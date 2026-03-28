@@ -382,7 +382,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Returns the element at `index`, or `None`. Equivalent to `ElementAtOrDefault`.
     fn element_at(self, index: usize) -> Option<Self::Item> {
-        self.skip(index).next()
+        Iterator::skip(self, index).next()
     }
 
     /// Returns the single element, or panics / returns `None` if there is not
@@ -397,7 +397,7 @@ pub trait LinqExt: Iterator + Sized {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Returns `true` if any element satisfies the predicate. Equivalent to `Any`.
-    fn any_<P>(self, predicate: P) -> bool
+    fn any_<P>(mut self, predicate: P) -> bool
     where
         P: FnMut(Self::Item) -> bool,
     {
@@ -405,7 +405,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns `true` if every element satisfies the predicate. Equivalent to `All`.
-    fn all_<P>(self, predicate: P) -> bool
+    fn all_<P>(mut self, predicate: P) -> bool
     where
         P: FnMut(Self::Item) -> bool,
     {
@@ -413,7 +413,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns `true` if the sequence contains a specific value. Equivalent to `Contains`.
-    fn contains_<T>(self, value: &T) -> bool
+    fn contains_<T>(mut self, value: &T) -> bool
     where
         Self::Item: PartialEq<T>,
     {

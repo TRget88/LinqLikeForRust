@@ -8,7 +8,7 @@ keywords = ["linq", "iterator", "query", "collection"]
 
 [lib]
 name = "linq_rs"
-path = "src/lib.rs"
+path = "lib.rs"
 
 [dev-dependencies]
 # none — zero dependencies
