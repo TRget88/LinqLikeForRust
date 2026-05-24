@@ -17,15 +17,20 @@
 //!
 //! assert_eq!(result, vec![4, 16, 36]);
 //! ```
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod adaptors;
 pub mod grouping;
 pub mod lookup;
 pub mod ordered;
 pub mod queryable;
+pub mod sources;
+pub mod sql;
 
 pub use adaptors::*;
 pub use grouping::Grouping;
 pub use lookup::Lookup;
 pub use ordered::{OrderedQueryable, ThenBy};
 pub use queryable::LinqExt;
+pub use sources::{empty, range, repeat};

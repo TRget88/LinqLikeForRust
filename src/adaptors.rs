@@ -41,6 +41,14 @@ impl<I: Iterator, B, F: FnMut(I::Item) -> B> Iterator for Select<I, F> {
     }
 }
 
+impl<I: DoubleEndedIterator, B, F: FnMut(I::Item) -> B> DoubleEndedIterator for Select<I, F> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back().map(&mut self.f)
+    }
+}
+
+impl<I: ExactSizeIterator, B, F: FnMut(I::Item) -> B> ExactSizeIterator for Select<I, F> {}
+
 // ── SelectMany ───────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`select_many`](crate::LinqExt::select_many).
@@ -93,7 +101,16 @@ impl<I: Iterator> Iterator for Skip<I> {
         }
         self.inner.next()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (low, high) = self.inner.size_hint();
+        (
+            low.saturating_sub(self.remaining),
+            high.map(|h| h.saturating_sub(self.remaining)),
+        )
+    }
 }
+
+impl<I: ExactSizeIterator> ExactSizeIterator for Skip<I> {}
 
 // ── SkipWhile ────────────────────────────────────────────────────────────────
 
@@ -137,7 +154,18 @@ impl<I: Iterator> Iterator for Take<I> {
         self.remaining -= 1;
         self.inner.next()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (low, high) = self.inner.size_hint();
+        let low = low.min(self.remaining);
+        let high = match high {
+            Some(h) => Some(h.min(self.remaining)),
+            None => Some(self.remaining),
+        };
+        (low, high)
+    }
 }
+
+impl<I: ExactSizeIterator> ExactSizeIterator for Take<I> {}
 
 // ── TakeWhile ────────────────────────────────────────────────────────────────
 
@@ -246,7 +274,23 @@ impl<I: Iterator> Iterator for Concat<I> {
         }
         self.second.next()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.on_second {
+            self.second.size_hint()
+        } else {
+            let (al, ah) = self.first.size_hint();
+            let (bl, bh) = self.second.size_hint();
+            let low = al.saturating_add(bl);
+            let high = match (ah, bh) {
+                (Some(a), Some(b)) => a.checked_add(b),
+                _ => None,
+            };
+            (low, high)
+        }
+    }
 }
+
+impl<I: ExactSizeIterator> ExactSizeIterator for Concat<I> {}
 
 // ── Zip ──────────────────────────────────────────────────────────────────────
 
@@ -264,6 +308,23 @@ impl<I: Iterator, J: Iterator, R, F: FnMut(I::Item, J::Item) -> R> Iterator for 
         let b = self.second.next()?;
         Some((self.result_selector)(a, b))
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (al, ah) = self.first.size_hint();
+        let (bl, bh) = self.second.size_hint();
+        let low = al.min(bl);
+        let high = match (ah, bh) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
+        (low, high)
+    }
+}
+
+impl<I: ExactSizeIterator, J: ExactSizeIterator, R, F: FnMut(I::Item, J::Item) -> R>
+    ExactSizeIterator for Zip<I, J, F>
+{
 }
 
 // ── Reverse ──────────────────────────────────────────────────────────────────
@@ -278,7 +339,18 @@ impl<I: Iterator> Iterator for Reverse<I> {
     fn next(&mut self) -> Option<Self::Item> {
         self.buffer.next()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.buffer.size_hint()
+    }
 }
+
+impl<I: Iterator> DoubleEndedIterator for Reverse<I> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.buffer.next_back()
+    }
+}
+
+impl<I: Iterator> ExactSizeIterator for Reverse<I> {}
 
 // ── Chunk / Batch ─────────────────────────────────────────────────────────────
 
@@ -305,7 +377,18 @@ impl<I: Iterator> Iterator for Chunk<I> {
                 }
             }
         }
-        if batch.is_empty() { None } else { Some(batch) }
+        if batch.is_empty() {
+            None
+        } else {
+            Some(batch)
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.done {
+            return (0, Some(0));
+        }
+        let (low, high) = self.inner.size_hint();
+        (low.div_ceil(self.size), high.map(|h| h.div_ceil(self.size)))
     }
 }
 
@@ -338,5 +421,87 @@ where
             let outer_item = self.outer.next()?;
             self.current = Some(outer_item.into_iter());
         }
+    }
+}
+
+// ── DefaultIfEmpty ───────────────────────────────────────────────────────────
+
+/// Iterator adaptor for [`default_if_empty`](crate::LinqExt::default_if_empty).
+pub struct DefaultIfEmpty<I: Iterator> {
+    pub(crate) inner: I,
+    pub(crate) default: Option<I::Item>,
+    pub(crate) yielded_anything: bool,
+}
+
+impl<I: Iterator> Iterator for DefaultIfEmpty<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some(v) => {
+                self.yielded_anything = true;
+                self.default = None;
+                Some(v)
+            }
+            None => {
+                if !self.yielded_anything {
+                    self.yielded_anything = true;
+                    self.default.take()
+                } else {
+                    None
+                }
+            }
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (low, high) = self.inner.size_hint();
+        if self.yielded_anything {
+            (low, high)
+        } else {
+            // We'll yield at least 1 if inner is empty (the default).
+            (low.max(1), high.map(|h| h.max(1)))
+        }
+    }
+}
+
+// ── SkipLast ─────────────────────────────────────────────────────────────────
+
+/// Iterator adaptor for [`skip_last`](crate::LinqExt::skip_last).
+///
+/// Holds a ring buffer of size `n`. Yielded items are always at least `n`
+/// steps behind the source, so the trailing `n` items are dropped on the floor.
+pub struct SkipLast<I: Iterator> {
+    pub(crate) inner: I,
+    pub(crate) buffer: std::collections::VecDeque<I::Item>,
+    pub(crate) n: usize,
+}
+
+impl<I: Iterator> Iterator for SkipLast<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.n == 0 {
+            return self.inner.next();
+        }
+        while self.buffer.len() < self.n {
+            match self.inner.next() {
+                Some(v) => self.buffer.push_back(v),
+                None => return None,
+            }
+        }
+        match self.inner.next() {
+            Some(v) => {
+                self.buffer.push_back(v);
+                self.buffer.pop_front()
+            }
+            None => None,
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // yet-to-yield = (items in buffer + items remaining in inner) - n
+        let (low, high) = self.inner.size_hint();
+        let buf_len = self.buffer.len();
+        let n = self.n;
+        let map_low = (buf_len + low).saturating_sub(n);
+        let map_high = high.map(|h| (buf_len + h).saturating_sub(n));
+        (map_low, map_high)
     }
 }

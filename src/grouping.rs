@@ -7,13 +7,18 @@
 /// Produced by [`LinqExt::group_by`](crate::queryable::LinqExt::group_by).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Grouping<K, V> {
+    /// The shared key for this group.
     pub key: K,
+    /// All elements that belong to this group.
     pub elements: Vec<V>,
 }
 
 impl<K, V> Grouping<K, V> {
     pub(crate) fn new(key: K) -> Self {
-        Self { key, elements: Vec::new() }
+        Self {
+            key,
+            elements: Vec::new(),
+        }
     }
 
     /// The shared key for this group.
