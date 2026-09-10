@@ -171,6 +171,12 @@ Published artifact (CONFIRMED, crates.io API): `linq_rs` **0.1.0**, created
 login `TRget88`, display name "Kirk". `linq-rs` and `LINQ_RS` normalise to the
 same taken name; `linqrs` is free (404).
 
+**Two numbers, used consistently throughout this report:** **48** is the method
+count on the `LinqExt` trait alone; **50** is the full public query surface,
+i.e. those 48 plus `ThenBy::then_by` and `ThenBy::then_by_descending`. Where a
+claim is about receivers, trailing underscores, or the trait itself it says 48;
+where it is about operator coverage it says 50.
+
 Two counts carried into this audit were wrong and are corrected here: the
 `LinqExt` surface on `main` is **48** methods, not 49 (a naive `grep -c 'fn '`
 also matches `queryable.rs:563`, `let mut key_fn = key_fn;`), and there are
