@@ -144,9 +144,16 @@ should wrap items in a newtype.
 The current implementation prioritizes simplicity and zero deps. Several
 operators were O(n²) where O(n) is achievable.
 
-- [x] **`distinct` / `distinct_by` fast path** — added `distinct_hashed` / `distinct_by_hashed` (HashSet-backed, O(n)). Existing `PartialEq`-only versions retained for types that can't `Hash` (e.g. floats).
-- [x] **`except` / `intersect` / `union_` fast path** — added `*_hashed` variants.
-- [x] **`group_by_key` / `group_join` / `inner_join` fast paths** — added `*_hashed` variants. `group_by_key_hashed` preserves first-occurrence insertion order via an auxiliary `HashMap<K, usize>` index; the count/aggregate hashed variants yield in hash order (documented).
+- [x] **Hash-backed algorithms are now the DEFAULT (`W-10`, supersedes the
+  `*_hashed` twins below).** `distinct`, `distinct_by`, `except`, `intersect`,
+  `union_`, `group_by_key`, `count_by`, `aggregate_by`, `inner_join`,
+  `group_join` and `to_lookup` all use a hash index and require `Eq + Hash`.
+  The `PartialEq` linear-scan implementations survive as `*_partial_eq` escape
+  hatches for types that cannot implement `Hash`. The `*_hashed` names are gone.
+  See `DECISIONS.md` `D-101` (settled) and `D-206`.
+- [x] ~~**`distinct` / `distinct_by` fast path** — added `distinct_hashed` /
+  `distinct_by_hashed`~~ *(superseded: the twins were the wrong shape — they left
+  the quadratic version as the default a caller reaches for first.)*
 - [x] **`size_hint` propagation** — added to `Skip`, `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`. `Select` already had it. The unpredictable ones (`Where`, `SkipWhile`, `TakeWhile`, `Distinct*`, `Flatten`, `SelectMany`) intentionally omitted — they can't give better than the default `(0, None)` without lying.
 - [x] **`DoubleEndedIterator` / `ExactSizeIterator` impls** — `Select` (both), `Skip` (ESI), `Take` (ESI), `Reverse` (both), `Concat` (ESI), `Zip` (ESI). DEI on `Skip` and `Take` deferred — they require non-trivial buffering against the ESI len and are niche use cases.
 - [~] **Benchmarks** — **deferred.** The built-in `test::Bencher` harness requires nightly Rust; the project is stable-only. Bringing in `criterion` would violate the zero-dep policy. Revisit when the project moves to a workspace where a `bench/` member with a one-off `criterion` dev-dep wouldn't pollute the main crate.

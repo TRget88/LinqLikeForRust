@@ -295,7 +295,11 @@ seam, not the seam.
 - **Enforced by:** **IMPLEMENTED** — the `msrv` CI job pins `1.75.0` and runs
   `test-count-floor.sh`, which covers both `--all-targets` and `--doc`; the
   latter is the bucket a bare `cargo test --all-targets` would have skipped.
-  Verified locally: 236 tests pass on 1.75 from a clean export with no lockfile.
+  Verified on a genuine 1.75.0 toolchain: 237 tests pass from a clean export
+  with no lockfile. The CI job now also asserts `rustc --version` is 1.75.x
+  before trusting the run — during this remediation two local verifications used
+  a `PATH` that silently fell through to stable, which produces a confident and
+  false MSRV claim.
 
 ## D-011 — `std` only, `alloc` door left open
 - **Status:** PROVISIONAL (2026-09-09)
@@ -378,9 +382,11 @@ seam, not the seam.
     data conversion that panics with no `Result` alternative.
   - The ten `*_hashed` twins (`distinct_hashed`, `distinct_by_hashed`,
     `except_hashed`, `intersect_hashed`, `union_hashed`, `group_by_hashed`,
-    `group_join_hashed`, `join_hashed`, `count_by_hashed`, `aggregate_by_hashed`)
-    violate **`D-206`** — a second implementation of every operator that leaves
+    `group_join_hashed`, `join_hashed`, `count_by_hashed`,
+    `aggregate_by_hashed`)
+    violated **`D-206`** — a second implementation of every operator that left
     the quadratic version as the default a user reaches for first.
+    **Fixed by `W-10`.**
   Both are on the `W-10`/`W-18` cut-line list. Neither may be published: `D-009`
   gates publishing, and the cut line comes first.
 
@@ -446,17 +452,31 @@ exist yet (`W-19`). Until it does, this section is enforced by nothing but this
 paragraph, which is exactly the state this file says not to rest in — so treat
 `W-19` as blocking 1.0, not as cleanup.
 
-## D-101 — Key bound: `Hash + Eq` or `PartialEq`?
-- **Status:** OPEN. **Recommended: `Hash + Eq`**, with `*_by` comparator variants
-  *named in the 1.0 docs* so adding them later is purely additive.
-- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** determines the complexity class of every hash-backed
-  operator *and* whether `f64` keys compile at all. `PartialEq` gives no
-  reflexivity, so `Lookup::get(&f64::NAN)` cannot find a key it just inserted.
-  `ROADMAP.md` defends `PartialEq` as serving float keys — but `order_by` binds
-  `K: Ord`, so that audience cannot sort anyway. The stated rationale does not
-  hold. `Eq` turns every NaN case into a compile error, which is what
-  `HashSet`/`HashMap`/`Itertools::unique` already do.
+## D-101 — Key bound: `Hash + Eq`
+- **Status:** **SETTLED (2026-09-09)** — implemented by `W-10`.
+- **Ruling:** the default for every operator that compares elements or keys is
+  **`Eq + Hash`** (plus `Clone` where an order-preserving index is needed). The
+  `PartialEq` linear-scan implementations remain, under explicit
+  `*_partial_eq` names, for types that cannot implement `Hash`.
+- **Why:** `PartialEq` does not guarantee reflexivity, and every one of these
+  algorithms needs an equivalence relation. The visible consequence was a
+  `Lookup` that could not retrieve a key it had just inserted (`f64::NAN`).
+  `Eq` is Rust's marker for exactly that property, and it is what `HashSet`,
+  `HashMap` and `Itertools::unique` already require. The cost was also
+  measured, not assumed: the `PartialEq` versions are O(n²) and cross 100 ms
+  around n≈17,000–30,000 (`AUDIT.md` §4.3).
+- **What this cost, stated plainly:** `f64` keys no longer work on the default
+  methods — `vec![1.0, 2.0, 1.0].distinct()` does not compile. `ROADMAP.md`
+  previously defended `PartialEq` as serving float keys, but that rationale did
+  not survive contact with the code: `order_by` binds `K: Ord`, so the same
+  float audience could not sort anyway. The escape hatches keep the capability
+  under a name that says what it costs.
+- **Forbids:** adding a new comparing operator whose default is `PartialEq`.
+  Reintroducing `*_hashed`-style twins (`D-206`).
+- **Enforced by:** **IMPLEMENTED** — the type system. Every default binds
+  `Eq + Hash`; `tests/edge_cases.rs` covers the float path through
+  `distinct_partial_eq`, and `tests/linq_tests.rs` carries a `*_partial_eq`
+  test per operator.
 
 ## D-102 — The v2 translation boundary
 - **Status:** OPEN. **Recommended: compile error, with an explicit one-token
@@ -552,6 +572,6 @@ Cite these IDs when the idea comes back. Full reasoning in `AUDIT.md` §9.
 | `D-203` | Full C# semantic fidelity | Would make the crate worse Rust to match a foreign contract; culture-aware collation needs an ICU dependency `D-001` forbids. See `D-017` |
 | `D-204` | `TryInto`-based `cast::<U>()` that panics on the first bad element | A fallible data conversion that panics, with no `Result` alternative. C# needs it for runtime downcasting; Rust has none |
 | `D-205` | Two vocabularies for one concept in one crate | `LinqExt::where_` and `sql::filter` mean the same thing and share no value. The SQL builder either becomes the seam (`D-002`) or its own crate |
-| `D-206` | A second implementation of every operator (`*_hashed` twins) | Doubles the surface to dodge a breaking change and leaves the slow version as the default. Pick the right default; make the other a named escape hatch |
+| `D-206` | A second implementation of every operator (`*_hashed` twins) | Doubles the surface to dodge a breaking change and leaves the slow version as the default. **Resolved by `W-10`**: the hash implementation took the plain name and the `PartialEq` one became `*_partial_eq`. The *count* of methods is unchanged — what changed is which one a caller reaches for by default, and that the slow one now has to be asked for by name |
 | `D-207` | Benchmarks via nightly `test::Bencher`, or `criterion` in the main crate | `ROADMAP.md` deferred benchmarks for this reason and was right. The way out is a workspace `benches/` member |
 | `D-208` | `async` before the sync seam exists | Diesel's async story is a separate 0.x crate in a personal repo with a thread-pool SQLite shim. Make the execution seam pluggable, not forked. See `D-006` |

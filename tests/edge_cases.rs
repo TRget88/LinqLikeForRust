@@ -270,11 +270,8 @@ fn aggregate_by_on_empty_is_empty() {
 }
 
 #[test]
-fn group_by_key_hashed_on_empty_is_empty() {
-    let v: Vec<_> = Vec::<i32>::new()
-        .into_iter()
-        .group_by_key_hashed(|x| *x)
-        .collect();
+fn group_by_key_on_empty_is_empty() {
+    let v: Vec<_> = Vec::<i32>::new().into_iter().group_by_key(|x| *x).collect();
     assert!(v.is_empty());
 }
 
@@ -428,7 +425,7 @@ fn where_predicate_runs_once_per_item_including_rejected() {
 fn distinct_works_with_floats() {
     let v: Vec<f64> = vec![1.0, 2.0, 1.0, 3.0, 2.0]
         .into_iter()
-        .distinct()
+        .distinct_partial_eq()
         .collect();
     assert_eq!(v, [1.0, 2.0, 3.0]);
 }
@@ -439,7 +436,7 @@ fn distinct_keeps_all_nans_because_partial_eq_says_they_differ() {
     // a "new" element. This is documented behaviour, not a bug — if you want
     // true float dedup you need bit-pattern comparison via a wrapper.
     let nans: Vec<f64> = vec![f64::NAN, f64::NAN, 1.0, f64::NAN];
-    let v: Vec<f64> = nans.into_iter().distinct().collect();
+    let v: Vec<f64> = nans.into_iter().distinct_partial_eq().collect();
     assert_eq!(v.len(), 4);
     assert!(v[0].is_nan());
     assert!(v[1].is_nan());
@@ -461,7 +458,7 @@ fn average_of_single_element() {
 fn to_lookup_preserves_all_duplicate_key_values() {
     let data = vec![("a", 1), ("a", 2), ("a", 3)];
     let lookup = data.into_iter().to_lookup(|(k, _)| *k);
-    assert_eq!(lookup.count(), 1);
+    assert_eq!(lookup.len(), 1);
     assert_eq!(lookup.get(&"a"), &[("a", 1), ("a", 2), ("a", 3)]);
 }
 
@@ -469,7 +466,7 @@ fn to_lookup_preserves_all_duplicate_key_values() {
 fn to_lookup_on_empty_source_has_zero_keys() {
     let data: Vec<(i32, i32)> = vec![];
     let lookup = data.into_iter().to_lookup(|(k, _)| *k);
-    assert_eq!(lookup.count(), 0);
+    assert_eq!(lookup.len(), 0);
     assert!(!lookup.contains_key(&1));
     assert_eq!(lookup.get(&1), &[]);
 }

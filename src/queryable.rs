@@ -315,14 +315,19 @@ pub trait LinqExt: Iterator + Sized {
     // SET OPERATIONS
     // ═══════════════════════════════════════════════════════════════════════
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`distinct`](Self::distinct)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Returns distinct elements. Equivalent to `Distinct`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
-    /// let d: Vec<_> = vec![1, 2, 2, 3, 1].into_iter().distinct().collect();
+    /// let d: Vec<_> = vec![1, 2, 2, 3, 1].into_iter().distinct_partial_eq().collect();
     /// assert_eq!(d, [1, 2, 3]);
     /// ```
-    fn distinct(self) -> Distinct<Self>
+    fn distinct_partial_eq(self) -> Distinct<Self>
     where
         Self::Item: PartialEq + Clone,
     {
@@ -332,8 +337,13 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`distinct_by`](Self::distinct_by)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Returns distinct elements by a key selector. Equivalent to `DistinctBy`.
-    fn distinct_by<K, F>(self, key_fn: F) -> DistinctBy<Self, F, K>
+    fn distinct_by_partial_eq<K, F>(self, key_fn: F) -> DistinctBy<Self, F, K>
     where
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
@@ -347,14 +357,14 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Returns distinct elements using a `HashSet` for O(1) lookup —
     /// **prefer this** over [`distinct`](Self::distinct) when your item type
-    /// implements `Eq + Hash`. Equivalent semantics, O(n) instead of O(n²).
+    /// implements `Eq + Hash`. Equivalent semantics, O(n) rather than O(n²).
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
-    /// let v: Vec<_> = vec![1, 2, 2, 3, 1].into_iter().distinct_hashed().collect();
+    /// let v: Vec<_> = vec![1, 2, 2, 3, 1].into_iter().distinct().collect();
     /// assert_eq!(v, [1, 2, 3]);
     /// ```
-    fn distinct_hashed(self) -> impl Iterator<Item = Self::Item>
+    fn distinct(self) -> impl Iterator<Item = Self::Item>
     where
         Self::Item: Eq + std::hash::Hash + Clone,
     {
@@ -365,7 +375,7 @@ pub trait LinqExt: Iterator + Sized {
     /// Returns distinct elements by a key selector, using a `HashSet`.
     /// **Prefer this** over [`distinct_by`](Self::distinct_by) when the key
     /// type implements `Eq + Hash`.
-    fn distinct_by_hashed<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Self::Item>
+    fn distinct_by<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Self::Item>
     where
         K: Eq + std::hash::Hash,
         F: FnMut(&Self::Item) -> K,
@@ -386,14 +396,19 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`except`](Self::except)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Returns elements of `self` that are not in `other`. Equivalent to `Except`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
-    /// let diff: Vec<_> = vec![1,2,3,4].into_iter().except(vec![2,4]).collect();
+    /// let diff: Vec<_> = vec![1,2,3,4].into_iter().except_partial_eq(vec![2,4]).collect();
     /// assert_eq!(diff, [1, 3]);
     /// ```
-    fn except<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn except_partial_eq<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: PartialEq,
@@ -402,14 +417,19 @@ pub trait LinqExt: Iterator + Sized {
         self.where_(move |x| !exclusions.contains(x))
     }
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`intersect`](Self::intersect)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Returns elements that appear in both sequences. Equivalent to `Intersect`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
-    /// let inter: Vec<_> = vec![1,2,3,4].into_iter().intersect(vec![2,4,6]).collect();
+    /// let inter: Vec<_> = vec![1,2,3,4].into_iter().intersect_partial_eq(vec![2,4,6]).collect();
     /// assert_eq!(inter, [2, 4]);
     /// ```
-    fn intersect<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn intersect_partial_eq<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: PartialEq,
@@ -418,8 +438,13 @@ pub trait LinqExt: Iterator + Sized {
         self.where_(move |x| inclusion.contains(x))
     }
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`union_`](Self::union_)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Produces the set union of two sequences. Equivalent to `Union`.
-    fn union_<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn union_partial_eq<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: PartialEq,
@@ -479,9 +504,13 @@ pub trait LinqExt: Iterator + Sized {
         self.where_(move |x| inclusions.contains(&key_fn(x)))
     }
 
-    /// Hash-backed [`except`](Self::except) — O(n) instead of O(n²).
+    /// Set difference: elements of `self` that are not in `other`.
+    ///
+    /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for element types that
+    /// are only `PartialEq` — `f64`, say — use
+    /// [`except_partial_eq`](Self::except_partial_eq), which is O(n·m).
     /// **Prefer this** over `except` when items implement `Eq + Hash`.
-    fn except_hashed<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn except<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: Eq + std::hash::Hash,
@@ -490,9 +519,12 @@ pub trait LinqExt: Iterator + Sized {
         self.filter(move |x| !exclusions.contains(x))
     }
 
-    /// Hash-backed [`intersect`](Self::intersect) — O(n) instead of O(n²).
+    /// Elements that appear in both sequences.
+    ///
+    /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for `PartialEq`-only
+    /// element types use [`intersect_partial_eq`](Self::intersect_partial_eq).
     /// **Prefer this** over `intersect` when items implement `Eq + Hash`.
-    fn intersect_hashed<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn intersect<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: Eq + std::hash::Hash,
@@ -501,9 +533,12 @@ pub trait LinqExt: Iterator + Sized {
         self.filter(move |x| inclusions.contains(x))
     }
 
-    /// Hash-backed [`union_`](Self::union_) — O(n) instead of O(n²).
+    /// Set union of two sequences.
+    ///
+    /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for `PartialEq`-only
+    /// element types use [`union_partial_eq`](Self::union_partial_eq).
     /// **Prefer this** over `union_` when items implement `Eq + Hash`.
-    fn union_hashed<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn union_<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: Eq + std::hash::Hash + Clone,
@@ -989,6 +1024,11 @@ pub trait LinqExt: Iterator + Sized {
     // JOINING
     // ═══════════════════════════════════════════════════════════════════════
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`inner_join`](Self::inner_join)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Performs an inner join between `self` and `inner` on matching keys,
     /// projecting results with `result_selector`.
     ///
@@ -1001,7 +1041,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let orders = vec![(1u32, "Order A"), (1, "Order B"), (2, "Order C")];
     ///
     /// let mut results: Vec<_> = people.into_iter()
-    ///     .inner_join(
+    ///     .inner_join_partial_eq(
     ///         orders,
     ///         |(id, _)| *id,
     ///         |(id, _)| *id,
@@ -1011,7 +1051,7 @@ pub trait LinqExt: Iterator + Sized {
     /// results.sort();
     /// assert_eq!(results, ["Alice: Order A", "Alice: Order B", "Bob: Order C"]);
     /// ```
-    fn inner_join<Inner, OuterKey, InnerKey, R, OuterKeyFn, InnerKeyFn, ResultFn>(
+    fn inner_join_partial_eq<Inner, OuterKey, InnerKey, R, OuterKeyFn, InnerKeyFn, ResultFn>(
         self,
         inner: Inner,
         outer_key_fn: OuterKeyFn,
@@ -1042,11 +1082,15 @@ pub trait LinqExt: Iterator + Sized {
         results.into_iter()
     }
 
-    /// Hash-backed [`inner_join`](Self::inner_join) — O(n + m) instead of O(n*m).
+    /// Inner join on matching keys, projecting results with `result_selector`.
+    ///
+    /// Builds a hash index over `inner`, so O(n + m) rather than the nested
+    /// loop's O(n·m). Requires `Eq + Hash` keys; for `PartialEq`-only keys use
+    /// [`inner_join_partial_eq`](Self::inner_join_partial_eq).
     /// **Prefer this** when both sides project to a `Key: Eq + Hash` (must
     /// be the same type for both, unlike the un-hashed version which
     /// supports asymmetric `PartialEq<...>` keys).
-    fn inner_join_hashed<Inner, Key, R, OuterKeyFn, InnerKeyFn, ResultFn>(
+    fn inner_join<Inner, Key, R, OuterKeyFn, InnerKeyFn, ResultFn>(
         self,
         inner: Inner,
         outer_key_fn: OuterKeyFn,
@@ -1080,9 +1124,14 @@ pub trait LinqExt: Iterator + Sized {
         results.into_iter()
     }
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`group_join`](Self::group_join)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Performs a group join (left outer join with grouped inner elements).
     /// Equivalent to `GroupJoin`.
-    fn group_join<Inner, OuterKey, InnerKey, R, OuterKeyFn, InnerKeyFn, ResultFn>(
+    fn group_join_partial_eq<Inner, OuterKey, InnerKey, R, OuterKeyFn, InnerKeyFn, ResultFn>(
         self,
         inner: Inner,
         outer_key_fn: OuterKeyFn,
@@ -1112,9 +1161,12 @@ pub trait LinqExt: Iterator + Sized {
         .into_iter()
     }
 
-    /// Hash-backed [`group_join`](Self::group_join) — O(n + m).
+    /// Left outer join with the matching inner elements grouped.
+    ///
+    /// Hash-indexed, O(n + m). Requires `Eq + Hash` keys; for `PartialEq`-only
+    /// keys use [`group_join_partial_eq`](Self::group_join_partial_eq).
     /// **Prefer this** when both sides project to a `Key: Eq + Hash`.
-    fn group_join_hashed<Inner, Key, R, OuterKeyFn, InnerKeyFn, ResultFn>(
+    fn group_join<Inner, Key, R, OuterKeyFn, InnerKeyFn, ResultFn>(
         self,
         inner: Inner,
         outer_key_fn: OuterKeyFn,
@@ -1148,6 +1200,11 @@ pub trait LinqExt: Iterator + Sized {
     // GROUPING
     // ═══════════════════════════════════════════════════════════════════════
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`group_by_key`](Self::group_by_key)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Groups elements by a key selector. Equivalent to `GroupBy`.
     ///
     /// ```rust
@@ -1155,13 +1212,16 @@ pub trait LinqExt: Iterator + Sized {
     ///
     /// let words = vec!["apple", "ant", "banana", "bear", "cherry"];
     /// let mut groups: Vec<_> = words.into_iter()
-    ///     .group_by_key(|w| w.chars().next().unwrap())
+    ///     .group_by_key_partial_eq(|w| w.chars().next().unwrap())
     ///     .collect();
     /// groups.sort_by_key(|g| g.key);
     /// assert_eq!(groups[0].key, 'a');
     /// assert_eq!(groups[0].elements, ["apple", "ant"]);
     /// ```
-    fn group_by_key<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Grouping<K, Self::Item>>
+    fn group_by_key_partial_eq<K, F>(
+        self,
+        mut key_fn: F,
+    ) -> impl Iterator<Item = Grouping<K, Self::Item>>
     where
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
@@ -1237,6 +1297,11 @@ pub trait LinqExt: Iterator + Sized {
             .map(move |g| result_fn(g.key, g.elements))
     }
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`count_by`](Self::count_by)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Groups by `key_fn` and yields `(key, count)` pairs. Equivalent to
     /// .NET 9+ `CountBy(keySelector)`.
     ///
@@ -1244,12 +1309,12 @@ pub trait LinqExt: Iterator + Sized {
     /// use linq_rs::LinqExt;
     /// let words = vec!["apple", "ant", "banana", "bear", "cherry"];
     /// let mut counts: Vec<_> = words.into_iter()
-    ///     .count_by(|w| w.chars().next().unwrap())
+    ///     .count_by_partial_eq(|w| w.chars().next().unwrap())
     ///     .collect();
     /// counts.sort_by_key(|(k, _)| *k);
     /// assert_eq!(counts, [('a', 2), ('b', 2), ('c', 1)]);
     /// ```
-    fn count_by<K, F>(self, mut key_fn: F) -> impl Iterator<Item = (K, usize)>
+    fn count_by_partial_eq<K, F>(self, mut key_fn: F) -> impl Iterator<Item = (K, usize)>
     where
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
@@ -1266,15 +1331,17 @@ pub trait LinqExt: Iterator + Sized {
         counts.into_iter()
     }
 
-    /// Hash-backed [`group_by_key`](Self::group_by_key) — O(n) instead of O(n²).
+    /// Groups elements by a key, yielding one [`Grouping`] per distinct key in
+    /// **first-appearance order**.
+    ///
+    /// Hash-indexed, O(n). Requires `Eq + Hash + Clone` keys; for
+    /// `PartialEq`-only keys use
+    /// [`group_by_key_partial_eq`](Self::group_by_key_partial_eq), which is O(n·k).
     /// **Prefer this** when keys implement `Eq + Hash + Clone`.
     ///
     /// Groups are yielded in **insertion order of their first occurrence**
     /// (same as `group_by_key`), not in hash order.
-    fn group_by_key_hashed<K, F>(
-        self,
-        mut key_fn: F,
-    ) -> impl Iterator<Item = Grouping<K, Self::Item>>
+    fn group_by_key<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Grouping<K, Self::Item>>
     where
         K: Eq + std::hash::Hash + Clone,
         F: FnMut(&Self::Item) -> K,
@@ -1297,9 +1364,9 @@ pub trait LinqExt: Iterator + Sized {
         groups.into_iter()
     }
 
-    /// Hash-backed [`count_by`](Self::count_by). Yields in hash order, not
+    /// Counts elements per key. Yields in hash order, not
     /// insertion order — the std `HashMap` iteration order is unspecified.
-    fn count_by_hashed<K, F>(self, mut key_fn: F) -> impl Iterator<Item = (K, usize)>
+    fn count_by<K, F>(self, mut key_fn: F) -> impl Iterator<Item = (K, usize)>
     where
         K: Eq + std::hash::Hash,
         F: FnMut(&Self::Item) -> K,
@@ -1312,9 +1379,9 @@ pub trait LinqExt: Iterator + Sized {
         counts.into_iter()
     }
 
-    /// Hash-backed [`aggregate_by`](Self::aggregate_by). Yields in hash
+    /// Fused group-and-aggregate. Yields in hash
     /// order, not insertion order.
-    fn aggregate_by_hashed<K, Acc, KF, SF, AF>(
+    fn aggregate_by<K, Acc, KF, SF, AF>(
         self,
         mut key_fn: KF,
         mut seed_fn: SF,
@@ -1338,6 +1405,11 @@ pub trait LinqExt: Iterator + Sized {
         accs.into_iter()
     }
 
+    /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
+    /// works on element/key types that are not `Eq + Hash` — `f64`, most
+    /// notably — at the cost of quadratic time. Prefer [`aggregate_by`](Self::aggregate_by)
+    /// unless you need that. See `DECISIONS.md` `D-101`.
+    ///
     /// Groups by `key_fn` and aggregates each group with `seed_fn` +
     /// `accum`. Equivalent to .NET 9+ `AggregateBy(keySelector, seedSelector,
     /// func)`. `seed_fn` receives the key so per-key seeds are possible;
@@ -1347,12 +1419,12 @@ pub trait LinqExt: Iterator + Sized {
     /// use linq_rs::LinqExt;
     /// let data = vec![("a", 1), ("b", 2), ("a", 3), ("b", 10)];
     /// let mut totals: Vec<_> = data.into_iter()
-    ///     .aggregate_by(|(k, _)| *k, |_| 0, |acc, (_, v)| acc + v)
+    ///     .aggregate_by_partial_eq(|(k, _)| *k, |_| 0, |acc, (_, v)| acc + v)
     ///     .collect();
     /// totals.sort_by_key(|(k, _)| *k);
     /// assert_eq!(totals, [("a", 4), ("b", 12)]);
     /// ```
-    fn aggregate_by<K, Acc, KF, SF, AF>(
+    fn aggregate_by_partial_eq<K, Acc, KF, SF, AF>(
         self,
         mut key_fn: KF,
         mut seed_fn: SF,
@@ -1417,7 +1489,7 @@ pub trait LinqExt: Iterator + Sized {
     /// Builds a [`Lookup`] (one-to-many dictionary). Equivalent to `ToLookup`.
     fn to_lookup<K, F>(self, mut key_fn: F) -> Lookup<K, Self::Item>
     where
-        K: PartialEq,
+        K: Eq + std::hash::Hash + Clone,
         F: FnMut(&Self::Item) -> K,
     {
         let mut lookup = Lookup::new();

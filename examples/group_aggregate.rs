@@ -50,7 +50,7 @@ fn main() {
     let mut totals: Vec<_> = employees
         .iter()
         .cloned()
-        .aggregate_by_hashed(|e| e.dept, |_| 0u32, |acc, e| acc + e.salary)
+        .aggregate_by(|e| e.dept, |_| 0u32, |acc, e| acc + e.salary)
         .collect();
     totals.sort_by_key(|(d, _)| *d);
     for (dept, total) in &totals {
@@ -59,11 +59,7 @@ fn main() {
 
     // 2. Headcount per department.
     println!("\nHeadcount per dept:");
-    let mut counts: Vec<_> = employees
-        .iter()
-        .cloned()
-        .count_by_hashed(|e| e.dept)
-        .collect();
+    let mut counts: Vec<_> = employees.iter().cloned().count_by(|e| e.dept).collect();
     counts.sort_by_key(|(d, _)| *d);
     for (dept, n) in &counts {
         println!("  {dept}: {n}");

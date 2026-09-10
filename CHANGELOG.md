@@ -72,18 +72,55 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   cut line (`AUDIT.md` §7.3) reverses it.
 - **Two methods land against DO-NOT-BUILD entries and must not be published.**
   `cast::<U>()` is a fallible conversion that panics via `.expect(...)` with no
-  `Result` alternative (`D-204`). The ten `*_hashed` twins leave the quadratic
-  implementation as the default a caller reaches for first, doubling the surface
-  to avoid a breaking change (`D-206`). `W-10` makes the hash-backed algorithm
-  the default instead of a twin.
-- **The quadratic defaults are unchanged.** `distinct`, `except`, `intersect`,
-  `union_`, `group_by_key`, `to_lookup`, `inner_join` and `group_join` are all O(n²) in the
-  default form, and `Lookup::get`/`contains_key` are linear scans. Measured
-  crossover into visible slowness is around n≈17,000–30,000. `AUDIT.md` §4.3.
+  `Result` alternative (`D-204`) — still outstanding. The `D-206` half of this
+  entry is **resolved**: `W-10` made the hash-backed algorithm the default and
+  renamed the `PartialEq` one to `*_partial_eq`.
+- ~~**The quadratic defaults are unchanged.**~~ **Resolved by `W-10`/`W-11`.**
+  The defaults are hash-backed and `Lookup` is hash-indexed. The quadratic
+  implementations remain only behind the `*_partial_eq` names, where they are
+  the documented cost of supporting types that cannot implement `Hash`.
 - **`D-005`'s own enforcement gate cannot be written yet.** It requires a test
   importing `LinqExt` and `itertools::Itertools` together, which cannot compile
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
+
+### Changed — hash-backed by default (W-10, breaking)
+
+`D-101` is settled: **`Eq + Hash` is the default bound.**
+
+Ten operators shipped in two forms — a `PartialEq` version that was the default
+and a `*_hashed` twin that was fast. That is backwards: the version a caller
+reaches for first was the O(n²) one, and the count of implementations doubled to
+avoid a breaking change. `D-206` forbids exactly that shape.
+
+- **The hash implementation now has the plain name.** `distinct`, `distinct_by`,
+  `except`, `intersect`, `union_`, `group_by_key`, `count_by`, `aggregate_by`,
+  `inner_join`, `group_join` are hash-indexed and require `Eq + Hash`.
+- **The `PartialEq` implementation is now `*_partial_eq`.** Nothing was deleted;
+  the slow path just has to be asked for by name. Long names on purpose.
+- **`*_hashed` is gone** as a suffix.
+- **`f64` keys no longer work on the defaults** — `vec![1.0].distinct()` will not
+  compile; `.distinct_partial_eq()` will. This is the deliberate cost of the
+  ruling. The old rationale for `PartialEq`-by-default was that it served float
+  keys, but `order_by` binds `K: Ord`, so that audience could never sort anyway.
+
+### Changed — `Lookup` rebuilt (W-11)
+
+The one type whose entire purpose is keyed random access was a linear scan:
+`get`, `contains_key` and `insert` all walked every group — measured 288x slower
+than `HashMap::get` at 10,000 keys (`AUDIT.md` P-1).
+
+- **Hash-indexed.** `get` and `contains_key` are O(1). Groups are still held in a
+  `Vec` so iteration stays **first-appearance order**; a `HashMap<K, usize>`
+  points into it. That costs storing each key twice, hence `K: Eq + Hash + Clone`.
+- **`count()` → `len()`, plus `is_empty()`** — Rust convention.
+- **`insert` is now public.** It was `pub(crate)` while `Default` was public, so
+  `Lookup::default()` produced a value that could never be filled.
+- **Added `IntoIterator` (owned and borrowed), `FromIterator<(K, V)>`, and
+  `PartialEq`/`Eq`.** `Grouping` derived `PartialEq` and `Lookup` did not, so you
+  could `assert_eq!` two groupings but not two lookups. The `PartialEq` impl is
+  hand-written and compares only the groups — the index is derived state, and a
+  `#[derive]` would both have compared it and demanded `K: Hash` needlessly.
 
 ### Changed — breaking renames (W-12)
 
@@ -167,7 +204,7 @@ Discarding a query used to be silent. It no longer is, in 52 places.
 - `count_by(key_fn)` and `aggregate_by(key_fn, seed_fn, accum)` — .NET 9+ fused group+aggregate
 
 #### Phase 3 — performance
-- Hash-backed fast paths: `distinct_hashed`, `distinct_by_hashed`, `except_hashed`, `intersect_hashed`, `union_hashed`, `group_by_key_hashed`, `count_by_hashed`, `aggregate_by_hashed`, `inner_join_hashed`, `group_join_hashed`. O(n) instead of O(n²); require `Eq + Hash`.
+- Hash-backed fast paths: `distinct`, `distinct_by`, `except`, `intersect`, `union_`, `group_by_key`, `count_by`, `aggregate_by`, `inner_join`, `group_join`. O(n) instead of O(n²); require `Eq + Hash`.
 - `size_hint` propagation on `Skip`, `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`
 - `ExactSizeIterator` impls for `Select`, `Skip`, `Take`, `Reverse`, `Concat`, `Zip`
 - `DoubleEndedIterator` impls for `Select` and `Reverse`

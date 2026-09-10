@@ -49,7 +49,7 @@ fn main() {
     let rows: Vec<String> = customers
         .clone()
         .into_iter()
-        .inner_join_hashed(
+        .inner_join(
             orders.clone(),
             |c| c.id,
             |o| o.customer_id,
@@ -64,7 +64,7 @@ fn main() {
     println!("\nGroup join (left outer):");
     let grouped: Vec<String> = customers
         .into_iter()
-        .group_join_hashed(
+        .group_join(
             orders,
             |c| c.id,
             |o| o.customer_id,

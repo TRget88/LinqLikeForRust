@@ -321,7 +321,7 @@ fn test_to_lookup() {
     assert_eq!(lookup.get(&"z"), &[]);
     assert!(lookup.contains_key(&"a"));
     assert!(!lookup.contains_key(&"z"));
-    assert_eq!(lookup.count(), 3);
+    assert_eq!(lookup.len(), 3);
 }
 
 // ── to_hashmap / to_hashset ───────────────────────────────────────────────────
@@ -930,15 +930,15 @@ fn test_aggregate_by_per_key_seed() {
 // ── hash-backed set ops (Phase 3.1) ──────────────────────────────────────────
 
 #[test]
-fn test_distinct_hashed_matches_distinct() {
+fn test_distinct_matches_distinct() {
     let input = vec![3, 1, 2, 1, 3, 4];
     let slow: Vec<_> = input.clone().into_iter().distinct().collect();
-    let fast: Vec<_> = input.into_iter().distinct_hashed().collect();
+    let fast: Vec<_> = input.into_iter().distinct().collect();
     assert_eq!(slow, fast);
 }
 
 #[test]
-fn test_distinct_by_hashed_matches_distinct_by() {
+fn test_distinct_by_matches_distinct_by() {
     let input = vec!["apple", "ant", "banana", "bear"];
     let slow: Vec<_> = input
         .clone()
@@ -947,48 +947,49 @@ fn test_distinct_by_hashed_matches_distinct_by() {
         .collect();
     let fast: Vec<_> = input
         .into_iter()
-        .distinct_by_hashed(|w| w.chars().next().unwrap())
+        .distinct_by(|w| w.chars().next().unwrap())
         .collect();
     assert_eq!(slow, fast);
 }
 
 #[test]
-fn test_except_hashed() {
+// Escape hatch: except_partial_eq works on types that are only
+// PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
+fn test_except_partial_eq() {
     let v: Vec<_> = vec![1, 2, 3, 4, 5]
         .into_iter()
-        .except_hashed(vec![2, 4])
+        .except_partial_eq(vec![2, 4])
         .collect();
     assert_eq!(v, [1, 3, 5]);
 }
+// Escape hatch: intersect_partial_eq works on types that are only
+// PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
 
 #[test]
-fn test_intersect_hashed() {
+fn test_intersect_partial_eq() {
     let v: Vec<_> = vec![1, 2, 3, 4]
         .into_iter()
-        .intersect_hashed(vec![2, 4, 6])
+        .intersect_partial_eq(vec![2, 4, 6])
         .collect();
     assert_eq!(v, [2, 4]);
 }
 
 #[test]
-fn test_union_hashed() {
-    let v: Vec<_> = vec![1, 2, 3]
-        .into_iter()
-        .union_hashed(vec![2, 3, 4, 5])
-        .collect();
+fn test_union_() {
+    let v: Vec<_> = vec![1, 2, 3].into_iter().union_(vec![2, 3, 4, 5]).collect();
     assert_eq!(v, [1, 2, 3, 4, 5]);
 }
 
 // ── hash-backed grouping (Phase 3.2) ─────────────────────────────────────────
 
 #[test]
-fn test_group_by_key_hashed_preserves_insertion_order() {
-    // group_by_key_hashed must yield groups in their first-occurrence order,
-    // unlike count_by_hashed / aggregate_by_hashed which yield in hash order.
+fn test_group_by_key_preserves_insertion_order() {
+    // group_by_key must yield groups in their first-occurrence order,
+    // unlike count_by / aggregate_by which yield in hash order.
     let words = vec!["cherry", "apple", "ant", "banana", "bear"];
     let groups: Vec<_> = words
         .into_iter()
-        .group_by_key_hashed(|w| w.chars().next().unwrap())
+        .group_by_key(|w| w.chars().next().unwrap())
         .collect();
     // First-occurrence order: 'c', 'a', 'b'.
     assert_eq!(groups.len(), 3);
@@ -997,40 +998,46 @@ fn test_group_by_key_hashed_preserves_insertion_order() {
     assert_eq!(groups[1].key, 'a');
     assert_eq!(groups[1].elements, ["apple", "ant"]);
     assert_eq!(groups[2].key, 'b');
+    // Escape hatch: count_by_partial_eq works on types that are only
+    // PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
     assert_eq!(groups[2].elements, ["banana", "bear"]);
 }
 
+// Escape hatch: count_by_partial_eq works on types that are only
+// PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
 #[test]
-fn test_count_by_hashed() {
+fn test_count_by_partial_eq() {
     let words = vec!["apple", "ant", "banana", "bear", "cherry"];
     let mut counts: Vec<_> = words
         .into_iter()
-        .count_by_hashed(|w| w.chars().next().unwrap())
+        .count_by_partial_eq(|w| w.chars().next().unwrap())
         .collect();
     counts.sort_by_key(|(k, _)| *k);
     assert_eq!(counts, [('a', 2), ('b', 2), ('c', 1)]);
 }
 
 #[test]
-fn test_aggregate_by_hashed() {
+fn test_aggregate_by() {
     let data = vec![("a", 1), ("b", 2), ("a", 3), ("b", 10)];
     let mut totals: Vec<_> = data
         .into_iter()
-        .aggregate_by_hashed(|(k, _)| *k, |_| 0, |acc, (_, v)| acc + v)
+        .aggregate_by(|(k, _)| *k, |_| 0, |acc, (_, v)| acc + v)
         .collect();
     totals.sort_by_key(|(k, _)| *k);
     assert_eq!(totals, [("a", 4), ("b", 12)]);
 }
+// Escape hatch: inner_join_partial_eq works on types that are only
+// PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
 
 // ── hash-backed joins (Phase 3.3) ────────────────────────────────────────────
 
 #[test]
-fn test_inner_join_hashed() {
+fn test_inner_join_partial_eq() {
     let customers = vec![(1u32, "Alice"), (2, "Bob"), (3, "Carol")];
     let orders = vec![(1u32, "Laptop"), (1, "Mouse"), (2, "Keyboard")];
     let mut results: Vec<String> = customers
         .into_iter()
-        .inner_join_hashed(
+        .inner_join_partial_eq(
             orders,
             |(id, _)| *id,
             |(id, _)| *id,
@@ -1043,18 +1050,22 @@ fn test_inner_join_hashed() {
         [
             "Alice bought Laptop",
             "Alice bought Mouse",
+            // Escape hatch: group_join_partial_eq works on types that are only
+            // PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
             "Bob bought Keyboard"
         ]
     );
 }
 
+// Escape hatch: group_join_partial_eq works on types that are only
+// PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
 #[test]
-fn test_group_join_hashed() {
+fn test_group_join_partial_eq() {
     let departments = vec![(1u32, "Engineering"), (2u32, "Sales")];
     let employees = vec![(1u32, "Alice"), (1, "Bob"), (2, "Carol")];
     let result: Vec<_> = departments
         .into_iter()
-        .group_join_hashed(
+        .group_join_partial_eq(
             employees,
             |(id, _)| *id,
             |(dept_id, _)| *dept_id,

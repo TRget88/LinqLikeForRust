@@ -291,29 +291,48 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 
 ---
 
-## Performance — `*_hashed` variants
+## Performance — the default is hash-backed
 
-Several operators ship in two forms: a default `PartialEq`-only version
-(O(n²)) and a `*_hashed` variant that requires `Eq + Hash` (O(n)). **Prefer
-the hashed version** unless your item or key type can't implement `Hash`
-(e.g. it contains floats).
+Ten operators need to compare elements or keys. All of them use a **hash index
+by default**, and require `Eq + Hash`:
 
-| Slow (PartialEq)        | Fast (Eq + Hash)           |
-|-------------------------|----------------------------|
-| `distinct`              | `distinct_hashed`          |
-| `distinct_by`           | `distinct_by_hashed`       |
-| `except`                | `except_hashed`            |
-| `intersect`             | `intersect_hashed`         |
-| `union_`                | `union_hashed`             |
-| `group_by_key`          | `group_by_key_hashed`      |
-| `count_by`              | `count_by_hashed`          |
-| `aggregate_by`          | `aggregate_by_hashed`      |
-| `inner_join`            | `inner_join_hashed`        |
-| `group_join`            | `group_join_hashed`        |
+`distinct` · `distinct_by` · `except` · `intersect` · `union_` ·
+`group_by_key` · `count_by` · `aggregate_by` · `inner_join` · `group_join`
+— plus `to_lookup`, whose `Lookup` is hash-indexed throughout.
 
-The hashed grouping/aggregation variants yield results in **hash order**,
-not insertion order — except `group_by_key_hashed`, which preserves insertion
-order of first-occurrence (same as `group_by_key`).
+Each also has a `*_partial_eq` counterpart that compares with `PartialEq` and
+scans linearly:
+
+| Default (`Eq + Hash`, O(n) or O(n + m)) | Escape hatch (`PartialEq`, O(n²)) |
+|---|---|
+| `distinct` | `distinct_partial_eq` |
+| `distinct_by` | `distinct_by_partial_eq` |
+| `except` | `except_partial_eq` |
+| `intersect` | `intersect_partial_eq` |
+| `union_` | `union_partial_eq` |
+| `group_by_key` | `group_by_key_partial_eq` |
+| `count_by` | `count_by_partial_eq` |
+| `aggregate_by` | `aggregate_by_partial_eq` |
+| `inner_join` | `inner_join_partial_eq` |
+| `group_join` | `group_join_partial_eq` |
+
+**Reach for `*_partial_eq` only when your type cannot implement `Hash`** — in
+practice that means floats. `vec![1.0, 2.0, 1.0].distinct()` does not compile;
+`.distinct_partial_eq()` does. The names are long on purpose: this is the slow
+path and you should have to ask for it.
+
+Be aware of what `PartialEq` costs you besides time. It does not guarantee
+reflexivity, so `f64::NAN != f64::NAN` and every NaN is its own group — a
+`Lookup` built that way could not find a NaN key it had just inserted. That is
+why the default requires `Eq`, which is Rust's marker for exactly the property
+these algorithms need. See `DECISIONS.md` `D-101`.
+
+### Ordering
+
+`group_by_key` and `Lookup` yield groups in **first-appearance order**, which
+costs an auxiliary index and a `Clone` bound on the key. `count_by` and
+`aggregate_by` yield in **hash order**, which is unspecified — sort the result
+if you need determinism.
 
 ## Versioning
 
@@ -332,8 +351,8 @@ project-specific clarifications:
 - **Loosening a trait bound** (e.g. `Eq + Hash + Clone` → `Eq + Hash`) is a
   **minor** bump.
 - **Renaming an operator** is always **breaking**, even for ergonomic fixes.
-- **`*_hashed` variants are independent operators** — changing their
-  signature is breaking just like the non-hashed ones.
+- **`*_partial_eq` variants are independent operators** — changing their
+  signature is breaking just like the default ones.
 - **Pre-1.0:** anything can break in a minor bump. `0.1.x → 0.2.x` may
   include breaking changes; `0.1.x → 0.1.y` (patch) will not.
 

@@ -96,6 +96,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.75
+      # Assert the toolchain is actually 1.75 before trusting anything below.
+      # Verifying an MSRV against the wrong compiler is worse than not
+      # verifying it: it produces a confident, false claim. That happened
+      # twice during this remediation, locally, via a PATH that silently fell
+      # through to stable.
+      - name: Confirm the toolchain really is 1.75
+        shell: bash
+        run: |
+          v="$(rustc --version)"
+          echo "$v"
+          case "$v" in
+            *"1.75."*) echo "confirmed 1.75" ;;
+            *) echo "FAIL: expected rustc 1.75.x, got: $v"; exit 1 ;;
+          esac
       - name: Build on MSRV
         run: cargo build --all-targets
       # Same gate as the stable job, not a bare `cargo test`. `--all-targets`
