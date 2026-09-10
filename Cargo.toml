@@ -4,12 +4,29 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
 description = "A LINQ-like query library for Rust iterators — no external dependencies"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 keywords = ["linq", "iterator", "query", "collection"]
 categories = ["rust-patterns", "algorithms", "data-structures"]
 readme = "README.md"
-homepage = "https://crates.io/crates/linq_rs"
 documentation = "https://docs.rs/linq_rs"
+repository = "https://github.com/TRget88/LinqLikeForRust"
+
+# Keep the published tarball to things a consumer can use. Without this,
+# `cargo package` ships the audit deliverables and the CI config to crates.io
+# and docs.rs. Verify any change here with `cargo package --list`.
+#
+# Deliberately NOT excluded:
+#   tests/        so the executed-test count is verifiable from the artifact
+#                 itself, not just from a claim in the README (D-013).
+#   DECISIONS.md  it is normative and the README links to it.
+#   ROADMAP.md, CHANGELOG.md  a consumer deciding whether to depend on this
+#                 should be able to read where it is going and what broke.
+exclude = [
+    "/.github/",
+    "/AUDIT.md",
+    "/QUESTIONS.md",
+    "/CLAUDE.md",
+]
 
 [dev-dependencies]
 # none — zero dependencies

@@ -8,6 +8,7 @@ use crate::grouping::Grouping;
 ///
 /// Produced by [`LinqExt::to_lookup`](crate::queryable::LinqExt::to_lookup).
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct Lookup<K, V> {
     /// Groups stored in insertion order.
     groups: Vec<Grouping<K, V>>,

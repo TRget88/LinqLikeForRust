@@ -24,6 +24,7 @@ type Comparator<T> = Box<dyn Fn(&T, &T) -> Ordering>;
 /// [`order_by_descending`](crate::LinqExt::order_by_descending),
 /// [`order`](crate::LinqExt::order), and
 /// [`order_descending`](crate::LinqExt::order_descending).
+#[must_use = "this buffers the source when constructed and sorts on into_iter(); dropping it wastes both"]
 pub struct OrderedQueryable<T> {
     pub(crate) data: Vec<T>,
     pub(crate) comparators: Vec<Comparator<T>>,

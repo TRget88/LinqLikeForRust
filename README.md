@@ -345,3 +345,21 @@ project-specific clarifications:
 - **Zero dependencies** — only `std`.
 - **Naming** — methods that shadow Rust keywords or `std` trait methods are suffixed with `_` (`where_`, `take_`, `any_`, etc.).
 - **size_hint / ExactSizeIterator / DoubleEndedIterator** — propagated through the lazy adaptors where possible (`Select`, `Skip`, `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`) so downstream consumers can pre-allocate or iterate in reverse.
+
+---
+
+## License
+
+Dual-licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. This is the Rust ecosystem norm (`D-012`).
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this crate by you shall be dual licensed as above, without any
+additional terms or conditions.
+
+Note: **0.1.0 was published MIT-only and stays that way.** A published version's
+licence cannot be changed retroactively; the dual licence begins at 0.2.0.

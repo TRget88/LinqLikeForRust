@@ -85,15 +85,43 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
-### Not yet done before publishing 0.2.0
+### Packaging and licence (W-17)
 
-`D-009` gates publishing on these; none is complete.
+- **Dual-licensed `MIT OR Apache-2.0`** (`D-012`), the Rust ecosystem norm.
+  `LICENSE` is renamed to `LICENSE-MIT` and `LICENSE-APACHE` is added — the
+  canonical Apache-2.0 text, verified by SHA-256 against
+  `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` rather than
+  retyped. **0.1.0 remains MIT-only forever**; a published version's licence
+  cannot be changed retroactively, so the dual licence begins at 0.2.0.
+- **`repository` is set** to `https://github.com/TRget88/LinqLikeForRust`. 0.1.0
+  was published with no source link at all, so the artifact had no path back to
+  the code. Also removes `homepage`, which pointed at the crate's own crates.io
+  page.
+- **`exclude` added**, so the tarball no longer carries `AUDIT.md`,
+  `QUESTIONS.md`, `CLAUDE.md` or `.github/`. `tests/`, `DECISIONS.md`,
+  `ROADMAP.md` and `CHANGELOG.md` are deliberately **kept**: the executed-test
+  count should be verifiable from the published artifact and not only from a
+  claim in this file.
 
-- `repository` is unset, so a published tarball has no path back to source.
-- No `exclude`, so `cargo package` ships `AUDIT.md`, `DECISIONS.md`,
-  `QUESTIONS.md`, `.github/` and both integration-test files.
-- `license` is still `MIT`, not the `MIT OR Apache-2.0` that `D-012` requires,
-  and there is no `LICENSE-APACHE`.
+### Added — `#[must_use]` across the public surface (W-17)
+
+Discarding a query used to be silent. It no longer is, in 52 places.
+
+- All 16 lazy adaptors carry std's own message, "iterators are lazy and do
+  nothing unless consumed". `Reverse` gets a truer one — it buffers the whole
+  source when constructed.
+- `OrderedQueryable` says it buffers on construction and sorts on `into_iter()`,
+  so dropping it wastes both. `Grouping` and `Lookup` are annotated too.
+- The 35 value-returning terminals (`to_vec`, `sum_`, `any_`, `first`, …) are
+  annotated; the four that consume *and* allocate carry a message pointing at
+  `for_each_`.
+- Nothing was added where it would double-report: the 33 `-> impl Iterator`
+  methods are already covered because `Iterator` is itself `#[must_use]` in std,
+  `index_` is covered by `std::iter::Enumerate`, and `then_by`/`to_lookup` are
+  covered by their return types. `for_each_` is deliberately not annotated —
+  it exists for side effects.
+- Verified from a downstream crate: 11 discarded results produce exactly 11
+  warnings, and `for_each_` produces none.
 
 ### Added
 

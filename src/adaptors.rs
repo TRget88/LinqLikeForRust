@@ -6,6 +6,7 @@
 // ── Where ────────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`where_`](crate::LinqExt::where_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Where<I, P> {
     pub(crate) inner: I,
     pub(crate) predicate: P,
@@ -26,6 +27,7 @@ impl<I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for Where<I, P> {
 // ── Select ───────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`select`](crate::LinqExt::select).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Select<I, F> {
     pub(crate) inner: I,
     pub(crate) f: F,
@@ -52,6 +54,7 @@ impl<I: ExactSizeIterator, B, F: FnMut(I::Item) -> B> ExactSizeIterator for Sele
 // ── SelectMany ───────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`select_many`](crate::LinqExt::select_many).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SelectMany<I, F, J>
 where
     I: Iterator,
@@ -87,6 +90,7 @@ where
 // ── Skip ─────────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`skip_`](crate::LinqExt::skip_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Skip<I> {
     pub(crate) inner: I,
     pub(crate) remaining: usize,
@@ -115,6 +119,7 @@ impl<I: ExactSizeIterator> ExactSizeIterator for Skip<I> {}
 // ── SkipWhile ────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`skip_while`](crate::LinqExt::skip_while_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SkipWhile<I, P> {
     pub(crate) inner: I,
     pub(crate) predicate: P,
@@ -140,6 +145,7 @@ impl<I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for SkipWhile<I, P> {
 // ── Take ─────────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`take`](crate::LinqExt::take_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Take<I> {
     pub(crate) inner: I,
     pub(crate) remaining: usize,
@@ -170,6 +176,7 @@ impl<I: ExactSizeIterator> ExactSizeIterator for Take<I> {}
 // ── TakeWhile ────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`take_while_`](crate::LinqExt::take_while_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct TakeWhile<I, P> {
     pub(crate) inner: I,
     pub(crate) predicate: P,
@@ -195,6 +202,7 @@ impl<I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for TakeWhile<I, P> {
 // ── Distinct ─────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`distinct`](crate::LinqExt::distinct).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Distinct<I>
 where
     I: Iterator,
@@ -224,6 +232,7 @@ where
 // ── DistinctBy ───────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`distinct_by`](crate::LinqExt::distinct_by).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DistinctBy<I, F, K>
 where
     I: Iterator,
@@ -257,6 +266,7 @@ where
 // ── Concat ───────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`concat`](crate::LinqExt::concat_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Concat<I> {
     pub(crate) first: I,
     pub(crate) second: I,
@@ -295,6 +305,7 @@ impl<I: ExactSizeIterator> ExactSizeIterator for Concat<I> {}
 // ── Zip ──────────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`zip_`](crate::LinqExt::zip_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Zip<I, J, F> {
     pub(crate) first: I,
     pub(crate) second: J,
@@ -330,6 +341,7 @@ impl<I: ExactSizeIterator, J: ExactSizeIterator, R, F: FnMut(I::Item, J::Item) -
 // ── Reverse ──────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`reverse`](crate::LinqExt::reverse).
+#[must_use = "this buffers the whole source when constructed; dropping it wastes that work"]
 pub struct Reverse<I: Iterator> {
     pub(crate) buffer: std::iter::Rev<std::vec::IntoIter<I::Item>>,
 }
@@ -355,6 +367,7 @@ impl<I: Iterator> ExactSizeIterator for Reverse<I> {}
 // ── Chunk / Batch ─────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`chunk`](crate::LinqExt::chunk).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Chunk<I: Iterator> {
     pub(crate) inner: I,
     pub(crate) size: usize,
@@ -395,6 +408,7 @@ impl<I: Iterator> Iterator for Chunk<I> {
 // ── Flatten ──────────────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`flatten_`](crate::LinqExt::flatten_).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Flatten<I>
 where
     I: Iterator,
@@ -427,6 +441,7 @@ where
 // ── DefaultIfEmpty ───────────────────────────────────────────────────────────
 
 /// Iterator adaptor for [`default_if_empty`](crate::LinqExt::default_if_empty).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DefaultIfEmpty<I: Iterator> {
     pub(crate) inner: I,
     pub(crate) default: Option<I::Item>,
@@ -469,6 +484,7 @@ impl<I: Iterator> Iterator for DefaultIfEmpty<I> {
 ///
 /// Holds a ring buffer of size `n`. Yielded items are always at least `n`
 /// steps behind the source, so the trailing `n` items are dropped on the floor.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SkipLast<I: Iterator> {
     pub(crate) inner: I,
     pub(crate) buffer: std::collections::VecDeque<I::Item>,

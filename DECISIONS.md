@@ -245,8 +245,13 @@ seam, not the seam.
   was ignored at publish time.
 - **Blocked on:** confirming that crates.io user `TRget88` is the owner's own
   account. If it is not, this is an ownership dispute, not a version bump.
-- **Enforced by:** a `cargo package --list` check in CI that fails if
-  `tests/`/`*_tests.rs` appear in the tarball, plus a manifest-completeness step.
+- **Enforced by:** **IMPLEMENTED** — `.github/scripts/packaging-gate.sh`, wired
+  into CI. It asserts `repository` is set, that the tarball does **not** carry
+  `AUDIT.md`/`QUESTIONS.md`/`CLAUDE.md`/`.github/`, and that it **does** carry
+  `tests/`, `DECISIONS.md` and both licence files — because the executed-test
+  count should be verifiable from the published artifact, not only claimed in a
+  README. Verified in both directions: it passes on this tree and fails when
+  `exclude` is removed or `repository` is deleted.
 
 ## D-010 — Stable Rust only; MSRV 1.75, declared **and actually exercised**
 - **Status:** SETTLED (2026-09-09)
@@ -281,8 +286,13 @@ seam, not the seam.
 - **Ruling:** `license = "MIT OR Apache-2.0"`, both licence files present.
 - **Why:** Ecosystem norm; trivial now, consent-requiring once outside
   contributors arrive.
+- **Enforced by:** **IMPLEMENTED** — the same packaging gate asserts
+  `license == "MIT OR Apache-2.0"`, that `LICENSE-MIT` and `LICENSE-APACHE` both
+  exist, and that `LICENSE-APACHE` hashes to the canonical Apache-2.0 text
+  (`cfc7749b…`), so a truncated or edited copy is caught. Verified failing when
+  the field is reverted to `MIT`.
 - **Note:** 0.1.0 is published MIT-only and stays MIT forever. Dual licensing can
-  only begin at the next version.
+  only begin at the next version — done at 0.2.0.
 - **Enforced by:** *(NOT YET IMPLEMENTED — `W-17`.)* A CI step asserting
   `Cargo.toml`'s `license` field is exactly `MIT OR Apache-2.0` and that both
   `LICENSE-MIT` and `LICENSE-APACHE` exist. Today the field still reads `MIT`.
@@ -403,9 +413,9 @@ paragraph, which is exactly the state this file says not to rest in — so treat
 `W-19` as blocking 1.0, not as cleanup.
 
 ## D-101 — Key bound: `Hash + Eq` or `PartialEq`?
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: `Hash + Eq`**, with `*_by` comparator variants
+- **Status:** OPEN. **Recommended: `Hash + Eq`**, with `*_by` comparator variants
   *named in the 1.0 docs* so adding them later is purely additive.
+- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
 - **Why it matters:** determines the complexity class of every hash-backed
   operator *and* whether `f64` keys compile at all. `PartialEq` gives no
   reflexivity, so `Lookup::get(&f64::NAN)` cannot find a key it just inserted.
@@ -415,10 +425,10 @@ paragraph, which is exactly the state this file says not to rest in — so treat
   `HashSet`/`HashMap`/`Itertools::unique` already do.
 
 ## D-102 — The v2 translation boundary
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: compile error, with an explicit one-token
+- **Status:** OPEN. **Recommended: compile error, with an explicit one-token
   opt-in** (`.to_memory()`) that consumes the queryable and returns a plain
   `Iterator` on which the full surface reappears.
+- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
 - **Why it matters:** EF Core ran this experiment — silent client-side fallback
   before 3.0, documented as causing "unnoticed performance issues", changed to a
   runtime throw in 3.0. C# cannot do better because `IQueryable<T>` exposes the
@@ -434,9 +444,9 @@ paragraph, which is exactly the state this file says not to rest in — so treat
   fix it. Plan a *second* method (`where_expr`), never a widened `where_`.
 
 ## D-103 — Three-valued logic across the seam
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended:** do not promise result identity. Promise a
+- **Status:** OPEN. **Recommended:** do not promise result identity. Promise a
   **stability class per operator, declared per provider**.
+- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
 - **Why it matters:** "same query, two backends, same answer" is not achievable by
   default. Rust `Ord for str` is byte-ordinal, C# `OrderBy` is culture-aware,
   PostgreSQL orders by the column's collation — measured, `["a","B","c","D"]`
@@ -444,9 +454,9 @@ paragraph, which is exactly the state this file says not to rest in — so treat
   land on opposite sides of `"f"`. Add `D-018`'s null split on top.
 
 ## D-104 — Key-selector signature
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended:** decide explicitly between an HRTB/GAT form,
+- **Status:** OPEN. **Recommended:** decide explicitly between an HRTB/GAT form,
   `K: Borrow<..>`, and accept-and-document-with-the-clone-cost-stated.
+- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
 - **Why it matters:** every key selector is `FnMut(&Self::Item) -> K` with `K`
   free, so a key cannot borrow from an owned item. Every shipped method takes a
   key selector, so this is unfixable after 1.0 without breaking the whole API. The
@@ -456,9 +466,9 @@ paragraph, which is exactly the state this file says not to rest in — so treat
   clones.
 
 ## D-105 — `Fn` vs `FnMut` on predicates and selectors
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: `Fn`** on anything the plan vocabulary might
+- **Status:** OPEN. **Recommended: `Fn`** on anything the plan vocabulary might
   ever contain.
+- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
 - **Why it matters:** currently inconsistent — `order_by` binds `FnMut`
   (`queryable.rs:229`), `join` binds `Fn` (`:460`). A translator needs purity, and
   narrowing later is breaking: verified, a v1-legal counting closure against a v2
@@ -466,9 +476,9 @@ paragraph, which is exactly the state this file says not to rest in — so treat
   variable in a 'Fn' closure`.
 
 ## D-106 — Named return types for anything the seam must reach
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: return named types** from `join`, `group_join`,
+- **Status:** OPEN. **Recommended: return named types** from `join`, `group_join`,
   `group_by` and any future relational operator.
+- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
 - **Why it matters:** `B-1`, compiler-verified — the eight `-> impl Iterator` sites
   in trait position permanently seal those operators against any future trait
   (`error[E0599]: no method named 'sql' found for opaque type`), and they are the
@@ -476,18 +486,22 @@ paragraph, which is exactly the state this file says not to rest in — so treat
   1.75 with zero headroom.
 
 ## D-107 — Seal the public traits
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: seal both.**
+- **Status:** OPEN. **Recommended: seal both.**
+- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
 - **Why it matters:** `LinqExt` is de facto sealed by its blanket impl, but
   `ThenBy` is a public unsealed trait with exactly one impl, so any added method is
   potentially breaking for a downstream implementor. Free now, impossible later.
 
 ## D-108 — `to_` vs `into_`, and `#[must_use]`
-- **Status:** OPEN
-- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended:** rename consuming conversions to `into_`; add
-  `#[must_use]` to every deferred return.
+- **Status:** OPEN — but **half done**. The `#[must_use]` half shipped in `W-17`
+  (52 annotations); the `to_` vs `into_` rename has not, and is the breaking half.
+  **Recommended:** rename consuming conversions to `into_`.
+- **Enforced by:** the `#[must_use]` half is enforced by the compiler as of
+  `W-17` and by a downstream probe (11 discarded results → 11 warnings,
+  `for_each_` → none). The rename half: nothing yet — see the shared gate for
+  this section (`W-19`).
 - **Why it matters:** `to_lookup` consumes `self` against the convention reserving
-  `to_` for borrow-to-owned, and clippy does not catch it. And there is **zero**
+  `to_` for borrow-to-owned, and clippy does not catch it. And there was **zero**
   `#[must_use]` in either tree, so a discarded eager `order_by` — which allocates
   and sorts — emits no diagnostic where std's `Filter`/`Map` both warn.
 

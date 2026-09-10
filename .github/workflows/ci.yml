@@ -66,6 +66,13 @@ jobs:
         run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+      # D-009 / D-012. A ruling in DECISIONS.md that is checked by nothing is a
+      # ruling that gets broken again: 0.1.0 shipped with no `repository`, the
+      # wrong licence, and 421 lines of dead test code in the tarball.
+      - name: Packaging and licence gate
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./.github/scripts/packaging-gate.sh
 
   msrv:
     name: MSRV (1.75)

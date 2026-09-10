@@ -294,6 +294,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let result: Vec<_> = (1..=5).take_last(2).collect();
     /// assert_eq!(result, [4, 5]);
     /// ```
+    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn take_last(self, n: usize) -> std::vec::IntoIter<Self::Item> {
         if n == 0 {
             return Vec::new().into_iter();
@@ -635,6 +636,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let sum = (1..=5).aggregate(0, |acc, x| acc + x);
     /// assert_eq!(sum, 15);
     /// ```
+    #[must_use]
     fn aggregate<Acc, F>(self, seed: Acc, f: F) -> Acc
     where
         F: FnMut(Acc, Self::Item) -> Acc,
@@ -653,6 +655,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let sum = (1..=5).reduce_(|acc, x| acc + x);
     /// assert_eq!(sum, Some(15));
     /// ```
+    #[must_use]
     fn reduce_<F>(self, f: F) -> Option<Self::Item>
     where
         F: FnMut(Self::Item, Self::Item) -> Self::Item,
@@ -673,6 +676,7 @@ pub trait LinqExt: Iterator + Sized {
     /// );
     /// assert_eq!(doubled_sum, 30);
     /// ```
+    #[must_use]
     fn aggregate_with_selector<Acc, R, F, S>(self, seed: Acc, f: F, result_selector: S) -> R
     where
         F: FnMut(Acc, Self::Item) -> Acc,
@@ -682,6 +686,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Sums elements that implement `std::iter::Sum`. Equivalent to `Sum`.
+    #[must_use]
     fn sum_<S>(self) -> S
     where
         S: std::iter::Sum<Self::Item>,
@@ -698,6 +703,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let total: i32 = pairs.into_iter().sum_by(|(_, n)| n);
     /// assert_eq!(total, 6);
     /// ```
+    #[must_use]
     fn sum_by<T, S, F>(self, selector: F) -> S
     where
         S: std::iter::Sum<T>,
@@ -713,6 +719,7 @@ pub trait LinqExt: Iterator + Sized {
     /// use linq_rs::LinqExt;
     /// assert_eq!((1..=10).count_where(|x| x % 2 == 0), 5);
     /// ```
+    #[must_use]
     fn count_where<P>(self, predicate: P) -> usize
     where
         P: FnMut(&Self::Item) -> bool,
@@ -721,6 +728,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns the minimum element, or `None` if the iterator is empty.
+    #[must_use]
     fn min_(self) -> Option<Self::Item>
     where
         Self::Item: Ord,
@@ -729,6 +737,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns the maximum element, or `None` if the iterator is empty.
+    #[must_use]
     fn max_(self) -> Option<Self::Item>
     where
         Self::Item: Ord,
@@ -740,6 +749,7 @@ pub trait LinqExt: Iterator + Sized {
     /// Equivalent to C# `MinBy(keySelector)` and to [`Iterator::min_by_key`].
     ///
     /// Returns `None` if the sequence is empty.
+    #[must_use]
     fn min_by_key_<K, F>(self, key_fn: F) -> Option<Self::Item>
     where
         K: Ord,
@@ -752,6 +762,7 @@ pub trait LinqExt: Iterator + Sized {
     /// Equivalent to C# `MaxBy(keySelector)` and to [`Iterator::max_by_key`].
     ///
     /// Returns `None` if the sequence is empty.
+    #[must_use]
     fn max_by_key_<K, F>(self, key_fn: F) -> Option<Self::Item>
     where
         K: Ord,
@@ -769,6 +780,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let avg = vec![1.0f64, 2.0, 3.0].into_iter().average(|x| x);
     /// assert_eq!(avg, Some(2.0));
     /// ```
+    #[must_use]
     fn average<F>(self, selector: F) -> Option<f64>
     where
         F: FnMut(Self::Item) -> f64,
@@ -799,16 +811,19 @@ pub trait LinqExt: Iterator + Sized {
     /// use linq_rs::LinqExt;
     /// assert_eq!((1..=5).first(), 1);
     /// ```
+    #[must_use]
     fn first(mut self) -> Self::Item {
         self.next().expect("sequence contains no elements")
     }
 
     /// Returns the first element, or `None`. Equivalent to `FirstOrDefault`.
+    #[must_use]
     fn first_or_default(mut self) -> Option<Self::Item> {
         self.next()
     }
 
     /// Returns the first element matching a predicate, or `None`.
+    #[must_use]
     fn first_where<P>(self, predicate: P) -> Option<Self::Item>
     where
         P: FnMut(&Self::Item) -> bool,
@@ -821,16 +836,19 @@ pub trait LinqExt: Iterator + Sized {
     /// Named `last_` to avoid colliding with [`Iterator::last`]. Equivalent to
     /// C# `Last()`. For a non-panicking version, see
     /// [`last_or_default`](Self::last_or_default).
+    #[must_use]
     fn last_(self) -> Self::Item {
         self.last().expect("sequence contains no elements")
     }
 
     /// Returns the last element, or `None`. Equivalent to `LastOrDefault`.
+    #[must_use]
     fn last_or_default(self) -> Option<Self::Item> {
         self.fold(None, |_, x| Some(x))
     }
 
     /// Returns the last element matching a predicate, or `None`.
+    #[must_use]
     fn last_where<P>(self, predicate: P) -> Option<Self::Item>
     where
         P: FnMut(&Self::Item) -> bool,
@@ -839,6 +857,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns the element at `index`, or `None`. Equivalent to `ElementAtOrDefault`.
+    #[must_use]
     fn element_at(self, index: usize) -> Option<Self::Item> {
         Iterator::skip(self, index).next()
     }
@@ -847,6 +866,7 @@ pub trait LinqExt: Iterator + Sized {
     /// bounds. Equivalent to C# `ElementAt(index)`.
     ///
     /// For a non-panicking version, see [`element_at`](Self::element_at).
+    #[must_use]
     fn element_at_strict(self, index: usize) -> Self::Item {
         Iterator::skip(self, index)
             .next()
@@ -857,6 +877,7 @@ pub trait LinqExt: Iterator + Sized {
     /// contains more than one element. Equivalent to C# `Single()`.
     ///
     /// For non-panicking variants, see [`single_or_default`](Self::single_or_default).
+    #[must_use]
     fn single(mut self) -> Self::Item {
         let first = self.next().expect("sequence contains no elements");
         if self.next().is_some() {
@@ -867,6 +888,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Returns the single element, or `None` if the sequence has 0 or 2+
     /// elements. Equivalent to `SingleOrDefault`.
+    #[must_use]
     fn single_or_default(mut self) -> Option<Self::Item> {
         let first = self.next()?;
         if self.next().is_some() {
@@ -878,12 +900,14 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Returns the first element, or `default` if the sequence is empty.
     /// Equivalent to C# `FirstOrDefault(defaultValue)` (.NET 6+).
+    #[must_use]
     fn first_or(mut self, default: Self::Item) -> Self::Item {
         self.next().unwrap_or(default)
     }
 
     /// Returns the last element, or `default` if the sequence is empty.
     /// Equivalent to C# `LastOrDefault(defaultValue)` (.NET 6+).
+    #[must_use]
     fn last_or(self, default: Self::Item) -> Self::Item {
         self.last().unwrap_or(default)
     }
@@ -892,6 +916,7 @@ pub trait LinqExt: Iterator + Sized {
     /// **Panics** if the sequence contains more than one element (mirrors
     /// C# `SingleOrDefault(defaultValue)` — the .NET 6+ overload still throws
     /// on multiple matches, the default only kicks in for empty).
+    #[must_use]
     fn single_or(mut self, default: Self::Item) -> Self::Item {
         let first = match self.next() {
             Some(v) => v,
@@ -905,6 +930,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Returns the element at `index`, or `default` if out of bounds.
     /// Equivalent to C# `ElementAtOrDefault(index, defaultValue)`-style.
+    #[must_use]
     fn element_at_or(self, index: usize, default: Self::Item) -> Self::Item {
         Iterator::skip(self, index).next().unwrap_or(default)
     }
@@ -933,6 +959,7 @@ pub trait LinqExt: Iterator + Sized {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Returns `true` if any element satisfies the predicate. Equivalent to `Any`.
+    #[must_use]
     fn any_<P>(mut self, predicate: P) -> bool
     where
         P: FnMut(Self::Item) -> bool,
@@ -941,6 +968,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns `true` if every element satisfies the predicate. Equivalent to `All`.
+    #[must_use]
     fn all_<P>(mut self, predicate: P) -> bool
     where
         P: FnMut(Self::Item) -> bool,
@@ -949,6 +977,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns `true` if the sequence contains a specific value. Equivalent to `Contains`.
+    #[must_use]
     fn contains_<T>(mut self, value: &T) -> bool
     where
         Self::Item: PartialEq<T>,
@@ -1352,11 +1381,13 @@ pub trait LinqExt: Iterator + Sized {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Collects into a `Vec`. Equivalent to `ToList`.
+    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn to_vec(self) -> Vec<Self::Item> {
         self.collect()
     }
 
     /// Collects into a `HashMap` by a key selector. Equivalent to `ToDictionary`.
+    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn to_hashmap<K, F>(self, key_fn: F) -> std::collections::HashMap<K, Self::Item>
     where
         K: std::hash::Hash + Eq,
@@ -1372,6 +1403,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Collects into a `HashSet`. Equivalent to `ToHashSet`.
+    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn to_hashset(self) -> std::collections::HashSet<Self::Item>
     where
         Self::Item: std::hash::Hash + Eq,
@@ -1475,6 +1507,7 @@ pub trait LinqExt: Iterator + Sized {
     /// but here the consumption is intentional and consistent with `any_` /
     /// `all_` / `count_where`.
     #[allow(clippy::wrong_self_convention)]
+    #[must_use]
     fn is_empty_(mut self) -> bool {
         self.next().is_none()
     }
@@ -1493,6 +1526,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Sequence equality — two sequences are equal if they yield the same
     /// elements in the same order. Equivalent to `SequenceEqual`.
+    #[must_use]
     fn sequence_equal<I2>(self, other: I2) -> bool
     where
         I2: IntoIterator<Item = Self::Item>,

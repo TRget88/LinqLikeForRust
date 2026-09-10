@@ -6,6 +6,7 @@
 ///
 /// Produced by [`LinqExt::group_by`](crate::queryable::LinqExt::group_by).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub struct Grouping<K, V> {
     /// The shared key for this group.
     pub key: K,
