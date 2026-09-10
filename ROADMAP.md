@@ -165,11 +165,11 @@ operators were O(n²) where O(n) is achievable.
 - [x] **Move source into `src/`** — standard Rust layout. `[lib]` block dropped from `Cargo.toml` (auto-discovery).
 - [x] **Move `linq_tests.rs` into `tests/`** — standard integration test location. `[[test]]` block dropped.
 - [x] **`examples/`** — three runnable examples: `basic_pipeline`, `join`, `group_aggregate`.
-- [x] **CI** — `.github/workflows/ci.yml` runs build, test, clippy `-D warnings`, fmt `--check`, doc on Linux + Windows. Separate `msrv` job pinned to Rust 1.75.
+- [x] **CI** — `.github/workflows/ci.yml` runs build, test, clippy `-D warnings`, fmt `--check`, doc on Linux + Windows. Separate `msrv` job pinned to Rust 1.65 (see `D-010`).
 - [x] **`#![warn(missing_docs)]`** — applied on the crate root. Caught two undocumented public fields on `Grouping<K, V>` (now documented).
 - [x] **`#![forbid(unsafe_code)]`** — applied on the crate root.
 - [x] **`CHANGELOG.md`** — Keep-a-Changelog format with the Phase 1–4 work documented.
-- [x] **`rust-version` / MSRV** — pinned to `1.75` (needed for return-position `impl Trait` in trait methods, which we use heavily).
+- [x] **`rust-version` / MSRV** — pinned to `1.65`. It was `1.75`, forced by 23 return-position-`impl Trait`-in-trait sites; `D-106` converted those to named types for unrelated reasons and the floor dropped ten releases.
 - [~] **`rustdoc` polish** — partial. The crate-level doc comment already shows a quick-start; a fuller side-by-side cheatsheet inside the rustdoc is deferred (it would duplicate the README).
 
 **Other Phase 4 fixes shipped while we were here:**

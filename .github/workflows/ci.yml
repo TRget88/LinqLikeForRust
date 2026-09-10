@@ -67,6 +67,22 @@ jobs:
       # README has drifted -- or if a method was renamed without updating the
       # map. Three hand-written counts in this project have been wrong, one of
       # them inside the fix for the previous one.
+      # D-106. Opaque returns in the trait carry no operator identity --
+      # distinct/except/intersect were all `Filter<I, closure>`, so a downstream
+      # trait could not give them different behaviour. They also pinned the MSRV.
+      - name: No opaque returns in LinqExt (D-106)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          n="$(grep -c -- '-> impl Iterator' src/queryable.rs || true)"
+          echo "opaque return sites: $n"
+          if [ "$n" -ne 0 ]; then
+            echo "FAIL: $n method(s) return an opaque type. D-106 requires named"
+            echo "      return types: only they let a downstream trait dispatch"
+            echo "      per operator, and they are what unpinned the MSRV."
+            grep -n -- '-> impl Iterator' src/queryable.rs
+            exit 1
+          fi
       - name: Derived docs are current
         if: runner.os == 'Linux'
         shell: bash
@@ -114,24 +130,24 @@ jobs:
         run: ./.github/scripts/release-gate.sh
 
   msrv:
-    name: MSRV (1.75)
+    name: MSRV (1.65)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.65
       # Assert the toolchain is actually 1.75 before trusting anything below.
       # Verifying an MSRV against the wrong compiler is worse than not
       # verifying it: it produces a confident, false claim. That happened
       # twice during this remediation, locally, via a PATH that silently fell
       # through to stable.
-      - name: Confirm the toolchain really is 1.75
+      - name: Confirm the toolchain really is 1.65
         shell: bash
         run: |
           v="$(rustc --version)"
           echo "$v"
           case "$v" in
-            *"1.75."*) echo "confirmed 1.75" ;;
-            *) echo "FAIL: expected rustc 1.75.x, got: $v"; exit 1 ;;
+            *"1.65."*) echo "confirmed 1.65" ;;
+            *) echo "FAIL: expected rustc 1.65.x, got: $v"; exit 1 ;;
           esac
       - name: Build on MSRV
         run: cargo build --all-targets

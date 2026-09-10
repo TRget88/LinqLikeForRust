@@ -127,11 +127,11 @@ pub trait LinqExt: Iterator + Sized {
     /// let d: Vec<_> = vec![1, 2, 2, 3, 1].into_iter().distinct_partial_eq().collect();
     /// assert_eq!(d, [1, 2, 3]);
     /// ```
-    fn distinct_partial_eq(self) -> Distinct<Self>
+    fn distinct_partial_eq(self) -> DistinctPartialEq<Self>
     where
         Self::Item: PartialEq + Clone,
     {
-        Distinct {
+        DistinctPartialEq {
             inner: self,
             seen: Vec::new(),
         }
@@ -143,12 +143,12 @@ pub trait LinqExt: Iterator + Sized {
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
     /// Returns distinct elements by a key selector. C# analogue: `DistinctBy`.
-    fn distinct_by_partial_eq<K, F>(self, key_fn: F) -> DistinctBy<Self, F, K>
+    fn distinct_by_partial_eq<K, F>(self, key_fn: F) -> DistinctByPartialEq<Self, F, K>
     where
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
     {
-        DistinctBy {
+        DistinctByPartialEq {
             inner: self,
             key_fn,
             seen_keys: Vec::new(),
@@ -166,25 +166,30 @@ pub trait LinqExt: Iterator + Sized {
     /// let v: Vec<_> = vec![1, 2, 2, 3, 1].into_iter().distinct().collect();
     /// assert_eq!(v, [1, 2, 3]);
     /// ```
-    fn distinct(self) -> impl Iterator<Item = Self::Item>
+    fn distinct(self) -> Distinct<Self>
     where
         Self::Item: Eq + std::hash::Hash + Clone,
     {
-        let mut seen = std::collections::HashSet::new();
-        self.filter(move |x| seen.insert(x.clone()))
+        Distinct {
+            inner: self,
+            seen: std::collections::HashSet::new(),
+        }
     }
 
     /// Returns distinct elements by a key selector, using a `HashSet`.
     /// Requires `Eq + Hash` keys; for `PartialEq`-only keys use
     /// [`distinct_by_partial_eq`](Self::distinct_by_partial_eq). When the key
     /// type implements `Eq + Hash`.
-    fn distinct_by<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Self::Item>
+    fn distinct_by<K, F>(self, key_fn: F) -> DistinctBy<Self, F, K>
     where
         K: Eq + std::hash::Hash,
         F: FnMut(&Self::Item) -> K,
     {
-        let mut seen: std::collections::HashSet<K> = std::collections::HashSet::new();
-        self.filter(move |x| seen.insert(key_fn(x)))
+        DistinctBy {
+            inner: self,
+            key_fn,
+            seen: std::collections::HashSet::new(),
+        }
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -199,13 +204,15 @@ pub trait LinqExt: Iterator + Sized {
     /// let diff: Vec<_> = vec![1,2,3,4].into_iter().except_partial_eq(vec![2,4]).collect();
     /// assert_eq!(diff, [1, 3]);
     /// ```
-    fn except_partial_eq<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn except_partial_eq<I2>(self, other: I2) -> ExceptPartialEq<Self>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: PartialEq,
     {
-        let exclusions: Vec<_> = other.into_iter().collect();
-        self.where_(move |x| !exclusions.contains(x))
+        ExceptPartialEq {
+            exclusions: other.into_iter().collect(),
+            inner: self,
+        }
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -220,13 +227,15 @@ pub trait LinqExt: Iterator + Sized {
     /// let inter: Vec<_> = vec![1,2,3,4].into_iter().intersect_partial_eq(vec![2,4,6]).collect();
     /// assert_eq!(inter, [2, 4]);
     /// ```
-    fn intersect_partial_eq<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn intersect_partial_eq<I2>(self, other: I2) -> IntersectPartialEq<Self>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: PartialEq,
     {
-        let inclusion: Vec<_> = other.into_iter().collect();
-        self.where_(move |x| inclusion.contains(x))
+        IntersectPartialEq {
+            inclusions: other.into_iter().collect(),
+            inner: self,
+        }
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -235,7 +244,7 @@ pub trait LinqExt: Iterator + Sized {
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
     /// Produces the set union of two sequences. C# analogue: `Union`.
-    fn union_partial_eq<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn union_partial_eq<I2>(self, other: I2) -> UnionPartialEq<Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: PartialEq,
@@ -246,7 +255,9 @@ pub trait LinqExt: Iterator + Sized {
                 result.push(item);
             }
         }
-        result.into_iter()
+        UnionPartialEq {
+            inner: result.into_iter(),
+        }
     }
 
     /// Returns elements of `self` whose **projected key** is not in `other`.
@@ -262,14 +273,17 @@ pub trait LinqExt: Iterator + Sized {
     ///     .collect();
     /// assert_eq!(v, ["banana", "bear"]);
     /// ```
-    fn except_by<I2, K, F>(self, other: I2, mut key_fn: F) -> impl Iterator<Item = Self::Item>
+    fn except_by<I2, K, F>(self, other: I2, key_fn: F) -> ExceptBy<Self, F, K>
     where
         I2: IntoIterator<Item = K>,
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
     {
-        let exclusions: Vec<K> = other.into_iter().collect();
-        self.where_(move |x| !exclusions.contains(&key_fn(x)))
+        ExceptBy {
+            exclusions: other.into_iter().collect(),
+            inner: self,
+            key_fn,
+        }
     }
 
     /// Returns elements of `self` whose **projected key** appears in `other`.
@@ -285,14 +299,17 @@ pub trait LinqExt: Iterator + Sized {
     ///     .collect();
     /// assert_eq!(v, ["apple", "ant", "cherry"]);
     /// ```
-    fn intersect_by<I2, K, F>(self, other: I2, mut key_fn: F) -> impl Iterator<Item = Self::Item>
+    fn intersect_by<I2, K, F>(self, other: I2, key_fn: F) -> IntersectBy<Self, F, K>
     where
         I2: IntoIterator<Item = K>,
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
     {
-        let inclusions: Vec<K> = other.into_iter().collect();
-        self.where_(move |x| inclusions.contains(&key_fn(x)))
+        IntersectBy {
+            inclusions: other.into_iter().collect(),
+            inner: self,
+            key_fn,
+        }
     }
 
     /// Set difference: elements of `self` that are not in `other`.
@@ -300,39 +317,45 @@ pub trait LinqExt: Iterator + Sized {
     /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for element types that
     /// are only `PartialEq` — `f64`, say — use
     /// [`except_partial_eq`](Self::except_partial_eq), which is O(n·m).
-    fn except<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn except<I2>(self, other: I2) -> Except<Self>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: Eq + std::hash::Hash,
     {
-        let exclusions: std::collections::HashSet<Self::Item> = other.into_iter().collect();
-        self.filter(move |x| !exclusions.contains(x))
+        Except {
+            exclusions: other.into_iter().collect(),
+            inner: self,
+        }
     }
 
     /// Elements that appear in both sequences.
     ///
     /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for `PartialEq`-only
     /// element types use [`intersect_partial_eq`](Self::intersect_partial_eq).
-    fn intersect<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn intersect<I2>(self, other: I2) -> Intersect<Self>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: Eq + std::hash::Hash,
     {
-        let inclusions: std::collections::HashSet<Self::Item> = other.into_iter().collect();
-        self.filter(move |x| inclusions.contains(x))
+        Intersect {
+            inclusions: other.into_iter().collect(),
+            inner: self,
+        }
     }
 
     /// Set union of two sequences.
     ///
     /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for `PartialEq`-only
     /// element types use [`union_partial_eq`](Self::union_partial_eq).
-    fn union_<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
+    fn union_<I2>(self, other: I2) -> Union<Self, I2::IntoIter>
     where
         I2: IntoIterator<Item = Self::Item>,
         Self::Item: Eq + std::hash::Hash + Clone,
     {
-        let mut seen: std::collections::HashSet<Self::Item> = std::collections::HashSet::new();
-        self.chain(other).filter(move |x| seen.insert(x.clone()))
+        Union {
+            inner: self.chain(other),
+            seen: std::collections::HashSet::new(),
+        }
     }
 
     /// Produces the set union of two sequences, deduplicating by projected
@@ -351,7 +374,7 @@ pub trait LinqExt: Iterator + Sized {
     ///     .collect();
     /// assert_eq!(v, ["apple", "banana"]);
     /// ```
-    fn union_by<I2, K, F>(self, other: I2, mut key_fn: F) -> impl Iterator<Item = Self::Item>
+    fn union_by<I2, K, F>(self, other: I2, mut key_fn: F) -> UnionBy<Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
         K: PartialEq,
@@ -366,7 +389,9 @@ pub trait LinqExt: Iterator + Sized {
                 result.push(item);
             }
         }
-        result.into_iter()
+        UnionBy {
+            inner: result.into_iter(),
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -849,7 +874,7 @@ pub trait LinqExt: Iterator + Sized {
         outer_key_fn: OuterKeyFn,
         inner_key_fn: InnerKeyFn,
         result_selector: ResultFn,
-    ) -> impl Iterator<Item = R>
+    ) -> InnerJoinPartialEq<R>
     where
         Inner: IntoIterator,
         OuterKey: PartialEq,
@@ -871,7 +896,9 @@ pub trait LinqExt: Iterator + Sized {
                 }
             }
         }
-        results.into_iter()
+        InnerJoinPartialEq {
+            inner: results.into_iter(),
+        }
     }
 
     /// Inner join on matching keys, projecting results with `result_selector`.
@@ -888,7 +915,7 @@ pub trait LinqExt: Iterator + Sized {
         outer_key_fn: OuterKeyFn,
         inner_key_fn: InnerKeyFn,
         result_selector: ResultFn,
-    ) -> impl Iterator<Item = R>
+    ) -> InnerJoin<R>
     where
         Inner: IntoIterator,
         Key: Eq + std::hash::Hash,
@@ -913,7 +940,9 @@ pub trait LinqExt: Iterator + Sized {
                 }
             }
         }
-        results.into_iter()
+        InnerJoin {
+            inner: results.into_iter(),
+        }
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -929,7 +958,7 @@ pub trait LinqExt: Iterator + Sized {
         outer_key_fn: OuterKeyFn,
         inner_key_fn: InnerKeyFn,
         result_selector: ResultFn,
-    ) -> impl Iterator<Item = R>
+    ) -> GroupJoinPartialEq<R>
     where
         Inner: IntoIterator,
         OuterKey: PartialEq,
@@ -940,17 +969,20 @@ pub trait LinqExt: Iterator + Sized {
         Inner::Item: Clone,
     {
         let inner_vec: Vec<Inner::Item> = inner.into_iter().collect();
-        self.map(move |outer_item| {
-            let outer_key = outer_key_fn(&outer_item);
-            let group: Vec<Inner::Item> = inner_vec
-                .iter()
-                .filter(|i| inner_key_fn(i) == outer_key)
-                .cloned()
-                .collect();
-            result_selector(outer_item, group)
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+        let out: Vec<R> = self
+            .map(move |outer_item| {
+                let outer_key = outer_key_fn(&outer_item);
+                let group: Vec<Inner::Item> = inner_vec
+                    .iter()
+                    .filter(|i| inner_key_fn(i) == outer_key)
+                    .cloned()
+                    .collect();
+                result_selector(outer_item, group)
+            })
+            .collect::<Vec<_>>();
+        GroupJoinPartialEq {
+            inner: out.into_iter(),
+        }
     }
 
     /// Left outer join with the matching inner elements grouped.
@@ -964,7 +996,7 @@ pub trait LinqExt: Iterator + Sized {
         outer_key_fn: OuterKeyFn,
         inner_key_fn: InnerKeyFn,
         result_selector: ResultFn,
-    ) -> impl Iterator<Item = R>
+    ) -> GroupJoin<R>
     where
         Inner: IntoIterator,
         Key: Eq + std::hash::Hash,
@@ -979,13 +1011,16 @@ pub trait LinqExt: Iterator + Sized {
             let k = inner_key_fn(&item);
             inner_map.entry(k).or_default().push(item);
         }
-        self.map(move |outer_item| {
-            let outer_key = outer_key_fn(&outer_item);
-            let group = inner_map.get(&outer_key).cloned().unwrap_or_default();
-            result_selector(outer_item, group)
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+        let out: Vec<R> = self
+            .map(move |outer_item| {
+                let outer_key = outer_key_fn(&outer_item);
+                let group = inner_map.get(&outer_key).cloned().unwrap_or_default();
+                result_selector(outer_item, group)
+            })
+            .collect();
+        GroupJoin {
+            inner: out.into_iter(),
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1010,10 +1045,7 @@ pub trait LinqExt: Iterator + Sized {
     /// assert_eq!(*groups[0].key(), 'a');
     /// assert_eq!(groups[0].elements(), ["apple", "ant"]);
     /// ```
-    fn group_by_key_partial_eq<K, F>(
-        self,
-        mut key_fn: F,
-    ) -> impl Iterator<Item = Grouping<K, Self::Item>>
+    fn group_by_key_partial_eq<K, F>(self, mut key_fn: F) -> GroupByKeyPartialEq<K, Self::Item>
     where
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
@@ -1029,7 +1061,9 @@ pub trait LinqExt: Iterator + Sized {
                 groups.push(g);
             }
         }
-        groups.into_iter()
+        GroupByKeyPartialEq {
+            inner: groups.into_iter(),
+        }
     }
 
     /// Groups elements by a key, projecting each item through `element_fn`
@@ -1039,7 +1073,7 @@ pub trait LinqExt: Iterator + Sized {
         self,
         mut key_fn: KF,
         mut element_fn: EF,
-    ) -> impl Iterator<Item = Grouping<K, E>>
+    ) -> GroupByWithElement<K, E>
     where
         K: PartialEq,
         KF: FnMut(&Self::Item) -> K,
@@ -1057,7 +1091,9 @@ pub trait LinqExt: Iterator + Sized {
                 groups.push(g);
             }
         }
-        groups.into_iter()
+        GroupByWithElement {
+            inner: groups.into_iter(),
+        }
     }
 
     /// Groups elements by a key, then projects each group through
@@ -1067,7 +1103,7 @@ pub trait LinqExt: Iterator + Sized {
         self,
         mut key_fn: KF,
         mut result_fn: RF,
-    ) -> impl Iterator<Item = R>
+    ) -> GroupByWithResult<R>
     where
         K: PartialEq,
         KF: FnMut(&Self::Item) -> K,
@@ -1084,10 +1120,16 @@ pub trait LinqExt: Iterator + Sized {
                 groups.push(g);
             }
         }
-        groups.into_iter().map(move |g| {
-            let (k, v) = g.into_parts();
-            result_fn(k, v)
-        })
+        let out: Vec<R> = groups
+            .into_iter()
+            .map(move |g| {
+                let (k, v) = g.into_parts();
+                result_fn(k, v)
+            })
+            .collect();
+        GroupByWithResult {
+            inner: out.into_iter(),
+        }
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -1107,7 +1149,7 @@ pub trait LinqExt: Iterator + Sized {
     /// counts.sort_by_key(|(k, _)| *k);
     /// assert_eq!(counts, [('a', 2), ('b', 2), ('c', 1)]);
     /// ```
-    fn count_by_partial_eq<K, F>(self, mut key_fn: F) -> impl Iterator<Item = (K, usize)>
+    fn count_by_partial_eq<K, F>(self, mut key_fn: F) -> CountByPartialEq<K>
     where
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
@@ -1121,7 +1163,9 @@ pub trait LinqExt: Iterator + Sized {
                 counts.push((key, 1));
             }
         }
-        counts.into_iter()
+        CountByPartialEq {
+            inner: counts.into_iter(),
+        }
     }
 
     /// Groups elements by a key, yielding one [`Grouping`] per distinct key in
@@ -1133,7 +1177,7 @@ pub trait LinqExt: Iterator + Sized {
     ///
     /// Groups are yielded in **insertion order of their first occurrence**,
     /// not in hash order.
-    fn group_by_key<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Grouping<K, Self::Item>>
+    fn group_by_key<K, F>(self, mut key_fn: F) -> GroupByKey<K, Self::Item>
     where
         K: Eq + std::hash::Hash + Clone,
         F: FnMut(&Self::Item) -> K,
@@ -1153,12 +1197,14 @@ pub trait LinqExt: Iterator + Sized {
                 }
             }
         }
-        groups.into_iter()
+        GroupByKey {
+            inner: groups.into_iter(),
+        }
     }
 
     /// Counts elements per key. Yields in hash order, not
     /// insertion order — the std `HashMap` iteration order is unspecified.
-    fn count_by<K, F>(self, mut key_fn: F) -> impl Iterator<Item = (K, usize)>
+    fn count_by<K, F>(self, mut key_fn: F) -> CountBy<K>
     where
         K: Eq + std::hash::Hash,
         F: FnMut(&Self::Item) -> K,
@@ -1168,7 +1214,9 @@ pub trait LinqExt: Iterator + Sized {
             let key = key_fn(&item);
             *counts.entry(key).or_insert(0) += 1;
         }
-        counts.into_iter()
+        CountBy {
+            inner: counts.into_iter(),
+        }
     }
 
     /// Fused group-and-aggregate. Yields in hash
@@ -1178,7 +1226,7 @@ pub trait LinqExt: Iterator + Sized {
         mut key_fn: KF,
         mut seed_fn: SF,
         mut accum: AF,
-    ) -> impl Iterator<Item = (K, Acc)>
+    ) -> AggregateBy<K, Acc>
     where
         K: Eq + std::hash::Hash,
         KF: FnMut(&Self::Item) -> K,
@@ -1194,7 +1242,9 @@ pub trait LinqExt: Iterator + Sized {
             };
             accs.insert(key, new_acc);
         }
-        accs.into_iter()
+        AggregateBy {
+            inner: accs.into_iter(),
+        }
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -1221,7 +1271,7 @@ pub trait LinqExt: Iterator + Sized {
         mut key_fn: KF,
         mut seed_fn: SF,
         mut accum: AF,
-    ) -> impl Iterator<Item = (K, Acc)>
+    ) -> AggregateByPartialEq<K, Acc>
     where
         K: PartialEq,
         KF: FnMut(&Self::Item) -> K,
@@ -1239,8 +1289,13 @@ pub trait LinqExt: Iterator + Sized {
                 accs.push((key, Some(accum(seed, item))));
             }
         }
-        accs.into_iter()
+        let out: Vec<(K, Acc)> = accs
+            .into_iter()
             .map(|(k, acc)| (k, acc.expect("acc was None — internal bug")))
+            .collect();
+        AggregateByPartialEq {
+            inner: out.into_iter(),
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

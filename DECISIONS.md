@@ -278,10 +278,13 @@ seam, not the seam.
   README. Verified in both directions: it passes on this tree and fails when
   `exclude` is removed or `repository` is deleted.
 
-## D-010 — Stable Rust only; MSRV 1.75, declared **and actually exercised**
+## D-010 — Stable Rust only; MSRV 1.65, declared **and actually exercised**
 - **Status:** SETTLED (2026-09-09)
-- **Ruling:** No nightly. `rust-version = "1.75"`. CI builds **and runs
-  doctests** on exactly 1.75.
+- **Ruling:** No nightly. `rust-version = "1.65"`. CI builds **and runs
+  doctests** on exactly 1.65.
+- **Lowered from 1.75 by `D-106` (2026-09-10).** The floor was never a
+  considered choice — it was wherever the 23 RPITIT sites happened to put it.
+  Converting them to named types for unrelated reasons dropped it ten releases.
 - **Why:** Eight return-position-`impl Trait`-in-trait sites pin the floor at
   exactly 1.75 with zero headroom. The branch declares it, but its MSRV job runs
   `cargo test --all-targets`, which **excludes doctests** — and the job never ran
@@ -648,15 +651,45 @@ while these remain open — which is exactly the intended latitude.
 - **Enforced by:** the compiler. Binding `Fn` on a non-boxing operator is a
   deliberate act a reviewer can see.
 
-## D-106 — Named return types for anything the seam must reach
-- **Status:** OPEN. **Recommended: return named types** from `join`, `group_join`,
-  `group_by` and any future relational operator.
-- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** `B-1`, compiler-verified — the eight `-> impl Iterator` sites
-  in trait position permanently seal those operators against any future trait
-  (`error[E0599]: no method named 'sql' found for opaque type`), and they are the
-  three operators the v2 thesis needs most. The same sites pin the MSRV at exactly
-  1.75 with zero headroom.
+## D-106 — Named return types, everywhere
+- **Status:** **SETTLED (2026-09-10)** — implemented; all 23 sites converted.
+- **Ruling:** no method on `LinqExt` returns an opaque type. Every operator
+  returns a named adaptor struct with `pub(crate)` fields — nameable but not
+  constructible, exactly `std::iter::Filter`'s contract.
+- **`AUDIT.md` B-1's premise was false, and its count was stale.** B-1 said
+  opaque returns are "permanently sealed" against a later trait. They are not:
+  a four-crate semver workspace with ten downstream call patterns — chaining,
+  re-export behind the caller's own `impl Trait`, `Box<dyn Iterator + Send>`,
+  generic fns, non-fused sources, `thread::spawn` — compiled **byte-identically**
+  against opaque and named libraries. Auto-trait leakage survives, generically.
+  Opaque → named is a *minor* change. And there were **23** opaque sites, not
+  the 8 B-1 claimed (confirmed by 1.74 rejecting exactly 23 with `E0562`).
+- **Two reasons it is worth doing anyway, neither previously on file:**
+  1. **The opaque witness carries no operator identity.** `distinct`, `except`
+     and `intersect` were all `Filter<I, closure>`. One blanket impl covers all
+     three, so a future `Sql` trait could not give them different SQL. *That* is
+     what blocked the v2 seam — not nameability. Verified after conversion: a
+     downstream trait impl'd separately for `Except`, `Intersect` and
+     `GroupByKey` prints `EXCEPT / INTERSECT / GROUP BY`.
+  2. **Method-bearing bounds are not additive.** `+ FusedIterator` can be added
+     to a shipped RPITIT later; `+ ExactSizeIterator` gives downstream
+     `error[E0034]: multiple applicable items in scope`, and `+ Clone` needs a
+     new input bound. So the impl set must be frozen at 1.0 whichever
+     representation is chosen — and only a conditional impl on a named type
+     (`impl FusedIterator for Distinct<I> where I: FusedIterator`) adds a
+     capability without adding an input bound. RPITIT cannot express that.
+- **The bonus: the MSRV drops from 1.75 to 1.65.** Those 23 RPITIT sites *were*
+  the pin. Verified: the full suite passes on a real `rustc 1.65.0`. Ten
+  releases of headroom, recovered by a change made for other reasons. See
+  `D-010`.
+- **Cost:** ~430 changed lines across `adaptors.rs` and `queryable.rs`, **zero
+  test edits**, zero behaviour change. 14 of the 23 were trivial newtypes over
+  `vec::IntoIter`, because the eager operators have already run their closures
+  by the time the type exists — so the feared unnameable
+  `InnerJoin<I, J, KO, KI, R>` signature never materialised; `inner_join`
+  returns `InnerJoin<R>`, one parameter.
+- **Enforced by:** **IMPLEMENTED** — CI greps `src/queryable.rs` for
+  `-> impl Iterator` and fails on any non-zero count. Currently zero.
 
 ## D-107 — Sealing: not needed; the blanket impl already seals
 - **Status:** **SETTLED (2026-09-10)** — no code change.

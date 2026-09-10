@@ -84,6 +84,55 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Changed — named return types everywhere (D-106). Breaking, and it unpins the MSRV.
+
+No method on `LinqExt` returns an opaque type any more. All **23** sites now
+return named adaptor structs with `pub(crate)` fields — nameable but not
+constructible, the same contract as `std::iter::Filter`.
+
+**`AUDIT.md` finding B-1 was wrong on its premise and its count.** It said
+opaque returns are "permanently sealed" against a later trait; they are not. A
+four-crate semver workspace with ten downstream call patterns compiled
+byte-identically against opaque and named libraries — opaque → named is a
+*minor* change. And there were 23 sites, not the 8 claimed.
+
+Two reasons to do it anyway, neither previously on file:
+
+1. **The opaque witness carries no operator identity.** `distinct`, `except`
+   and `intersect` were all `Filter<I, closure>`, so one blanket impl covered
+   all three and a future `Sql` trait could not give them different SQL. That,
+   not nameability, is what blocked the v2 seam.
+2. **Method-bearing bounds are not additive.** `+ FusedIterator` can be added
+   to a shipped opaque return later; `+ ExactSizeIterator` gives downstream
+   `error[E0034]`. Only a conditional impl on a named type adds a capability
+   without adding an input bound, and RPITIT cannot express one.
+
+**The MSRV drops from 1.75 to 1.65.** Those 23 sites *were* the pin — the floor
+was never a considered choice. The full suite passes on a real `rustc 1.65.0`.
+
+The feared unnameable signature never materialised: the eager operators have
+already run their closures by the time the type exists, so `inner_join` returns
+`InnerJoin<R>` — one parameter, not five. 14 of the 23 were trivial newtypes.
+Zero test edits; zero behaviour change.
+
+### Fixed — ordering over borrowed data (D-104). Breaking.
+
+`OrderedQueryable`'s boxed comparator carried an elided `'static`, which
+propagated `Self::Item: 'static` onto all eight ordering methods. So
+`people.iter().order_by(|p| &p.dept)` — sorting a view of a collection you still
+own — did not compile, failing with `error[E0597]`. Introduced by the W-14
+rewrite and invisible to the whole suite, because every test and doctest sorted
+an owned `Vec` of `'static` elements. `OrderedQueryable` now carries a lifetime
+parameter.
+
+This also unblocked `D-104`'s own ruling, which rests on "iterate by reference"
+as the answer for borrowed keys — a mitigation that did not work until this was
+fixed.
+
+### Changed — `to_lookup`/`to_hashmap` → `into_lookup`/`into_hashmap` (D-108). Breaking.
+
+They consume `self`, and Rust reserves `to_` for borrow-to-owned.
+
 ### Removed — the v1.0 cut line (D-019). Breaking.
 
 **`LinqExt` goes from 94 methods to 62.** An operator earns its place if it
