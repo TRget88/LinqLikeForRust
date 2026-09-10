@@ -1,7 +1,10 @@
 //! Ordered sequences produced by `order_by` / `order_by_descending` /
 //! `order` / `order_descending`.
 //!
-//! Mirrors `IOrderedEnumerable<T>` from C# LINQ.
+//! Plays the role of C# `IOrderedEnumerable<T>`, with two differences:
+//! this buffers at call time where C# defers everything to the first
+//! `MoveNext`, and it compares with `Ord` (byte-ordinal for strings) where
+//! C# uses the culture-sensitive `Comparer<T>.Default`.
 //!
 //! ## How chaining works
 //!

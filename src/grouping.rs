@@ -1,6 +1,7 @@
 //! [`Grouping`] — the result of a `group_by_key` operation.
 //!
-//! Mirrors `IGrouping<TKey, TElement>` from C# LINQ.
+//! Plays the role of C# `IGrouping<TKey, TElement>`, but holds its elements
+//! in a `Vec` rather than being a lazily-enumerable sequence.
 
 /// A group of elements that share a common key.
 ///

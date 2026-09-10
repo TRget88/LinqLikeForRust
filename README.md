@@ -131,9 +131,11 @@ For `except_by` / `intersect_by`, the second argument is the iterable of
 | `.then_by_descending(key_fn)`     | `.ThenByDescending(key_fn)`     |
 | `reverse()`                       | `Reverse()`                     |
 
-Sorting is **deferred** to the first `into_iter()` — `order_by` and
-`then_by` only stash comparators, so chained calls compose into a single
-lexicographic sort rather than re-sorting the data each step.
+The **sort** is deferred to the first `into_iter()`: `order_by` and `then_by`
+accumulate comparators, so a chain composes into one lexicographic sort rather
+than re-sorting at each step. The **source** is not deferred — `order_by`
+collects the receiver when it is called (measured; see *Evaluation timing*).
+`then_by` alone genuinely does nothing but push a comparator.
 
 ### Aggregation
 
@@ -166,7 +168,8 @@ Strict (panicking) variants on the left; `_or_default` variants return `Option<T
 | `last_or(default)`              | `LastOrDefault(defaultValue)`      |
 | `last_where(p)`                 | `LastOrDefault(p)`                 |
 | `single()`                      | `Single()`                         |
-| `single_or_default()`           | `SingleOrDefault()`                |
+| `try_single()`                  | `Single()`, but returns `Result<T, SingleError>` instead of throwing |
+| `single_or_default()`           | *not* `SingleOrDefault` — returns `Result<Option<T>, SingleError>` so empty and too-many are distinguishable |
 | `single_or(default)`            | `SingleOrDefault(defaultValue)`    |
 | `element_at_strict(index)`      | `ElementAt(index)`                 |
 | `element_at(index)`             | `ElementAtOrDefault(index)`        |
@@ -307,7 +310,7 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 ## Overlap with `std::iter`
 
 <!-- BEGIN GENERATED: std-overlap -->
-**52 of this crate's 90 `LinqExt` methods (58%) are a rename or a short composition of something `std::iter::Iterator` already gives you.** If you are not porting C# code, reach for std first.
+**52 of this crate's 91 `LinqExt` methods (57%) are a rename or a short composition of something `std::iter::Iterator` already gives you.** If you are not porting C# code, reach for std first.
 
 | linq_rs | use this instead |
 |---|---|
@@ -364,7 +367,7 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 | `zip3` | `zip().zip().map()` |
 | `zip_` | `zip().map()` |
 
-The remaining 38 have no direct std equivalent — that is the part of this crate with a reason to exist.
+The remaining 39 have no direct std equivalent — that is the part of this crate with a reason to exist.
 <!-- END GENERATED: std-overlap -->
 
 ## Performance — the default is hash-backed
@@ -410,6 +413,273 @@ costs an auxiliary index and a `Clone` bound on the key. `count_by` and
 `aggregate_by` yield in **hash order**, which is unspecified — sort the result
 if you need determinism.
 
+## Differences from C# LINQ
+
+This crate does not claim per-method equivalence with `System.Linq.Enumerable`.
+Most operators here delegate to `std::iter`, and where `std` and C# disagree,
+**`std` wins** (`D-005`). The table above maps names; this section is the
+normative list of places where the same name does *not* mean the same
+behaviour. Every entry is either demonstrated by the runnable example beneath
+it or sourced to the .NET API reference.
+
+### Empty sequences return `None`; C# throws
+
+`Min`, `Max`, `MinBy`, `MaxBy`, `Average` and the seedless `Aggregate` all
+throw `InvalidOperationException` on an empty sequence when the element type is
+a non-nullable value type
+([Min](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.min),
+[MaxBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.maxby),
+[Average](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.average)).
+The Rust counterparts return `None`, because that is what `Iterator::min`,
+`Iterator::max_by_key` and `Iterator::reduce` return.
+
+```rust
+use linq_rs::LinqExt;
+
+let empty: Vec<i32> = Vec::new();
+assert_eq!(empty.clone().into_iter().min_(), None);
+assert_eq!(empty.clone().into_iter().max_by_key_(|x| *x), None);
+assert_eq!(empty.clone().into_iter().average(|x| x as f64), None);
+assert_eq!(empty.clone().into_iter().reduce_(|a, b| a + b), None);
+
+// Sum is the exception: C# and Rust agree that an empty sum is zero.
+assert_eq!(empty.into_iter().sum_::<i32>(), 0);
+```
+
+The same substitution runs through the `*_or_default` family. C#
+`FirstOrDefault`/`LastOrDefault`/`ElementAtOrDefault` return `default(T)` — `0`
+for `int`, `null` for a reference type — which is indistinguishable from a
+sequence that really contained `0`. `first_or_default`, `last_or_default` and
+`element_at` return `Option<T>` instead. If you want C#'s "supply a fallback"
+shape, use `first_or` / `last_or` / `element_at_or`.
+
+### `single_or_default` returns a `Result`; C# throws on 2+ elements
+
+C# `SingleOrDefault` substitutes the default **only for the empty case** and
+throws `InvalidOperationException` when the sequence has more than one element
+([SingleOrDefault](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.singleordefault):
+"this method throws an exception if there is more than one element in the
+sequence").
+
+This crate takes the third option: neither a silent default nor a panic, but a
+value that says which happened. Absent stays ordinary; ambiguous becomes an
+error you have to handle.
+
+```rust
+use linq_rs::{LinqExt, SingleError};
+
+assert_eq!(vec![1].into_iter().single_or_default(), Ok(Some(1)));
+assert_eq!(Vec::<i32>::new().into_iter().single_or_default(), Ok(None));
+assert_eq!(vec![1, 2].into_iter().single_or_default(), Err(SingleError::MoreThanOne));
+
+// `try_single` distinguishes all three outcomes.
+assert_eq!(vec![1].into_iter().try_single(), Ok(1));
+assert_eq!(Vec::<i32>::new().into_iter().try_single(), Err(SingleError::Empty));
+assert_eq!(vec![1, 2].into_iter().try_single(), Err(SingleError::MoreThanOne));
+```
+
+An earlier version returned `None` for both empty and too-many, so a caller
+could not tell "not found" from a broken uniqueness assumption. If you want that
+collapsing behaviour back it is one call: `.single_or_default().ok().flatten()`.
+
+If you want C#'s exact shape, `single()` panics on both cases and
+`single_or(default)` matches the .NET 6+ `SingleOrDefault(defaultValue)`
+overload — default for empty, panic for 2+.
+
+### `max_by_key_` breaks ties toward the **last** element; C# `MaxBy` keeps the first
+
+C# `MaxBy` replaces its running best only on a strictly-greater key
+([`Max.cs`](https://github.com/dotnet/runtime/blob/v9.0.0/src/libraries/System.Linq/src/System/Linq/Max.cs):
+`if (comparer.Compare(nextKey, key) > 0)`), so the **first** element with the
+maximum key wins. `Iterator::max_by_key`, which `max_by_key_` delegates to,
+documents the opposite: "If several elements are equally maximum, the last
+element is returned."
+
+```rust
+use linq_rs::LinqExt;
+
+let tied = vec![("first", 5), ("second", 5)];
+assert_eq!(tied.into_iter().max_by_key_(|(_, k)| *k), Some(("second", 5)));
+
+// min_by_key_ agrees with C# MinBy: the first minimum wins.
+let tied = vec![("first", 5), ("second", 5)];
+assert_eq!(tied.into_iter().min_by_key_(|(_, k)| *k), Some(("first", 5)));
+```
+
+Porting a `MaxBy` whose result you care about on ties? Reverse the sequence
+first, or key on `(key, Reverse(index))`.
+
+### `to_hashmap` keeps the last duplicate; `ToDictionary` throws
+
+C# `ToDictionary` raises `ArgumentException` when "`keySelector` produces
+duplicate keys for two elements"
+([ToDictionary](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.todictionary)).
+`to_hashmap` is `HashMap::insert` in a loop, so a later duplicate silently
+overwrites an earlier one.
+
+```rust
+use linq_rs::LinqExt;
+
+let m = vec![("a", 1), ("a", 2), ("b", 3)].into_iter().to_hashmap(|(k, _)| *k);
+assert_eq!(m.len(), 2);              // C#: ArgumentException
+assert_eq!(m["a"], ("a", 2));        // last one wins
+```
+
+Use `to_lookup` when the keys are genuinely one-to-many; it keeps every value.
+
+### `sum_` overflow is profile-dependent; C# `Sum` always throws
+
+`Enumerable.Sum(IEnumerable<int>)` documents `OverflowException` — "The sum is
+larger than `Int32.MaxValue`"
+([Sum](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.sum))
+— and it throws regardless of the caller's `checked`/`unchecked` context.
+`sum_` and `sum_by` are `Iterator::sum`, which follows Rust's arithmetic
+profile: **panic** with `debug-assertions = on`, **two's-complement wraparound**
+in a default release build. `vec![i32::MAX, 1].sum_::<i32>()` panics under
+`cargo test` and produces `-2147483648` under `cargo build --release`.
+
+There is no checked variant here. If the totals can approach the type's range,
+sum into a wider type (`sum_by(|x| x as i64)`) or fold with `checked_add`
+yourself. The same applies to `linq_rs::range`: C# `Enumerable.Range` throws
+`ArgumentOutOfRangeException` when `start + count - 1` exceeds `Int32.MaxValue`
+([Range](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.range)),
+while `range(i32::MAX - 1, 5)` panics in debug and wraps past `i32::MIN` in
+release.
+
+`average` diverges for a second reason: C# `Average` over `int` accumulates in
+`long` and throws on overflow, whereas `average` projects every element to
+`f64`, so sums beyond 2^53 lose precision instead of failing.
+
+### String ordering is byte-ordinal; C# is culture-aware
+
+C# `OrderBy` "compares keys by using the default comparer `Comparer<T>.Default`"
+([OrderBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderby)),
+which for `string` routes to `String.CompareTo`, and that method "performs a
+word (case-sensitive and culture-sensitive) comparison using the current
+culture" — it even treats ignorable characters such as a soft hyphen as absent
+([String.CompareTo](https://learn.microsoft.com/en-us/dotnet/api/system.string.compareto)).
+`order`, `order_by` and `then_by` use Rust's `Ord`, which for `str` is a
+lexicographic comparison of UTF-8 bytes. Case and punctuation therefore sort
+differently, and the result does not depend on the machine's locale.
+
+```rust
+use linq_rs::LinqExt;
+
+let sorted: Vec<_> = vec!["apple", "Banana", "cherry"]
+    .into_iter()
+    .order()
+    .into_iter()
+    .collect();
+
+// Byte order: every uppercase letter precedes every lowercase one.
+assert_eq!(sorted, ["Banana", "apple", "cherry"]);
+// C# `OrderBy(s => s)` under an en-US culture yields ["apple", "Banana", "cherry"].
+```
+
+Both are stable sorts, so ties keep source order in either language
+([OrderBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderby):
+"This method performs a stable sort").
+
+### `of_type` and `cast` convert values; C# tests runtime types
+
+C# `OfType<TResult>` "returns only those elements in `source` that are non-null
+and compatible with type `TResult`"
+([OfType](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.oftype))
+— a runtime type test over a heterogeneous `IEnumerable`, with `Cast<TResult>`
+as the throwing version. Rust sequences are homogeneous and there is nothing to
+test, so both methods route through `TryInto` instead. That makes them *value
+conversions*, and the two operations select different elements.
+
+```rust
+use linq_rs::LinqExt;
+
+// Elements that do not fit the target type are dropped, not type-filtered.
+let v: Vec<i32> = vec![1i64, i64::MAX, 3].into_iter().of_type::<i32>().collect();
+assert_eq!(v, [1, 3]);
+
+// `cast` succeeds on a widening conversion. C# `Cast<long>()` over boxed ints
+// throws InvalidCastException, because unboxing does not widen.
+let v: Vec<i64> = vec![1i32, 2, 3].into_iter().cast::<i64>().collect();
+assert_eq!(v, [1i64, 2, 3]);
+```
+
+Treat these as `filter_map(TryInto::try_into)` and `map(TryInto::unwrap)` with
+LINQ-shaped names — not as a port of the C# operators.
+
+### `count_by` and `aggregate_by` yield in hash order; C# preserves first appearance
+
+C# `CountBy` yields its key/count pairs in the order the keys first appear —
+the [documented example](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.countby)
+prints `IT`, `Sales`, `HR`, the order those departments first occur in the
+input. Same for `GroupBy`, whose groups "are yielded in an order based on the
+order of the elements in `source` that produced the first key"
+([GroupBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby)).
+
+`group_by_key` and `to_lookup` **do** match that: they carry an auxiliary index
+so groups come out in first-appearance order. `count_by` and `aggregate_by` do
+not — they iterate a `HashMap` directly, and `std`'s `HashMap` iteration order
+is unspecified and varies run to run.
+
+```rust
+use linq_rs::LinqExt;
+
+let mut counts: Vec<_> = vec!["ant", "bee", "ape"]
+    .into_iter()
+    .count_by(|w| w.chars().next().unwrap())
+    .collect();
+counts.sort();                       // required: the raw order is arbitrary
+assert_eq!(counts, [('a', 2), ('b', 1)]);
+
+// group_by_key needs no sort — first-appearance order, like C# GroupBy.
+let keys: Vec<_> = vec!["ant", "bee", "ape"]
+    .into_iter()
+    .group_by_key(|w| w.chars().next().unwrap())
+    .map(|g| g.key)
+    .collect();
+assert_eq!(keys, ['a', 'b']);
+```
+
+Curiously, the `*_partial_eq` escape hatches for these two *do* preserve source
+order, because a linear scan has nowhere else to put the keys. Do not rely on
+that; it is a side effect of the algorithm, not a guarantee.
+
+### Work happens at call time, not on first `MoveNext`
+
+Every C# operator listed here is documented as "implemented by using deferred
+execution … not executed until the object is enumerated" — including the ones
+that must buffer, such as
+[OrderBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderby)
+and [Reverse](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.reverse).
+A C# query that is built and never enumerated costs nothing.
+
+In this crate `order_by`, `order`, `reverse`, `group_by_key`, `union_`,
+`inner_join`, `group_join` and `to_lookup` consume the source **when you call
+them**, so building a query and dropping it still pays for the traversal.
+`OrderedQueryable` defers only the *sort* to `into_iter()`, not the buffering.
+The genuinely lazy adaptors — `where_`, `select`, `select_many`, `take_`,
+`skip_`, `distinct`, `distinct_by`, `chunk`, `skip_last`, `zip_` — do behave
+like their C# counterparts and terminate on infinite sources.
+
+### Operators with no C# counterpart
+
+Three convenience methods here are named after things that are not on
+`System.Linq.Enumerable` at all. They are kept because they are useful, but do
+not go looking for them in the C# docs:
+
+| linq_rs | what people assume | reality |
+|---|---|---|
+| `for_each_(action)` | `Enumerable.ForEach` | No such method. `ForEach` is `List<T>.ForEach`; `Do` is Rx, not LINQ. This is `Iterator::for_each`. |
+| `element_at_or(index, default)` | `ElementAtOrDefault(index, defaultValue)` | `ElementAtOrDefault` has exactly two overloads, `(Index)` and `(Int32)`. Neither takes a fallback value. |
+| `zip3(second, third, selector)` | `Zip(second, third, resultSelector)` | `Zip`'s three-sequence overload returns tuples and takes no selector; the selector overload takes only two sequences. |
+
+Verified against the [Enumerable method
+list](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable).
+
+Finally, none of the 38 `IEqualityComparer` / `IComparer` overloads are
+implemented, deliberately (`D-202`). Rust expresses "compare these differently"
+with traits and newtypes rather than a runtime comparer argument; the honest
+substitute is the `*_by` key-selector family.
+
 ## Versioning
 
 This crate follows [Semantic Versioning](https://semver.org/). Some
@@ -434,14 +704,41 @@ project-specific clarifications:
 
 ## Design Notes
 
-- **Lazy by default** — filtering, projection, and slicing adaptors are lazy iterators; no allocation happens until you `collect()` or iterate.
-- **Eager where necessary** — `order_by`/`then_by` (buffered at call time, sorted once at `into_iter`), `reverse`, `group_by_key`, `union_`, `inner_join` and `group_join` buffer the sequence. `distinct`/`distinct_by` do **not** — they stream, keeping a seen-set, and terminate on an infinite source. `except`/`intersect` stream the receiver but drain their argument at call time.
-- **This is not C#'s deferral.** C# `OrderBy`/`GroupBy`/`Union`/`Join`/`Reverse` do nothing at call time and process the source on the first `MoveNext`; the operators above do the work at **call** time, so a query that is built and then discarded still pays full cost. (This list is hand-maintained and therefore suspect; `D-016` / `W-7` will derive it from a measurement.)
-- **Zero dependencies** — only `std`.
-- **Naming** — methods that shadow Rust keywords or `std` trait methods are suffixed with `_` (`where_`, `take_`, `any_`, etc.).
-- **size_hint / ExactSizeIterator / DoubleEndedIterator** — propagated through the lazy adaptors where possible (`Select`, `Skip`, `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`) so downstream consumers can pre-allocate or iterate in reverse.
+### Evaluation timing
 
----
+<!-- BEGIN GENERATED: laziness -->
+Measured, not asserted: a counting source records how many elements each operator pulls when it is **called**, before anything is iterated. `tests/laziness.rs` re-runs these measurements, so this table cannot drift from the code.
+
+**Lazy (29)** — pull nothing at call time and stream during iteration:
+
+`append_item`, `cast`, `chunk`, `concat_`, `default_if_empty`, `distinct`, `distinct_by`, `distinct_by_partial_eq`, `distinct_partial_eq`, `flatten_`, `index_`, `of_type`, `prepend_item`, `select`, `select_indexed`, `select_many`, `select_many_indexed`, `skip_`, `skip_last`, `skip_while_`, `skip_while_indexed`, `take_`, `take_while_`, `take_while_indexed`, `union_`, `where_`, `where_indexed`, `zip3`, `zip_`.
+
+**Eager at call (20)** — drain the source when *called*, before any iteration. C# defers these to the first `MoveNext`, so a query that is built and then discarded costs nothing there and costs full price here:
+
+`aggregate_by`, `aggregate_by_partial_eq`, `count_by`, `count_by_partial_eq`, `group_by_key`, `group_by_key_partial_eq`, `group_by_with_element`, `group_by_with_result`, `group_join`, `group_join_partial_eq`, `inner_join`, `inner_join_partial_eq`, `order`, `order_by`, `order_by_descending`, `order_descending`, `reverse`, `take_last`, `union_by`, `union_partial_eq`.
+
+**Half-eager (6)** — the receiver streams, but the *argument* is drained at call time even if the result is never iterated:
+
+`except`, `except_by`, `except_partial_eq`, `intersect`, `intersect_by`, `intersect_partial_eq`.
+
+**Terminal (36)** — consume and return a value, immediate by definition. Many still short-circuit: `first` pulls one element, `any_` stops at the first match, `try_single` pulls at most two.
+
+> Generated by `.github/scripts/gen-docs.py`. Do not edit by hand.
+<!-- END GENERATED: laziness -->
+
+### Everything else
+
+- **Zero dependencies** — only `std`. Not even a dev-dependency; the interop
+  check against `itertools` builds a throwaway crate in CI instead.
+- **Naming** — methods that would shadow a `std::iter::Iterator` method or a
+  Rust keyword carry a trailing `_` (`where_`, `take_`, `skip_`, `any_`). Where
+  familiarity to C# and idiomatic Rust conflict, idiom wins.
+- **`size_hint` / `ExactSizeIterator` / `DoubleEndedIterator`** — propagated
+  through the lazy adaptors where they can be given honestly (`Select`, `Skip`,
+  `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`).
+  The unpredictable ones are left at the default rather than lying.
+- **`FusedIterator`** — implemented on fourteen adaptors, conditionally on the
+  source except `Reverse` and `Chunk`, which are unconditional.
 
 ## License
 

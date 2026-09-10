@@ -429,10 +429,15 @@ seam, not the seam.
 - **Why:** Six audit findings dissolved into "this behaves exactly like the `std`
   method it delegates to". Chasing the C# contract would make the crate worse Rust,
   and culture-aware collation needs an ICU dependency `D-001` forbids. See `D-203`.
-- **Enforced by:** *(NOT YET IMPLEMENTED — `W-6`/`W-7`.)*
-  `#![doc = include_str!("README.md")]` makes every README block a doctest, plus
-  a CI grep asserting no doc comment says "Equivalent to <C# name>" without
-  linking the `# Differences from C# LINQ` section.
+- **Enforced by:** **IMPLEMENTED** (`W-7`). The README's
+  *Differences from C# LINQ* section is crate documentation, so all of its
+  examples are doctests CI runs — every divergence it claims is executed. And
+  no doc comment asserts equivalence any more: all 74 "Equivalent to `X`"
+  phrases were demoted to "C# analogue: `X`", with the trait-level doc saying
+  once that a shared name does not mean shared behaviour. Three that named
+  methods or overloads which **do not exist** (`for_each_`→`ForEach`,
+  `element_at_or`→a nonexistent `ElementAtOrDefault` overload, `zip3`→a
+  nonexistent `Zip` overload) now say so.
 
 ## D-018 — `Option<T>` null semantics are documented, never SQL-shaped
 - **Status:** SETTLED (2026-09-09)
@@ -448,10 +453,10 @@ seam, not the seam.
   lying.
 
 ---
-- **Enforced by:** *(NOT YET IMPLEMENTED.)* Tests asserting the measured
-  behaviour — `where_(|x| *x < Some(2))` keeps the `None` rows, `sum_` returns
-  `None` on any `None`, `order_by` sorts `None` first — so that a well-meaning
-  "fix" toward SQL semantics fails the build instead of landing silently.
+- **Enforced by:** **PARTIALLY IMPLEMENTED** (`W-7`). The *Differences from C#
+  LINQ* section's examples are doctests, so the documented `Option` behaviour is
+  executed. A dedicated `Option`-semantics test file is still worth adding when
+  the v2 SQL work starts, since that is when the three-way split matters.
 
 # API stability — must be closed before any 1.0
 

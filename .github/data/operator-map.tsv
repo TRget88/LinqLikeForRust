@@ -56,6 +56,7 @@ last_where	linqext	LastOrDefault	last_	filter().last()	C# LastOrDefault(predicat
 element_at	linqext	ElementAtOrDefault		nth	Body: Iterator::skip(self,index).next()
 element_at_strict	linqext	ElementAt	element_at	nth	Panics; the plain-named Rust method is the OrDefault one
 single	linqext	Single			Panics on 0 or 2+
+try_single	linqext	Single	single		Result-returning form of Single; C# throws, this returns SingleError so Empty and MoreThanOne are distinguishable
 single_or_default	linqext	SingleOrDefault	single		Returns None on 0 OR 2+
 first_or	linqext	FirstOrDefault	first	next	C# FirstOrDefault(defaultValue), .NET 6+ (overload confirmed present)
 last_or	linqext	LastOrDefault	last_	last	C# LastOrDefault(defaultValue), .NET 6+ (overload confirmed present)
@@ -105,4 +106,3 @@ Lookup::get	type_method				Corresponds to the ILookup this[key] indexer; O(1), r
 Lookup::contains_key	type_method				Corresponds to ILookup.Contains(key)
 Lookup::groups	type_method				First-appearance order
 Lookup::into_groups	type_method			into_iter	
-

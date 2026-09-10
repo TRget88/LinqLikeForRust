@@ -84,6 +84,72 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Changed — no more C#-equivalence claims (W-7)
+
+The crate asserted equivalence with `System.Linq.Enumerable` 74 times in doc
+comments and again in the README tables. An audit of every one against live
+docs found **69 that were not true as stated**: 2 named methods that do not
+exist on `Enumerable` at all, 5 named overloads that do not exist, 23 diverged
+in behaviour, and 38 were misleading.
+
+- **All 74 "Equivalent to `X`" phrases are now "C# analogue: `X`."** The
+  `LinqExt` trait doc says once that a shared name does not mean shared
+  behaviour, rather than each method implying otherwise.
+- **Three named things that do not exist**, and now say so: `for_each_`
+  (`ForEach` is `List<T>.ForEach`, not LINQ), `element_at_or` (no
+  `ElementAtOrDefault(index, defaultValue)` overload exists in any .NET
+  version), `zip3` (`Zip`'s three-sequence overload returns tuples and takes no
+  selector).
+- **`of_type` and `cast` were the sharpest misses.** They are `TryInto` *value*
+  conversions; C# `OfType`/`Cast` are runtime *type tests*. `cast::<i64>()`
+  widens an `i32` here, while C# `Cast<long>()` on a boxed `int` throws.
+- **New `## Differences from C# LINQ` section**, ~260 lines covering empty
+  sequences, `single_or_default`, `max_by_key_` tie-breaking, duplicate keys,
+  overflow, string collation, `of_type`/`cast`, hash-order grouping, evaluation
+  timing, and the operators with no C# counterpart. Because the README is crate
+  documentation, **every example in it is a doctest CI runs.**
+- **`max_by_key_` ties differ from C#** and this was previously undocumented:
+  C# `MaxBy` keeps the *first* maximum, `Iterator::max_by_key` the *last*.
+  Measured. `min_by_key_` agrees with C#.
+
+### Changed — the laziness table is measured and generated (W-7)
+
+The README's evaluation-timing bullet flagged *itself* as "hand-maintained and
+therefore suspect". It was right to: it was wrong in five places.
+
+- Every operator's timing is now **measured** with a counting source and
+  committed to `.github/data/laziness.tsv`: 29 lazy, 20 eager-at-call,
+  6 half-eager, 36 terminal. The README table is generated from it and
+  `tests/laziness.rs` re-runs the measurements, so neither can drift.
+- **`union_` was listed as buffering. It is fully lazy** — W-10's rewrite made
+  it `chain().filter()`, which also made it *match* C#'s deferred-streaming
+  `Union` rather than diverge from it. The same error had propagated into
+  `src/lib.rs`.
+- **`order_by` "only stashes comparators" was half true.** The sort is
+  deferred; the source is collected at call time.
+- **`take_last` is an eager slicing operator**, so "no allocation until you
+  collect" was false for it.
+- The half-eager class has six members; the README named two.
+
+### Changed — `single_or_default` distinguishes its two failures (W-16)
+
+It returned `None` both when the sequence was empty and when it had more than
+one element, so a caller could not tell "not found" from a broken uniqueness
+assumption. C# `SingleOrDefault` throws on the latter.
+
+- **`single_or_default` now returns `Result<Option<T>, SingleError>`** —
+  `Ok(None)` for empty, `Err(MoreThanOne)` for too many. Breaking, and
+  deliberately a compile error at every call site rather than a silent change
+  of behaviour.
+- **New `try_single() -> Result<T, SingleError>`** for the three-way answer.
+- **New `SingleError { Empty, MoreThanOne }`** — the crate's first and only
+  error type. The two variants are the complete partition of "not exactly one",
+  so it is deliberately not `#[non_exhaustive]`.
+- `single`, `single_or` and `try_single` share one panic string via
+  `SingleError::message`, so the `# Panics` docs, the panic, and `Display`
+  cannot drift apart.
+- Old behaviour is one call away: `.single_or_default().ok().flatten()`.
+
 ### Fixed — two adaptor defects only visible when driving by hand (W-8, W-9)
 
 Both survived because `collect()` masks them: it stops at the first `None`, and

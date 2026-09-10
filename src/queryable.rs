@@ -1,11 +1,23 @@
 //! The [`LinqExt`] extension trait — brings LINQ methods to every `Iterator`.
 
 use crate::adaptors::*;
+use crate::error::SingleError;
 use crate::grouping::Grouping;
 use crate::lookup::Lookup;
 use crate::ordered::OrderedQueryable;
 
 /// Extends every `Iterator` with C# LINQ–style query operations.
+///
+/// # This does not claim per-method equivalence with C#
+///
+/// Method docs below name the C# analogue so you can find your way around, but
+/// a shared name does **not** mean shared behaviour. Most operators here
+/// delegate to `std::iter`, and where `std` and C# disagree, `std` wins
+/// (`D-005`). The normative list of divergences — empty sequences, tie-breaking,
+/// overflow, string collation, duplicate keys, evaluation timing — is the
+/// *Differences from C# LINQ* section of the crate documentation. Three
+/// operators (`for_each_`, `element_at_or`, `zip3`) name C# methods or overloads
+/// that **do not exist**; they are marked below.
 ///
 /// Import this trait to unlock all methods:
 ///
@@ -17,7 +29,7 @@ pub trait LinqExt: Iterator + Sized {
     // FILTERING
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Filters elements by a predicate. Equivalent to `Where` in C# LINQ.
+    /// Filters elements by a predicate. C# analogue: `Where`.
     ///
     /// Named `where_` to avoid the Rust keyword `where`.
     ///
@@ -36,7 +48,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Filter with access to the item's 0-based index. Equivalent to the
+    /// Filter with access to the item's 0-based index. C# analogue: the
     /// C# `Where((item, index) => ...)` overload.
     ///
     /// ```rust
@@ -60,7 +72,7 @@ pub trait LinqExt: Iterator + Sized {
     // PROJECTION
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Projects each element into a new form. Equivalent to `Select`.
+    /// Projects each element into a new form. C# analogue: `Select`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -74,7 +86,7 @@ pub trait LinqExt: Iterator + Sized {
         Select { inner: self, f }
     }
 
-    /// Project with access to the item's 0-based index. Equivalent to the
+    /// Project with access to the item's 0-based index. C# analogue: the
     /// C# `Select((item, index) => ...)` overload.
     ///
     /// ```rust
@@ -93,7 +105,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Projects each element to an iterator and flattens the results.
-    /// Equivalent to `SelectMany`.
+    /// C# analogue: `SelectMany`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -115,7 +127,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// `select_many` with the item's 0-based index. Equivalent to C#
+    /// `select_many` with the item's 0-based index. C# analogue:
     /// `SelectMany((item, index) => ...)`.
     fn select_many_indexed<J, F>(self, mut f: F) -> impl Iterator<Item = J::Item>
     where
@@ -125,7 +137,7 @@ pub trait LinqExt: Iterator + Sized {
         self.enumerate().flat_map(move |(i, x)| f(x, i))
     }
 
-    /// Flattens one level of nesting. Equivalent to `SelectMany(x => x)`.
+    /// Flattens one level of nesting. C# analogue: `SelectMany(x => x)`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -145,7 +157,7 @@ pub trait LinqExt: Iterator + Sized {
     /// Yields only the elements that can be converted into `U` via
     /// [`TryInto`]; conversion failures are silently dropped.
     ///
-    /// Equivalent to C# `OfType<U>()`. The natural Rust analogue of C#'s
+    /// C# analogue: `OfType<U>()`. The natural Rust analogue of C#'s
     /// runtime type test — but here it goes through the type system via
     /// `TryInto`, so the compiler verifies that *some* conversion exists.
     ///
@@ -163,7 +175,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Converts each element to `U` via [`TryInto`]. **Panics** on the first
-    /// failed conversion. Equivalent to C# `Cast<U>()` (which throws
+    /// failed conversion. Named after C# `Cast<U>()`, but **this converts values** via `TryInto` where C# tests runtime types — `cast::<i64>()` widens an `i32` here, while C# `Cast<long>()` on a boxed `int` throws. (C# throws
     /// `InvalidCastException`). For the non-panicking version, see
     /// [`of_type`](Self::of_type).
     ///
@@ -186,7 +198,7 @@ pub trait LinqExt: Iterator + Sized {
     // PAGING / SLICING
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Skips the first `n` elements. Equivalent to `Skip`.
+    /// Skips the first `n` elements. C# analogue: `Skip`.
     ///
     /// Named `skip_` to avoid colliding with [`Iterator::skip`].
     fn skip_(self, n: usize) -> Skip<Self> {
@@ -196,7 +208,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Skips elements while the predicate holds. Equivalent to `SkipWhile`.
+    /// Skips elements while the predicate holds. C# analogue: `SkipWhile`.
     fn skip_while_<P>(self, predicate: P) -> SkipWhile<Self, P>
     where
         P: FnMut(&Self::Item) -> bool,
@@ -208,7 +220,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// `skip_while_` with the item's 0-based index. Equivalent to C#
+    /// `skip_while_` with the item's 0-based index. C# analogue:
     /// `SkipWhile((item, index) => ...)`.
     fn skip_while_indexed<P>(self, mut predicate: P) -> impl Iterator<Item = Self::Item>
     where
@@ -219,7 +231,7 @@ pub trait LinqExt: Iterator + Sized {
             .map(|(_, x)| x)
     }
 
-    /// Takes at most `n` elements. Equivalent to `Take`.
+    /// Takes at most `n` elements. C# analogue: `Take`.
     fn take_(self, n: usize) -> Take<Self> {
         Take {
             inner: self,
@@ -227,7 +239,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Takes elements while the predicate holds. Equivalent to `TakeWhile`.
+    /// Takes elements while the predicate holds. C# analogue: `TakeWhile`.
     fn take_while_<P>(self, predicate: P) -> TakeWhile<Self, P>
     where
         P: FnMut(&Self::Item) -> bool,
@@ -239,7 +251,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// `take_while_` with the item's 0-based index. Equivalent to C#
+    /// `take_while_` with the item's 0-based index. C# analogue:
     /// `TakeWhile((item, index) => ...)`.
     fn take_while_indexed<P>(self, mut predicate: P) -> impl Iterator<Item = Self::Item>
     where
@@ -274,7 +286,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Yields all elements except the last `n`. Equivalent to `SkipLast`.
+    /// Yields all elements except the last `n`. C# analogue: `SkipLast`.
     ///
     /// Lazy — uses a ring buffer of size `n`. If the source has fewer than
     /// `n` items, yields nothing.
@@ -292,7 +304,7 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Yields only the last `n` elements. Equivalent to `TakeLast`.
+    /// Yields only the last `n` elements. C# analogue: `TakeLast`.
     ///
     /// Eager — must consume the source to find the tail. If `n` is `0`,
     /// the source is not iterated.
@@ -328,7 +340,7 @@ pub trait LinqExt: Iterator + Sized {
     /// notably — at the cost of quadratic time. Prefer [`distinct`](Self::distinct)
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
-    /// Returns distinct elements. Equivalent to `Distinct`.
+    /// Returns distinct elements. C# analogue: `Distinct`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -350,7 +362,7 @@ pub trait LinqExt: Iterator + Sized {
     /// notably — at the cost of quadratic time. Prefer [`distinct_by`](Self::distinct_by)
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
-    /// Returns distinct elements by a key selector. Equivalent to `DistinctBy`.
+    /// Returns distinct elements by a key selector. C# analogue: `DistinctBy`.
     fn distinct_by_partial_eq<K, F>(self, key_fn: F) -> DistinctBy<Self, F, K>
     where
         K: PartialEq,
@@ -395,7 +407,7 @@ pub trait LinqExt: Iterator + Sized {
         self.filter(move |x| seen.insert(key_fn(x)))
     }
 
-    /// Concatenates two sequences. Equivalent to `Concat`.
+    /// Concatenates two sequences. C# analogue: `Concat`.
     fn concat_<I2>(self, other: I2) -> Concat<Self>
     where
         I2: IntoIterator<Item = Self::Item, IntoIter = Self>,
@@ -412,7 +424,7 @@ pub trait LinqExt: Iterator + Sized {
     /// notably — at the cost of quadratic time. Prefer [`except`](Self::except)
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
-    /// Returns elements of `self` that are not in `other`. Equivalent to `Except`.
+    /// Returns elements of `self` that are not in `other`. C# analogue: `Except`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -433,7 +445,7 @@ pub trait LinqExt: Iterator + Sized {
     /// notably — at the cost of quadratic time. Prefer [`intersect`](Self::intersect)
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
-    /// Returns elements that appear in both sequences. Equivalent to `Intersect`.
+    /// Returns elements that appear in both sequences. C# analogue: `Intersect`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -454,7 +466,7 @@ pub trait LinqExt: Iterator + Sized {
     /// notably — at the cost of quadratic time. Prefer [`union_`](Self::union_)
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
-    /// Produces the set union of two sequences. Equivalent to `Union`.
+    /// Produces the set union of two sequences. C# analogue: `Union`.
     fn union_partial_eq<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
@@ -470,7 +482,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns elements of `self` whose **projected key** is not in `other`.
-    /// Equivalent to C# `ExceptBy(other, keySelector)`. Note that `other`
+    /// C# analogue: `ExceptBy(other, keySelector)`. Note that `other`
     /// supplies *keys*, not items.
     ///
     /// ```rust
@@ -493,7 +505,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns elements of `self` whose **projected key** appears in `other`.
-    /// Equivalent to C# `IntersectBy(other, keySelector)`. Note that `other`
+    /// C# analogue: `IntersectBy(other, keySelector)`. Note that `other`
     /// supplies *keys*, not items.
     ///
     /// ```rust
@@ -556,7 +568,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Produces the set union of two sequences, deduplicating by projected
-    /// key. Equivalent to C# `UnionBy(other, keySelector)`. Unlike
+    /// key. C# analogue: `UnionBy(other, keySelector)`. Unlike
     /// `except_by` / `intersect_by`, `other` supplies *items* (the same type
     /// as `self`'s items), not keys.
     ///
@@ -593,7 +605,7 @@ pub trait LinqExt: Iterator + Sized {
     // ORDERING
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Sorts the sequence by a key in ascending order. Equivalent to `OrderBy`.
+    /// Sorts the sequence by a key in ascending order. C# analogue: `OrderBy`.
     ///
     /// Returns an [`OrderedQueryable`] that supports `.then_by()`. Sorting is
     /// **deferred** until iteration, so chained `then_by` calls compose into
@@ -618,7 +630,7 @@ pub trait LinqExt: Iterator + Sized {
         OrderedQueryable::new(data, Box::new(move |a, b| key_fn(a).cmp(&key_fn(b))))
     }
 
-    /// Sorts in descending order. Equivalent to `OrderByDescending`.
+    /// Sorts in descending order. C# analogue: `OrderByDescending`.
     fn order_by_descending<K, F>(self, key_fn: F) -> OrderedQueryable<Self::Item>
     where
         K: Ord,
@@ -630,7 +642,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Sorts the sequence in ascending order using `Ord` on the elements
-    /// themselves. Equivalent to .NET 7+ `Order()`.
+    /// themselves. C# analogue: `Order()` (.NET 6+).
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -650,7 +662,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Sorts the sequence in descending order using `Ord` on the elements
-    /// themselves. Equivalent to .NET 7+ `OrderDescending()`.
+    /// themselves. C# analogue: `OrderDescending()` (.NET 6+).
     fn order_descending(self) -> OrderedQueryable<Self::Item>
     where
         Self::Item: Ord + 'static,
@@ -659,7 +671,7 @@ pub trait LinqExt: Iterator + Sized {
         OrderedQueryable::new(data, Box::new(|a, b| b.cmp(a)))
     }
 
-    /// Reverses the sequence. Equivalent to `Reverse`.
+    /// Reverses the sequence. C# analogue: `Reverse`.
     fn reverse(self) -> Reverse<Self> {
         let buffer: Vec<_> = self.collect();
         Reverse {
@@ -672,7 +684,7 @@ pub trait LinqExt: Iterator + Sized {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Applies an accumulator function over the sequence with an explicit seed.
-    /// Equivalent to `Aggregate` / `Aggregate(seed, func)`.
+    /// C# analogue: `Aggregate(seed, func)`. (The seedless `Aggregate(func)` overload is `reduce_`, not this.)
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -690,7 +702,7 @@ pub trait LinqExt: Iterator + Sized {
     /// Applies an accumulator function over the sequence, using the first
     /// element as the seed. Returns `None` if the sequence is empty.
     ///
-    /// Equivalent to C# `Aggregate(func)` (the no-seed overload) and an alias
+    /// C# analogue: `Aggregate(func)`, the no-seed overload — but C# throws on an empty sequence and this returns `None`. Alias
     /// for [`Iterator::reduce`].
     ///
     /// ```rust
@@ -707,7 +719,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Applies an accumulator function with an explicit seed, then projects
-    /// the final accumulator through `result_selector`. Equivalent to C#
+    /// the final accumulator through `result_selector`. C# analogue:
     /// `Aggregate(seed, func, resultSelector)`.
     ///
     /// ```rust
@@ -728,7 +740,7 @@ pub trait LinqExt: Iterator + Sized {
         result_selector(self.fold(seed, f))
     }
 
-    /// Sums elements that implement `std::iter::Sum`. Equivalent to `Sum`.
+    /// Sums elements that implement `std::iter::Sum`. C# analogue: `Sum`.
     #[must_use]
     fn sum_<S>(self) -> S
     where
@@ -738,7 +750,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Projects each element via `selector` and returns the sum of the
-    /// projection. Equivalent to C# `Sum(selector)`.
+    /// projection. C# analogue: `Sum(selector)`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -789,7 +801,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns the **element** whose projected key is smallest.
-    /// Equivalent to C# `MinBy(keySelector)` and to [`Iterator::min_by_key`].
+    /// C# analogue: `MinBy(keySelector)`; delegates to [`Iterator::min_by_key`]. Ties agree with C# — the first minimum wins.
     ///
     /// Returns `None` if the sequence is empty.
     #[must_use]
@@ -802,7 +814,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns the **element** whose projected key is largest.
-    /// Equivalent to C# `MaxBy(keySelector)` and to [`Iterator::max_by_key`].
+    /// C# analogue: `MaxBy(keySelector)`; delegates to [`Iterator::max_by_key`]. **Ties differ from C#**: this returns the *last* maximum, C# `MaxBy` the first.
     ///
     /// Returns `None` if the sequence is empty.
     #[must_use]
@@ -814,7 +826,7 @@ pub trait LinqExt: Iterator + Sized {
         self.max_by_key(key_fn)
     }
 
-    /// Computes the average of a sequence mapped to `f64`. Equivalent to `Average`.
+    /// Computes the average of a sequence mapped to `f64`. C# analogue: `Average`.
     ///
     /// Returns `None` if the iterator is empty.
     ///
@@ -847,7 +859,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Returns the first element. **Panics** if the sequence is empty.
     ///
-    /// Equivalent to C# `First()`. For a non-panicking version, see
+    /// C# analogue: `First()`. For a non-panicking version, see
     /// [`first_or_default`](Self::first_or_default).
     ///
     /// ```rust
@@ -859,7 +871,7 @@ pub trait LinqExt: Iterator + Sized {
         self.next().expect("sequence contains no elements")
     }
 
-    /// Returns the first element, or `None`. Equivalent to `FirstOrDefault`.
+    /// Returns the first element, or `None`. C# analogue: `FirstOrDefault`.
     #[must_use]
     fn first_or_default(mut self) -> Option<Self::Item> {
         self.next()
@@ -876,7 +888,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Returns the last element. **Panics** if the sequence is empty.
     ///
-    /// Named `last_` to avoid colliding with [`Iterator::last`]. Equivalent to
+    /// Named `last_` to avoid colliding with [`Iterator::last`]. C# analogue:
     /// C# `Last()`. For a non-panicking version, see
     /// [`last_or_default`](Self::last_or_default).
     #[must_use]
@@ -884,7 +896,7 @@ pub trait LinqExt: Iterator + Sized {
         self.last().expect("sequence contains no elements")
     }
 
-    /// Returns the last element, or `None`. Equivalent to `LastOrDefault`.
+    /// Returns the last element, or `None`. C# analogue: `LastOrDefault`.
     #[must_use]
     fn last_or_default(self) -> Option<Self::Item> {
         self.fold(None, |_, x| Some(x))
@@ -899,14 +911,14 @@ pub trait LinqExt: Iterator + Sized {
         self.where_(predicate).fold(None, |_, x| Some(x))
     }
 
-    /// Returns the element at `index`, or `None`. Equivalent to `ElementAtOrDefault`.
+    /// Returns the element at `index`, or `None`. C# analogue: `ElementAtOrDefault`.
     #[must_use]
     fn element_at(self, index: usize) -> Option<Self::Item> {
         Iterator::skip(self, index).next()
     }
 
     /// Returns the element at `index`. **Panics** if the index is out of
-    /// bounds. Equivalent to C# `ElementAt(index)`.
+    /// bounds. C# analogue: `ElementAt(index)`.
     ///
     /// For a non-panicking version, see [`element_at`](Self::element_at).
     #[must_use]
@@ -916,40 +928,86 @@ pub trait LinqExt: Iterator + Sized {
             .expect("index out of bounds")
     }
 
-    /// Returns the single element. **Panics** if the sequence is empty or
-    /// contains more than one element. Equivalent to C# `Single()`.
+    /// Returns the single element, reporting which way it failed.
     ///
-    /// For non-panicking variants, see [`single_or_default`](Self::single_or_default).
-    #[must_use]
-    fn single(mut self) -> Self::Item {
-        let first = self.next().expect("sequence contains no elements");
+    /// Consumes at most two elements, so it terminates on an infinite source.
+    ///
+    /// # Errors
+    ///
+    /// [`SingleError::Empty`] if there were no elements;
+    /// [`SingleError::MoreThanOne`] if there were two or more. The two cases
+    /// are usually different bugs — "no row matched" is often recoverable,
+    /// "several rows matched" usually means a uniqueness assumption is wrong.
+    ///
+    /// ```rust
+    /// use linq_rs::{LinqExt, SingleError};
+    /// assert_eq!(vec![7].into_iter().try_single(), Ok(7));
+    /// assert_eq!(vec![1, 2].into_iter().try_single(), Err(SingleError::MoreThanOne));
+    /// ```
+    fn try_single(mut self) -> Result<Self::Item, SingleError> {
+        let first = self.next().ok_or(SingleError::Empty)?;
         if self.next().is_some() {
-            panic!("sequence contains more than one element");
+            return Err(SingleError::MoreThanOne);
         }
-        first
+        Ok(first)
     }
 
-    /// Returns the single element, or `None` if the sequence has 0 or 2+
-    /// elements. Equivalent to `SingleOrDefault`.
+    /// Returns the single element. C# analogue: `Single()`.
+    ///
+    /// For a non-panicking form see [`try_single`](Self::try_single).
+    ///
+    /// # Panics
+    ///
+    /// Panics with `"sequence contains no elements"` if empty, or
+    /// `"sequence contains more than one element"` if there are two or more.
+    /// Both strings come from [`SingleError::message`], so they cannot drift
+    /// from this section.
     #[must_use]
-    fn single_or_default(mut self) -> Option<Self::Item> {
-        let first = self.next()?;
-        if self.next().is_some() {
-            None
-        } else {
-            Some(first)
+    fn single(self) -> Self::Item {
+        match self.try_single() {
+            Ok(value) => value,
+            Err(err) => panic!("{}", err.message()),
+        }
+    }
+
+    /// Returns `Ok(Some(x))` for exactly one element, `Ok(None)` for none, and
+    /// an error if there were several.
+    ///
+    /// **This is not C# `SingleOrDefault`, deliberately.** C# throws on two or
+    /// more; an earlier version of this method returned `None` for *both*
+    /// empty and too-many, so a caller could not tell "not found" from a broken
+    /// uniqueness assumption. Absent stays ordinary (`Ok(None)`); ambiguous
+    /// becomes an error you have to handle.
+    ///
+    /// To recover the old collapsing behaviour: `.single_or_default().ok().flatten()`.
+    ///
+    /// # Errors
+    ///
+    /// Only ever [`SingleError::MoreThanOne`] — the empty case is `Ok(None)`.
+    ///
+    /// ```rust
+    /// use linq_rs::{LinqExt, SingleError};
+    /// assert_eq!(vec![42].into_iter().single_or_default(), Ok(Some(42)));
+    /// assert_eq!(Vec::<i32>::new().into_iter().single_or_default(), Ok(None));
+    /// assert_eq!(vec![1, 2].into_iter().single_or_default(), Err(SingleError::MoreThanOne));
+    /// ```
+    fn single_or_default(self) -> Result<Option<Self::Item>, SingleError> {
+        match self.try_single() {
+            Ok(value) => Ok(Some(value)),
+            Err(SingleError::Empty) => Ok(None),
+            Err(SingleError::MoreThanOne) => Err(SingleError::MoreThanOne),
         }
     }
 
     /// Returns the first element, or `default` if the sequence is empty.
-    /// Equivalent to C# `FirstOrDefault(defaultValue)` (.NET 6+).
+    /// C# analogue: `FirstOrDefault(defaultValue)` (.NET 6+).
     #[must_use]
     fn first_or(mut self, default: Self::Item) -> Self::Item {
         self.next().unwrap_or(default)
     }
 
     /// Returns the last element, or `default` if the sequence is empty.
-    /// Equivalent to C# `LastOrDefault(defaultValue)` (.NET 6+).
+    /// C# analogue: `LastOrDefault(defaultValue)` (.NET 6+).
     #[must_use]
     fn last_or(self, default: Self::Item) -> Self::Item {
         self.last().unwrap_or(default)
@@ -959,27 +1017,29 @@ pub trait LinqExt: Iterator + Sized {
     /// **Panics** if the sequence contains more than one element (mirrors
     /// C# `SingleOrDefault(defaultValue)` — the .NET 6+ overload still throws
     /// on multiple matches, the default only kicks in for empty).
+    ///
+    /// # Panics
+    ///
+    /// Panics with `"sequence contains more than one element"` if there are two
+    /// or more. The string comes from [`SingleError::message`].
     #[must_use]
-    fn single_or(mut self, default: Self::Item) -> Self::Item {
-        let first = match self.next() {
-            Some(v) => v,
-            None => return default,
-        };
-        if self.next().is_some() {
-            panic!("sequence contains more than one element");
+    fn single_or(self, default: Self::Item) -> Self::Item {
+        match self.try_single() {
+            Ok(value) => value,
+            Err(SingleError::Empty) => default,
+            Err(err @ SingleError::MoreThanOne) => panic!("{}", err.message()),
         }
-        first
     }
 
     /// Returns the element at `index`, or `default` if out of bounds.
-    /// Equivalent to C# `ElementAtOrDefault(index, defaultValue)`-style.
+    /// **No C# counterpart.** `ElementAtOrDefault` has only `(Index)` and `(Int32)` overloads; neither takes a fallback value.
     #[must_use]
     fn element_at_or(self, index: usize, default: Self::Item) -> Self::Item {
         Iterator::skip(self, index).next().unwrap_or(default)
     }
 
     /// If the sequence is empty, yields `default` once; otherwise yields all
-    /// elements unchanged. Equivalent to `DefaultIfEmpty(value)`.
+    /// elements unchanged. C# analogue: `DefaultIfEmpty(value)`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -1001,7 +1061,7 @@ pub trait LinqExt: Iterator + Sized {
     // QUANTIFIERS
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Returns `true` if any element satisfies the predicate. Equivalent to `Any`.
+    /// Returns `true` if any element satisfies the predicate. C# analogue: `Any`.
     #[must_use]
     fn any_<P>(mut self, predicate: P) -> bool
     where
@@ -1010,7 +1070,7 @@ pub trait LinqExt: Iterator + Sized {
         self.any(predicate)
     }
 
-    /// Returns `true` if every element satisfies the predicate. Equivalent to `All`.
+    /// Returns `true` if every element satisfies the predicate. C# analogue: `All`.
     #[must_use]
     fn all_<P>(mut self, predicate: P) -> bool
     where
@@ -1019,7 +1079,7 @@ pub trait LinqExt: Iterator + Sized {
         self.all(predicate)
     }
 
-    /// Returns `true` if the sequence contains a specific value. Equivalent to `Contains`.
+    /// Returns `true` if the sequence contains a specific value. C# analogue: `Contains`.
     #[must_use]
     fn contains_<T>(mut self, value: &T) -> bool
     where
@@ -1040,7 +1100,7 @@ pub trait LinqExt: Iterator + Sized {
     /// Performs an inner join between `self` and `inner` on matching keys,
     /// projecting results with `result_selector`.
     ///
-    /// Equivalent to `Join(inner, outerKey, innerKey, resultSelector)`.
+    /// C# analogue: `Join(inner, outerKey, innerKey, resultSelector)`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -1138,7 +1198,7 @@ pub trait LinqExt: Iterator + Sized {
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
     /// Performs a group join (left outer join with grouped inner elements).
-    /// Equivalent to `GroupJoin`.
+    /// C# analogue: `GroupJoin`.
     fn group_join_partial_eq<Inner, OuterKey, InnerKey, R, OuterKeyFn, InnerKeyFn, ResultFn>(
         self,
         inner: Inner,
@@ -1213,7 +1273,7 @@ pub trait LinqExt: Iterator + Sized {
     /// notably — at the cost of quadratic time. Prefer [`group_by_key`](Self::group_by_key)
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
-    /// Groups elements by a key selector. Equivalent to `GroupBy`.
+    /// Groups elements by a key selector. C# analogue: `GroupBy`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -1249,7 +1309,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Groups elements by a key, projecting each item through `element_fn`
-    /// before bucketing. Equivalent to C#
+    /// before bucketing. C# analogue:
     /// `GroupBy(keySelector, elementSelector)`.
     fn group_by_with_element<K, E, KF, EF>(
         self,
@@ -1310,7 +1370,7 @@ pub trait LinqExt: Iterator + Sized {
     /// notably — at the cost of quadratic time. Prefer [`count_by`](Self::count_by)
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
-    /// Groups by `key_fn` and yields `(key, count)` pairs. Equivalent to
+    /// Groups by `key_fn` and yields `(key, count)` pairs. C# analogue:
     /// .NET 9+ `CountBy(keySelector)`.
     ///
     /// ```rust
@@ -1418,8 +1478,8 @@ pub trait LinqExt: Iterator + Sized {
     /// unless you need that. See `DECISIONS.md` `D-101`.
     ///
     /// Groups by `key_fn` and aggregates each group with `seed_fn` +
-    /// `accum`. Equivalent to .NET 9+ `AggregateBy(keySelector, seedSelector,
-    /// func)`. `seed_fn` receives the key so per-key seeds are possible;
+    /// `accum`. C# analogue: `AggregateBy(keySelector, seedSelector,
+    /// func)` (.NET 6+). `seed_fn` receives the key so per-key seeds are possible;
     /// pass `|_| my_const` for a global seed.
     ///
     /// ```rust
@@ -1462,13 +1522,13 @@ pub trait LinqExt: Iterator + Sized {
     // CONVERSION
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Collects into a `Vec`. Equivalent to `ToList`.
+    /// Collects into a `Vec`. C# analogue: `ToList`.
     #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn to_vec(self) -> Vec<Self::Item> {
         self.collect()
     }
 
-    /// Collects into a `HashMap` by a key selector. Equivalent to `ToDictionary`.
+    /// Collects into a `HashMap` by a key selector. C# analogue: `ToDictionary`.
     #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn to_hashmap<K, F>(self, key_fn: F) -> std::collections::HashMap<K, Self::Item>
     where
@@ -1484,7 +1544,7 @@ pub trait LinqExt: Iterator + Sized {
         map
     }
 
-    /// Collects into a `HashSet`. Equivalent to `ToHashSet`.
+    /// Collects into a `HashSet`. C# analogue: `ToHashSet`.
     #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn to_hashset(self) -> std::collections::HashSet<Self::Item>
     where
@@ -1493,7 +1553,7 @@ pub trait LinqExt: Iterator + Sized {
         self.collect()
     }
 
-    /// Builds a [`Lookup`] (one-to-many dictionary). Equivalent to `ToLookup`.
+    /// Builds a [`Lookup`] (one-to-many dictionary). C# analogue: `ToLookup`.
     fn to_lookup<K, F>(self, mut key_fn: F) -> Lookup<K, Self::Item>
     where
         K: Eq + std::hash::Hash + Clone,
@@ -1512,7 +1572,7 @@ pub trait LinqExt: Iterator + Sized {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Merges two sequences element-by-element using a result selector.
-    /// Equivalent to `Zip(second, resultSelector)`.
+    /// C# analogue: `Zip(second, resultSelector)`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -1535,7 +1595,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Merges three sequences element-by-element using a three-arg result
     /// selector. Stops as soon as any of the three is exhausted.
-    /// Equivalent to .NET 6+ `Zip(second, third, resultSelector)`.
+    /// C# analogue: `Zip(second, third, resultSelector)` (.NET 6+).
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -1564,7 +1624,7 @@ pub trait LinqExt: Iterator + Sized {
         })
     }
 
-    /// Applies an action to each element (for side effects). Equivalent to `ForEach` / `Do`.
+    /// Applies an action to each element (for side effects). C# analogue: `ForEach` / `Do`.
     fn for_each_<F>(self, f: F)
     where
         F: FnMut(Self::Item),
@@ -1572,17 +1632,17 @@ pub trait LinqExt: Iterator + Sized {
         self.for_each(f)
     }
 
-    /// Appends a single element to the end of the sequence. Equivalent to `Append`.
+    /// Appends a single element to the end of the sequence. C# analogue: `Append`.
     fn append_item(self, item: Self::Item) -> impl Iterator<Item = Self::Item> {
         self.chain(std::iter::once(item))
     }
 
-    /// Prepends a single element to the front of the sequence. Equivalent to `Prepend`.
+    /// Prepends a single element to the front of the sequence. C# analogue: `Prepend`.
     fn prepend_item(self, item: Self::Item) -> impl Iterator<Item = Self::Item> {
         std::iter::once(item).chain(self)
     }
 
-    /// Returns `true` if the sequence contains no elements. Equivalent to `!Any()`.
+    /// Returns `true` if the sequence contains no elements. C# analogue: `!Any()`.
     ///
     /// `is_empty_` consumes the iterator like other LINQ terminal ops; clippy's
     /// `wrong_self_convention` lint expects `is_*` methods to take `&self`,
@@ -1594,7 +1654,7 @@ pub trait LinqExt: Iterator + Sized {
         self.next().is_none()
     }
 
-    /// Yields `(index, item)` pairs. Equivalent to .NET 9+ `Index()` and an
+    /// Yields `(index, item)` pairs. C# analogue: .NET 9+ `Index()`; an
     /// alias for [`Iterator::enumerate`].
     ///
     /// ```rust
@@ -1607,7 +1667,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Sequence equality — two sequences are equal if they yield the same
-    /// elements in the same order. Equivalent to `SequenceEqual`.
+    /// elements in the same order. C# analogue: `SequenceEqual`.
     #[must_use]
     fn sequence_equal<I2>(self, other: I2) -> bool
     where

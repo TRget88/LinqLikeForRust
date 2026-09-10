@@ -217,10 +217,47 @@ fn test_element_at() {
 }
 
 #[test]
-fn test_single_or_default() {
-    assert_eq!(vec![42].into_iter().single_or_default(), Some(42));
-    assert_eq!(vec![1, 2].into_iter().single_or_default(), None);
-    assert_eq!(Vec::<i32>::new().into_iter().single_or_default(), None);
+fn test_single_or_default_distinguishes_empty_from_too_many() {
+    use linq_rs::SingleError;
+    // The whole point of W-16: these two used to be indistinguishable.
+    assert_eq!(vec![42].into_iter().single_or_default(), Ok(Some(42)));
+    assert_eq!(Vec::<i32>::new().into_iter().single_or_default(), Ok(None));
+    assert_eq!(
+        vec![1, 2].into_iter().single_or_default(),
+        Err(SingleError::MoreThanOne)
+    );
+    // The documented one-liner back to the old collapsing behaviour.
+    let collapse = |v: Vec<i32>| v.into_iter().single_or_default().ok().flatten();
+    assert_eq!(collapse(vec![42]), Some(42));
+    assert_eq!(collapse(vec![]), None);
+    assert_eq!(collapse(vec![1, 2]), None);
+}
+
+#[test]
+fn test_try_single() {
+    use linq_rs::SingleError;
+    assert_eq!(vec![7].into_iter().try_single(), Ok(7));
+    assert_eq!(
+        Vec::<i32>::new().into_iter().try_single(),
+        Err(SingleError::Empty)
+    );
+    assert_eq!(
+        vec![1, 2].into_iter().try_single(),
+        Err(SingleError::MoreThanOne)
+    );
+    // Consumes at most two elements, so it terminates on an infinite source.
+    assert_eq!((1i32..).try_single(), Err(SingleError::MoreThanOne));
+}
+
+#[test]
+fn test_single_family_shares_one_panic_message() {
+    use linq_rs::SingleError;
+    // `single` and `single_or` panic with text generated from SingleError, so
+    // the doc section, the panic and Display cannot drift apart.
+    let e = std::panic::catch_unwind(|| vec![1, 2].into_iter().single()).unwrap_err();
+    let msg = e.downcast_ref::<String>().map(String::as_str).unwrap_or("");
+    assert_eq!(msg, SingleError::MoreThanOne.message());
+    assert_eq!(msg, SingleError::MoreThanOne.to_string());
 }
 
 // ── quantifiers ───────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@
 //! mostly so C# devs can find them under familiar names.
 
 /// Yields the integers `start, start + 1, ..., start + count - 1`.
-/// Equivalent to C# `Enumerable.Range(start, count)`.
+/// C# analogue: `Enumerable.Range(start, count)`.
 ///
 /// ```rust
 /// let v: Vec<_> = linq_rs::range(1, 5).collect();
@@ -16,7 +16,7 @@ pub fn range(start: i32, count: usize) -> impl Iterator<Item = i32> {
     (start..).take(count)
 }
 
-/// Yields `value`, `count` times. Equivalent to C# `Enumerable.Repeat(value, count)`.
+/// Yields `value`, `count` times. C# analogue: `Enumerable.Repeat(value, count)`.
 ///
 /// ```rust
 /// let v: Vec<_> = linq_rs::repeat("hi", 3).collect();
@@ -26,7 +26,7 @@ pub fn repeat<T: Clone>(value: T, count: usize) -> impl Iterator<Item = T> {
     std::iter::repeat(value).take(count)
 }
 
-/// Yields no elements. Equivalent to C# `Enumerable.Empty<T>()`.
+/// Yields no elements. C# analogue: `Enumerable.Empty<T>()`.
 ///
 /// ```rust
 /// let v: Vec<i32> = linq_rs::empty().collect();

@@ -1,6 +1,7 @@
 //! [`Lookup`] — a one-to-many keyed collection.
 //!
-//! Mirrors `ILookup<TKey, TElement>` from C# LINQ.
+//! Plays the role of C# `ILookup<TKey, TElement>`. Keys are `Eq + Hash`
+//! rather than compared by an `IEqualityComparer`.
 //!
 //! Keys are `Eq + Hash + Clone` and lookups are O(1). The `Clone` bound buys
 //! the index: groups are held in a `Vec` so that iteration order is
