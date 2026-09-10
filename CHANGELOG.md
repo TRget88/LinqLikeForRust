@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Yanked
+
+- **`0.1.0` is yanked.** It was published on 2026-03-28 and should not be used.
+  Three defects, any one of which is disqualifying:
+  - `then_by` / `then_by_descending` re-sorted the whole buffer on the secondary
+    key, discarding the primary ordering. The inline comment asserted the
+    opposite. `tests/linq_tests.rs::test_then_by` caught it — and had never been
+    compiled, because the file was not a cargo target.
+  - `LinqExt::skip` collided with `Iterator::skip`, so merely importing the trait
+    turned every unqualified `.skip(n)` in that module into `error[E0034]`,
+    including calls on iterators unrelated to this crate. There was no `skip_`
+    escape, so the name could not be spelled in method position at all.
+  - `concat_`'s bound `I2: IntoIterator<IntoIter = Self>` required the argument's
+    iterator type to be identical to the receiver's, which rejects every
+    mid-chain call.
+
+  Also shipped in that tarball: the 421-line never-compiled test file, and no
+  `repository` link, so the published artifact had no path back to source. See
+  `AUDIT.md` finding A-3 and `DECISIONS.md` `D-009`.
+
+### Changed
+
+- **Version is `0.2.0`, not `0.1.1`.** `skip` → `skip_` and the `then_by`
+  behaviour change are both breaking. Pre-1.0, a minor bump is the correct
+  vehicle (`README.md` § Versioning).
+- Scope, naming and API rulings now live in **`DECISIONS.md`** and nowhere else.
+  `CLAUDE.md`, `ROADMAP.md` and `README.md` cite `D-NNN` IDs instead of stating
+  scope of their own — four documents had drifted into four different answers
+  (`AUDIT.md` finding A-1). SQL translation is the v2 thesis (`D-002`);
+  `src/sql/` is held on `feature/v0.1.0-and-sql-builder` pending reshape into a
+  single query value with two interpreters, rather than merged as a disjoint
+  second query vocabulary (`D-205`).
+- CI now runs on every branch, gates on the **executed** test count rather than
+  exit status (`D-013`), treats broken intra-doc links as errors, and checks
+  doctests on the 1.75 MSRV. Previously it ran on none of them: the workflow
+  triggered only on `main`/`master`, and had never executed.
+- `Cargo.lock` is no longer tracked. It was lockfile v4, which Cargo 1.75 — the
+  declared MSRV — cannot parse, so a fresh clone failed before compiling a line.
+
+### Fixed
+
+- Dangling intra-doc link in `src/adaptors.rs` left by the `skip` → `skip_`
+  rename. It survived because `cargo doc --no-deps` exits 0 on broken links.
+
 ### Added
 
 #### Phase 1 — close the C# LINQ feature gap
