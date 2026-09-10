@@ -56,8 +56,8 @@ group_by_key	linqext	GroupBy			Hash-indexed default; first-appearance order. Ren
 count_by	linqext	CountBy			.NET 9+; yields in HASH order, not insertion order	clause
 aggregate_by	linqext	AggregateBy			.NET 9+; seed_fn(&K)->Acc matches the seedSelector overload. Hash order	clause
 aggregate_by_partial_eq	linqext	AggregateBy	aggregate_by		Escape hatch, O(n*k)	clause
-to_hashmap	linqext	ToDictionary		map().collect()	Last key wins on duplicates (C# ToDictionary throws)	terminal
-to_lookup	linqext	ToLookup			Returns the crate's Lookup type	terminal
+into_hashmap	linqext	ToDictionary		map().collect()	Last key wins on duplicates (C# ToDictionary throws)	terminal
+into_lookup	linqext	ToLookup			Returns the crate's Lookup type	terminal
 OrderedQueryable::then_by	type_method	ThenBy			On OrderedQueryable via the ThenBy trait; pushes a comparator (ordered.rs:68)	n/a
 OrderedQueryable::then_by_descending	type_method	ThenByDescending	OrderedQueryable::then_by			n/a
 range	free_fn	Range		(start..).take(n)	Body: (start..).take(count); i32-only (sources.rs:16)	n/a

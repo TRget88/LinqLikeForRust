@@ -104,7 +104,7 @@ the cut is a gate rather than a one-time judgement that decays.
 are `std::iter` in a different spelling — use `collect()`, `chain()`, `rev()`,
 `zip()`, `fold()`, `enumerate()`, `eq()`.
 
-**Two calls worth naming.** `to_lookup` and `to_hashmap` are kept while `to_vec`
+**Two calls worth naming.** `into_lookup` and `into_hashmap` are kept while `to_vec`
 and `to_hashset` are cut: the first two produce shapes `collect()` cannot, the
 last two *are* `collect()`. And the element family (`first`, `single`, …) is
 kept because `LIMIT 1` and `LIMIT 2` are real clauses — which is why 62 survive
@@ -383,7 +383,7 @@ Discarding a query used to be silent. It no longer is, in 52 places.
   `for_each_`.
 - Nothing was added where it would double-report: the 33 `-> impl Iterator`
   methods are already covered because `Iterator` is itself `#[must_use]` in std,
-  `index_` is covered by `std::iter::Enumerate`, and `then_by`/`to_lookup` are
+  `index_` is covered by `std::iter::Enumerate`, and `then_by`/`into_lookup` are
   covered by their return types. `for_each_` is deliberately not annotated —
   it exists for side effects.
 - Verified from a downstream crate: 11 discarded results produce exactly 11

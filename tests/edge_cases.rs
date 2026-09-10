@@ -375,7 +375,7 @@ fn average_of_single_element() {
 #[test]
 fn to_lookup_preserves_all_duplicate_key_values() {
     let data = vec![("a", 1), ("a", 2), ("a", 3)];
-    let lookup = data.into_iter().to_lookup(|(k, _)| *k);
+    let lookup = data.into_iter().into_lookup(|(k, _)| *k);
     assert_eq!(lookup.len(), 1);
     assert_eq!(lookup.get(&"a"), &[("a", 1), ("a", 2), ("a", 3)]);
 }
@@ -383,7 +383,7 @@ fn to_lookup_preserves_all_duplicate_key_values() {
 #[test]
 fn to_lookup_on_empty_source_has_zero_keys() {
     let data: Vec<(i32, i32)> = vec![];
-    let lookup = data.into_iter().to_lookup(|(k, _)| *k);
+    let lookup = data.into_iter().into_lookup(|(k, _)| *k);
     assert_eq!(lookup.len(), 0);
     assert!(!lookup.contains_key(&1));
     assert_eq!(lookup.get(&1), &[]);
@@ -393,7 +393,7 @@ fn to_lookup_on_empty_source_has_zero_keys() {
 fn to_hashmap_last_write_wins_on_duplicate_keys() {
     // HashMap::insert overwrites — so duplicate keys keep the last value.
     let data = vec![("a", 1), ("a", 2), ("a", 3)];
-    let map = data.into_iter().to_hashmap(|(k, _)| *k);
+    let map = data.into_iter().into_hashmap(|(k, _)| *k);
     assert_eq!(map.len(), 1);
     assert_eq!(map[&"a"], ("a", 3));
 }

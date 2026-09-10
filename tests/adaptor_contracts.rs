@@ -102,3 +102,75 @@ fn select_many_accepts_any_into_iterator() {
 }
 
 // ── Ordering and grouping API shape (W-13, W-14, W-15) ───────────────────────
+
+// ── Ordering over borrowed data (D-104) ──────────────────────────────────────
+
+#[derive(Debug, PartialEq)]
+struct Person {
+    dept: String,
+    age: u32,
+}
+
+fn staff() -> Vec<Person> {
+    vec![
+        Person {
+            dept: "ops".into(),
+            age: 40,
+        },
+        Person {
+            dept: "eng".into(),
+            age: 30,
+        },
+        Person {
+            dept: "eng".into(),
+            age: 25,
+        },
+    ]
+}
+
+#[test]
+fn ordering_works_over_a_borrowed_collection() {
+    // The whole ordering family used to require `Self::Item: 'static`, because
+    // OrderedQueryable's boxed comparator had an elided 'static. So
+    // `people.iter().order_by(..)` -- sorting a view of a collection you still
+    // own, the commonest LINQ idiom there is -- did not compile:
+    //   error[E0597]: `people` does not live long enough
+    //   note: requirement that the value outlives `'static` introduced here
+    // Every test in the crate sorted an owned Vec of 'static elements, so
+    // nothing could see it.
+    let people = staff();
+
+    let by_age: Vec<&Person> = people.iter().order_by(|p| p.age).collect();
+    assert_eq!(by_age[0].age, 25);
+
+    // A borrowed KEY, not just a borrowed item -- the mitigation D-104 rests on.
+    let by_dept: Vec<&Person> = people.iter().order_by(|p| &p.dept).collect();
+    assert_eq!(by_dept[0].dept, "eng");
+
+    let multi: Vec<&Person> = people
+        .iter()
+        .order_by(|p| &p.dept)
+        .then_by_descending(|p| p.age)
+        .collect();
+    assert_eq!((multi[0].dept.as_str(), multi[0].age), ("eng", 30));
+
+    // And the no-selector forms, which take no key at all yet failed the same way.
+    let ages: Vec<u32> = people.iter().select(|p| p.age).order().collect();
+    assert_eq!(ages, [25, 30, 40]);
+    let desc: Vec<u32> = people.iter().select(|p| p.age).order_descending().collect();
+    assert_eq!(desc, [40, 30, 25]);
+
+    // The source is still owned and usable afterwards.
+    assert_eq!(people.len(), 3);
+}
+
+#[test]
+fn ordering_accepts_a_non_static_comparator() {
+    let people = staff();
+    let pivot = String::from("eng"); // borrowed by the comparator, not 'static
+    let v: Vec<&Person> = people
+        .iter()
+        .order_by_with(|a, b| (a.dept == pivot).cmp(&(b.dept == pivot)).reverse())
+        .collect();
+    assert_eq!(v[0].dept, "eng");
+}

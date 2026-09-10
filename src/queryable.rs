@@ -387,11 +387,11 @@ pub trait LinqExt: Iterator + Sized {
     ///     .collect();
     /// assert_eq!(sorted, ["apple", "banana", "cherry"]);
     /// ```
-    fn order_by<K, F>(self, key_fn: F) -> OrderedQueryable<Self::Item>
+    fn order_by<'a, K, F>(self, key_fn: F) -> OrderedQueryable<'a, Self::Item>
     where
         K: Ord,
-        F: Fn(&Self::Item) -> K + 'static,
-        Self::Item: 'static,
+        F: Fn(&Self::Item) -> K + 'a,
+        Self::Item: 'a,
     {
         let data: Vec<_> = self.collect();
         OrderedQueryable::new(data, Box::new(move |a, b| key_fn(a).cmp(&key_fn(b))))
@@ -413,21 +413,21 @@ pub trait LinqExt: Iterator + Sized {
     ///     .collect();
     /// assert_eq!(by_price, [("a", 1.0), ("b", 2.5)]);
     /// ```
-    fn order_by_with<F>(self, cmp: F) -> OrderedQueryable<Self::Item>
+    fn order_by_with<'a, F>(self, cmp: F) -> OrderedQueryable<'a, Self::Item>
     where
-        F: Fn(&Self::Item, &Self::Item) -> std::cmp::Ordering + 'static,
-        Self::Item: 'static,
+        F: Fn(&Self::Item, &Self::Item) -> std::cmp::Ordering + 'a,
+        Self::Item: 'a,
     {
         let data: Vec<_> = self.collect();
         OrderedQueryable::new(data, Box::new(cmp))
     }
 
     /// Sorts in descending order. C# analogue: `OrderByDescending`.
-    fn order_by_descending<K, F>(self, key_fn: F) -> OrderedQueryable<Self::Item>
+    fn order_by_descending<'a, K, F>(self, key_fn: F) -> OrderedQueryable<'a, Self::Item>
     where
         K: Ord,
-        F: Fn(&Self::Item) -> K + 'static,
-        Self::Item: 'static,
+        F: Fn(&Self::Item) -> K + 'a,
+        Self::Item: 'a,
     {
         let data: Vec<_> = self.collect();
         OrderedQueryable::new(data, Box::new(move |a, b| key_fn(b).cmp(&key_fn(a))))
@@ -444,9 +444,9 @@ pub trait LinqExt: Iterator + Sized {
     ///     .collect();
     /// assert_eq!(sorted, [1, 1, 2, 3, 4, 5, 9]);
     /// ```
-    fn order(self) -> OrderedQueryable<Self::Item>
+    fn order<'a>(self) -> OrderedQueryable<'a, Self::Item>
     where
-        Self::Item: Ord + 'static,
+        Self::Item: Ord + 'a,
     {
         let data: Vec<_> = self.collect();
         OrderedQueryable::new(data, Box::new(|a, b| a.cmp(b)))
@@ -454,9 +454,9 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Sorts the sequence in descending order using `Ord` on the elements
     /// themselves. C# analogue: `OrderDescending()` (.NET 6+).
-    fn order_descending(self) -> OrderedQueryable<Self::Item>
+    fn order_descending<'a>(self) -> OrderedQueryable<'a, Self::Item>
     where
-        Self::Item: Ord + 'static,
+        Self::Item: Ord + 'a,
     {
         let data: Vec<_> = self.collect();
         OrderedQueryable::new(data, Box::new(|a, b| b.cmp(a)))
@@ -1249,7 +1249,7 @@ pub trait LinqExt: Iterator + Sized {
 
     /// Collects into a `HashMap` by a key selector. C# analogue: `ToDictionary`.
     #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
-    fn to_hashmap<K, F>(self, key_fn: F) -> std::collections::HashMap<K, Self::Item>
+    fn into_hashmap<K, F>(self, key_fn: F) -> std::collections::HashMap<K, Self::Item>
     where
         K: std::hash::Hash + Eq,
         F: FnMut(&Self::Item) -> K,
@@ -1264,7 +1264,7 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Builds a [`Lookup`] (one-to-many dictionary). C# analogue: `ToLookup`.
-    fn to_lookup<K, F>(self, mut key_fn: F) -> Lookup<K, Self::Item>
+    fn into_lookup<K, F>(self, mut key_fn: F) -> Lookup<K, Self::Item>
     where
         K: Eq + std::hash::Hash + Clone,
         F: FnMut(&Self::Item) -> K,

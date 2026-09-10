@@ -56,8 +56,8 @@ single_or	terminal	2	-	yes	pulls exactly 2 then panics on a longer source (measu
 any_	terminal	6	-	yes	stops at the first match (6 for a match at index 5)
 all_	terminal	6	-	yes	stops at the first counterexample (6 for a failure at index 5)
 contains_	terminal	6	-	yes	stops at the first match
-to_hashmap	terminal	1000	-	no	drains
-to_lookup	terminal	1000	-	no	drains
+into_hashmap	terminal	1000	-	no	drains
+into_lookup	terminal	1000	-	no	drains
 order_by_with	eager_at_call	1000	-	no	collects at call, sorts on first next()
 min_by_	terminal	1000	-	no	drains
 max_by_	terminal	1000	-	no	drains

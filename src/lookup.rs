@@ -18,7 +18,7 @@ use std::hash::Hash;
 
 /// A keyed collection that maps each key to one or more values.
 ///
-/// Produced by [`LinqExt::to_lookup`](crate::queryable::LinqExt::to_lookup).
+/// Produced by [`LinqExt::into_lookup`](crate::queryable::LinqExt::into_lookup).
 ///
 /// Groups are kept in **first-appearance order**, and the values within each
 /// group in source order. Key lookup is O(1).
@@ -27,7 +27,7 @@ use std::hash::Hash;
 /// use linq_rs::LinqExt;
 ///
 /// let data = vec![("a", 1), ("b", 2), ("a", 3)];
-/// let lookup = data.into_iter().to_lookup(|(k, _)| *k);
+/// let lookup = data.into_iter().into_lookup(|(k, _)| *k);
 ///
 /// assert_eq!(lookup.get(&"a"), &[("a", 1), ("a", 3)]);
 /// assert_eq!(lookup.get(&"z"), &[]);          // missing key: empty slice
@@ -55,7 +55,7 @@ impl<K: Eq + Hash + Clone, V> Lookup<K, V> {
     /// Appends `value` to the group for `key`, creating the group if it is new.
     ///
     /// Public so that a `Lookup` can be built directly, not only via
-    /// [`to_lookup`](crate::queryable::LinqExt::to_lookup). Before this was
+    /// [`into_lookup`](crate::queryable::LinqExt::into_lookup). Before this was
     /// public, `Lookup::default()` produced a value that could never be filled.
     pub fn insert(&mut self, key: K, value: V) {
         match self.index.get(&key) {

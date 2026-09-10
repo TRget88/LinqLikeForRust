@@ -293,12 +293,12 @@ fn test_group_by() {
     assert_eq!(groups[2].elements(), ["cherry"]);
 }
 
-// ── to_lookup ─────────────────────────────────────────────────────────────────
+// ── into_lookup ─────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_to_lookup() {
     let data = vec![("a", 1), ("b", 2), ("a", 3), ("c", 4), ("b", 5)];
-    let lookup = data.into_iter().to_lookup(|(k, _)| *k);
+    let lookup = data.into_iter().into_lookup(|(k, _)| *k);
 
     assert_eq!(lookup.get(&"a"), &[("a", 1), ("a", 3)]);
     assert_eq!(lookup.get(&"b"), &[("b", 2), ("b", 5)]);
@@ -309,13 +309,13 @@ fn test_to_lookup() {
     assert_eq!(lookup.len(), 3);
 }
 
-// ── to_hashmap / to_hashset ───────────────────────────────────────────────────
+// ── into_hashmap / to_hashset ───────────────────────────────────────────────────
 
 #[test]
 fn test_to_hashmap() {
     let map = vec![("one", 1), ("two", 2), ("three", 3)]
         .into_iter()
-        .to_hashmap(|(k, _)| *k);
+        .into_hashmap(|(k, _)| *k);
     assert_eq!(map[&"one"], ("one", 1));
     assert_eq!(map[&"two"], ("two", 2));
 }

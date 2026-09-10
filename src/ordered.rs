@@ -35,7 +35,7 @@
 
 use std::cmp::Ordering;
 
-type Comparator<T> = Box<dyn Fn(&T, &T) -> Ordering>;
+type Comparator<'a, T> = Box<dyn Fn(&T, &T) -> Ordering + 'a>;
 
 /// A sequence that will be sorted by one or more keys on first iteration.
 ///
@@ -46,15 +46,15 @@ type Comparator<T> = Box<dyn Fn(&T, &T) -> Ordering>;
 ///
 /// Implements [`Iterator`], so every `LinqExt` operator works on it directly.
 #[must_use = "this buffers the source when constructed and sorts on first next(); dropping it wastes both"]
-pub struct OrderedQueryable<T> {
+pub struct OrderedQueryable<'a, T> {
     /// Unsorted until `next()` is first called; `None` afterwards.
     pending: Option<Vec<T>>,
-    comparators: Vec<Comparator<T>>,
+    comparators: Vec<Comparator<'a, T>>,
     sorted: Option<std::vec::IntoIter<T>>,
 }
 
-impl<T> OrderedQueryable<T> {
-    pub(crate) fn new(data: Vec<T>, first: Comparator<T>) -> Self {
+impl<'a, T> OrderedQueryable<'a, T> {
+    pub(crate) fn new(data: Vec<T>, first: Comparator<'a, T>) -> Self {
         Self {
             pending: Some(data),
             comparators: vec![first],
@@ -62,7 +62,7 @@ impl<T> OrderedQueryable<T> {
         }
     }
 
-    fn push_comparator(mut self, c: Comparator<T>) -> Self {
+    fn push_comparator(mut self, c: Comparator<'a, T>) -> Self {
         debug_assert!(
             self.pending.is_some(),
             "comparators cannot be added once iteration has begun"
@@ -86,8 +86,8 @@ impl<T> OrderedQueryable<T> {
     pub fn then_by<K, F>(self, key_fn: F) -> Self
     where
         K: Ord,
-        F: Fn(&T) -> K + 'static,
-        T: 'static,
+        F: Fn(&T) -> K + 'a,
+        T: 'a,
     {
         self.push_comparator(Box::new(move |a, b| key_fn(a).cmp(&key_fn(b))))
     }
@@ -96,8 +96,8 @@ impl<T> OrderedQueryable<T> {
     pub fn then_by_descending<K, F>(self, key_fn: F) -> Self
     where
         K: Ord,
-        F: Fn(&T) -> K + 'static,
-        T: 'static,
+        F: Fn(&T) -> K + 'a,
+        T: 'a,
     {
         self.push_comparator(Box::new(move |a, b| key_fn(b).cmp(&key_fn(a))))
     }
@@ -116,8 +116,8 @@ impl<T> OrderedQueryable<T> {
     /// ```
     pub fn then_by_with<F>(self, cmp: F) -> Self
     where
-        F: Fn(&T, &T) -> Ordering + 'static,
-        T: 'static,
+        F: Fn(&T, &T) -> Ordering + 'a,
+        T: 'a,
     {
         self.push_comparator(Box::new(cmp))
     }
@@ -139,7 +139,7 @@ impl<T> OrderedQueryable<T> {
     }
 }
 
-impl<T> Iterator for OrderedQueryable<T> {
+impl<T> Iterator for OrderedQueryable<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
@@ -157,10 +157,10 @@ impl<T> Iterator for OrderedQueryable<T> {
     }
 }
 
-impl<T> ExactSizeIterator for OrderedQueryable<T> {}
-impl<T> std::iter::FusedIterator for OrderedQueryable<T> {}
+impl<T> ExactSizeIterator for OrderedQueryable<'_, T> {}
+impl<T> std::iter::FusedIterator for OrderedQueryable<'_, T> {}
 
-impl<T> DoubleEndedIterator for OrderedQueryable<T> {
+impl<T> DoubleEndedIterator for OrderedQueryable<'_, T> {
     fn next_back(&mut self) -> Option<T> {
         self.ensure_sorted();
         self.sorted

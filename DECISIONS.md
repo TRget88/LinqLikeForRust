@@ -530,56 +530,123 @@ while these remain open — which is exactly the intended latitude.
   `distinct_partial_eq`, and `tests/linq_tests.rs` carries a `*_partial_eq`
   test per operator.
 
-## D-102 — The v2 translation boundary
-- **Status:** OPEN. **Recommended: compile error, with an explicit one-token
-  opt-in** (`.to_memory()`) that consumes the queryable and returns a plain
-  `Iterator` on which the full surface reappears.
-- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** EF Core ran this experiment — silent client-side fallback
-  before 3.0, documented as causing "unnoticed performance issues", changed to a
-  runtime throw in 3.0. C# cannot do better because `IQueryable<T>` exposes the
-  same methods regardless of provider. **Rust can**, and this crate already
-  accidentally proves it: the boundary is 100 % compile-time today.
-- **Also forbids, if adopted:** partial translation ("translate the prefix,
-  evaluate the suffix") and runtime capability flags — provider subsets are
-  per-provider trait method sets.
-- **Hard constraint from the audit (`B-2`, compiler-verified):** v2 must be
-  **purely additive**. Widening `where_<P: FnMut(&T)->bool>` into
-  `where_<P: IntoPredicate<T>>` breaks every existing call site with
-  `error: implementation of 'FnMut' is not general enough`, and `for<'a>` does not
-  fix it. Plan a *second* method (`where_expr`), never a widened `where_`.
+## D-102 — The v2 translation boundary: compile error, explicit opt-in
+- **Status:** **SETTLED (2026-09-10).**
+- **Ruling:** an operator the SQL path cannot translate is a **compile error**,
+  not a silent fallback and not a runtime throw. The SQL-backed type exposes
+  only the translatable subset; `.to_memory()` consumes it, executes what it
+  has, and returns a plain `Iterator` on which the full `LinqExt` surface
+  reappears. Crossing the boundary is one visible token, greppable in review.
+- **Why:** EF Core ran this experiment. It fell back to client evaluation before
+  3.0, documented the result as "unnoticed performance issues", and changed it
+  to a runtime throw in 3.0. C# cannot do better — `IQueryable<T>` exposes the
+  same method set regardless of provider, so translatability is not expressible
+  in its type system. **Rust's is**, and this crate proves it accidentally: the
+  boundary is already 100% compile-time, because operators are trait methods on
+  concrete types.
+- **Forbids:** partial translation ("translate the prefix, evaluate the
+  suffix") — where EF Core's own memory-leak documentation lives — and runtime
+  capability flags. A provider's operator subset is its trait's method set.
+- **Constrained by `B-2` (compiler-verified):** v2 must be **purely additive**.
+  Widening `where_<P: FnMut(&T)->bool>` to `where_<P: IntoPredicate<T>>` breaks
+  every call site with `error: implementation of 'FnMut' is not general enough`,
+  and `for<'a>` does not fix it. v2 adds `where_expr`; it never re-bounds
+  `where_`.
+- **Enforced by:** *prose until v2 exists* — there is no boundary to gate yet.
+  When there is: the SQL type must not implement `LinqExt`, and a `compile_fail`
+  test must pin a non-translatable operator against it.
 
-## D-103 — Three-valued logic across the seam
-- **Status:** OPEN. **Recommended:** do not promise result identity. Promise a
-  **stability class per operator, declared per provider**.
-- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** "same query, two backends, same answer" is not achievable by
-  default. Rust `Ord for str` is byte-ordinal, C# `OrderBy` is culture-aware,
-  PostgreSQL orders by the column's collation — measured, `["a","B","c","D"]`
-  sorts to `["B","D","a","c"]`, and canonically-equal NFC `é` and NFD `e\u{301}`
-  land on opposite sides of `"f"`. Add `D-018`'s null split on top.
+## D-103 — Three-valued logic: promise a stability class, not identity
+- **Status:** **SETTLED (2026-09-10).**
+- **Ruling:** the crate does **not** promise a query returns the same answer in
+  memory and in SQL. It promises, per operator, a documented *stability class*:
+  `identical`, `identical-modulo-collation`, or `provider-defined`.
+- **Why:** identity is not achievable, and claiming it would be the
+  silent-wrong-answer class this audit spent its length on. Measured: Rust
+  `Ord for str` is byte-ordinal, C# `OrderBy` is culture-aware, PostgreSQL
+  orders by the column's collation — `["a","B","c","D"]` sorts to
+  `["B","D","a","c"]` here, and canonically-equal NFC `é` and NFD `e\u{301}`
+  land on opposite sides of `"f"`. Nulls split worse: Rust and C#
+  LINQ-to-Objects agree `None == None`, SQL says `UNKNOWN`; Rust sorts `None`
+  first, PostgreSQL defaults `NULLS LAST`; `sum_` annihilates on one `None`
+  where C# and SQL skip nulls. Three answers for one operator (`D-018`).
+- **Forbids:** any claim that a query "gives the same result" across providers.
+- **Enforced by:** *prose until v2 exists.* Then the stability class becomes a
+  column in `.github/data/operator-map.tsv`, generated into the docs like every
+  other per-operator fact (`D-016`).
 
-## D-104 — Key-selector signature
-- **Status:** OPEN. **Recommended:** decide explicitly between an HRTB/GAT form,
-  `K: Borrow<..>`, and accept-and-document-with-the-clone-cost-stated.
-- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** every key selector is `FnMut(&Self::Item) -> K` with `K`
-  free, so a key cannot borrow from an owned item. Every shipped method takes a
-  key selector, so this is unfixable after 1.0 without breaking the whole API. The
-  diagnostic is a bare `error: lifetime may not live long enough` — no error code,
-  no suggested fix. Mitigation that already works and must be documented either
-  way: iterating by reference (`.iter()`) makes borrowed keys work with zero
-  clones.
+## D-104 — Key selectors cannot borrow from owned items: accept and document
+- **Status:** **SETTLED (2026-09-10)** — signature unchanged, limitation
+  documented, and a real bug found and fixed on the way.
+- **Ruling:** key selectors keep `Fn(&Self::Item) -> K` with `K` a free type
+  parameter. A key therefore cannot borrow from an item the iterator owns.
+  Iterating by reference (`.iter()`) makes `Self::Item = &T` and borrowed keys
+  work with **zero clones**; that is the documented answer.
+- **Scope, measured:** 23 of the 62 `LinqExt` methods take a key selector, plus
+  two on `OrderedQueryable` — 25 sites. (The earlier claim that "every shipped
+  method" takes one was wrong.)
+- **Why not the alternatives — each compiled, not reasoned about:**
+  - `for<'a> Fn(&'a T) -> K<'a>` does not express it:
+    `error[E0109]: lifetime arguments are not allowed on type parameter 'K'`.
+  - `for<'a> Fn(&'a T) -> &'a K` compiles but rejects every *computed* key
+    (`|p| p.n` → `E0308`), and the storing operators clone anyway.
+  - A GAT key trait **does** compile on 1.75 — so the MSRV is not what kills it.
+    Coherence is: restoring closure syntax needs one blanket impl per key shape
+    and they collide (`E0119`). Storing operators remain impossible
+    (`E0597`/`E0505`). Rejecting it "because 1.75 can't" would have been a wrong
+    reason for a right answer.
+  - `Cow<'a, K>` is the one alternative that genuinely works for non-storing
+    operators, and is rejected on cost: every owned key needs a turbofish, since
+    `ToOwned` is not invertible (`E0283`).
+  - Every alternative fails on the **storing** operators — `group_by_key`,
+    `into_lookup`, `into_hashmap`, `aggregate_by` — because `Grouping` must own
+    a key derived from the item being moved into it. The option costing a total
+    API break buys nothing where the pain is worst.
+- **`std` does the same.** `vec.into_iter().max_by_key(|p| &p.dept)` and
+  `vec.sort_by_key(|p| &p.dept)` emit a byte-identical
+  `error: lifetime may not live long enough`. A user who hits this has hit it in
+  `sort_by_key` already.
+- **Survives the v2 thesis, and fits it best.** A key selector on a
+  *translatable* query names a column, and `B-2` means the SQL path gets a
+  second method taking an expression value, never a widened closure bound. A
+  column reference has nothing to borrow from, so a lifetime-parameterised key
+  type would be dead weight there — and would compound `D-106`, which needs
+  these operators to return nameable types.
+- **The precondition that had to be fixed first.** The mitigation this ruling
+  rests on *did not work*. `OrderedQueryable`'s boxed comparator carried an
+  elided `'static`, which propagated `Self::Item: 'static` onto all eight
+  ordering methods — so `people.iter().order_by(|p| &p.dept)`, sorting a view of
+  a collection you still own, failed with
+  `error[E0597]: 'people' does not live long enough`. Introduced by `W-14`, and
+  invisible because every test and doctest sorted an owned `Vec` of `'static`
+  elements. Fixed by parameterising the lifetime (`OrderedQueryable<'a, T>`).
+  Documenting the mitigation without fixing this would have been precisely the
+  comment-and-code-disagree failure this repo is built against.
+- **Enforced by:** **IMPLEMENTED** —
+  `tests/adaptor_contracts.rs::ordering_works_over_a_borrowed_collection` and
+  `::ordering_accepts_a_non_static_comparator` exercise the whole ordering
+  family over borrowed data, including a borrowed key and a non-`'static`
+  comparator.
 
-## D-105 — `Fn` vs `FnMut` on predicates and selectors
-- **Status:** OPEN. **Recommended: `Fn`** on anything the plan vocabulary might
-  ever contain.
-- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** currently inconsistent — `order_by` binds `FnMut`
-  (`queryable.rs:229`), `join` binds `Fn` (`:460`). A translator needs purity, and
-  narrowing later is breaking: verified, a v1-legal counting closure against a v2
-  `Fn` bound gives `error[E0594]: cannot assign to 'calls', as it is a captured
-  variable in a 'Fn' closure`.
+## D-105 — Closure bounds: `FnMut`, matching `std`
+- **Status:** **SETTLED (2026-09-10)** — this **reverses** the recommendation
+  previously on file, which said to bind `Fn` everywhere.
+- **Ruling:** the in-memory surface binds **`FnMut`**, as `std::iter` does. The
+  ordering operators keep `Fn + 'a` because they *box* their comparator — an
+  implementation constraint, documented, not a preference.
+- **Why the reversal:** the case for `Fn` was "a translator needs purity, and
+  narrowing later is breaking". The first half is true; the second is moot,
+  because **`B-2` is compiler-verified** — v2 cannot re-bound these methods at
+  all, it must add new ones. The scenario `Fn` insured against cannot happen, so
+  paying for it means being less capable than `std` for nothing, which `D-005`
+  forbids.
+- **Measured:** relaxing the boxed operators to `FnMut` compiles and passes the
+  full suite, but buys nothing — a stateful closure still fails there on the
+  lifetime bound, not on `Fn`. `where_` with `FnMut` *does* accept a stateful
+  predicate. Documenting the real constraint beats hiding it behind a
+  uniform-looking bound.
+- **Enforced by:** the compiler. Binding `Fn` on a non-boxing operator is a
+  deliberate act a reviewer can see.
 
 ## D-106 — Named return types for anything the seam must reach
 - **Status:** OPEN. **Recommended: return named types** from `join`, `group_join`,
@@ -591,36 +658,31 @@ while these remain open — which is exactly the intended latitude.
   three operators the v2 thesis needs most. The same sites pin the MSRV at exactly
   1.75 with zero headroom.
 
-## D-107 — Seal the public traits
-- **Status:** OPEN, and **half resolved by `W-14`.** That deleted the `ThenBy`
-  trait — `then_by`, `then_by_descending` and `then_by_with` are inherent
-  methods on `OrderedQueryable` now — so the unsealed-public-trait hazard is
-  gone. What remains is whether to seal `LinqExt`. **Recommended: seal it.**
-- **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** `LinqExt` is de facto sealed by its blanket impl, so the
-  practical risk is low — but declaring it is free now and impossible later. The
-  `ThenBy` half was the sharp one: a public unsealed trait with exactly one
-  impl, where any added method is potentially breaking for a downstream
-  implementor.
-- **Related, and done:** `OrderedQueryable` implements `Iterator`,
-  `ExactSizeIterator`, `DoubleEndedIterator` and `FusedIterator` as of `W-14`.
-  Adding those later would have been non-breaking; removing them would not,
-  which is why they had to land before 1.0.
+## D-107 — Sealing: not needed; the blanket impl already seals
+- **Status:** **SETTLED (2026-09-10)** — no code change.
+- **Ruling:** `LinqExt` needs no sealed supertrait. `impl<I: Iterator> LinqExt
+  for I {}` already makes a downstream impl impossible **for any type**.
+  Verified: a downstream crate with its own `Iterator` writing
+  `impl LinqExt for MyIter {}` gets `error[E0119]: conflicting implementations
+  of trait 'LinqExt' for type 'MyIter'`, citing `impl<I> LinqExt for I` here.
+- **Why record a no-op:** "seal the public traits" reads like outstanding work,
+  and someone would eventually add the machinery. The `ThenBy` half *was* real —
+  a public unsealed trait with one impl — and `W-14` removed it by deleting the
+  trait.
+- **Enforced by:** the coherence rules. Nothing to add.
 
-## D-108 — `to_` vs `into_`, and `#[must_use]`
-- **Status:** OPEN — but **half done**. The `#[must_use]` half shipped in `W-17`
-  (52 annotations); the `to_` vs `into_` rename has not, and is the breaking half.
-  **Recommended:** rename consuming conversions to `into_`.
-- **Enforced by:** the `#[must_use]` half is enforced by the compiler as of
-  `W-17` and by a downstream probe (11 discarded results → 11 warnings,
-  `for_each_` → none). The rename half: nothing yet — see the shared gate for
-  this section (`W-19`).
-- **Why it matters:** `to_lookup` consumes `self` against the convention reserving
-  `to_` for borrow-to-owned, and clippy does not catch it. And there was **zero**
-  `#[must_use]` in either tree, so a discarded eager `order_by` — which allocates
-  and sorts — emits no diagnostic where std's `Filter`/`Map` both warn.
-
----
+## D-108 — `to_` vs `into_`: renamed; `#[must_use]` shipped
+- **Status:** **SETTLED (2026-09-10)** — both halves done.
+- **Ruling:** consuming conversions take `into_`. `to_lookup` → `into_lookup`,
+  `to_hashmap` → `into_hashmap`. (`to_vec`/`to_hashset` were cut by `D-019`;
+  they were `collect()` in a different spelling.)
+- **Why:** Rust reserves `to_` for borrow-to-owned and `into_` for
+  owned-to-owned; both of these consume `self`. Clippy does not catch it, which
+  is why it needed a decision rather than a lint.
+- **`#[must_use]`:** shipped in `W-17` — 52 annotations, verified downstream at
+  11 discarded results → 11 warnings, with side-effect methods correctly exempt.
+- **Enforced by:** the compiler for `#[must_use]`; naming is a review matter,
+  and the surface is now consistent.
 
 # DO-NOT-BUILD
 

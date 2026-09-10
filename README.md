@@ -191,8 +191,8 @@ group into a single value.
 
 | Rust                           | C#                               |
 |--------------------------------|----------------------------------|
-| `to_hashmap(key_fn)`           | `ToDictionary(key_fn)`           |
-| `to_lookup(key_fn)`            | `ToLookup(key_fn)`               |
+| `into_hashmap(key_fn)`           | `ToDictionary(key_fn)`           |
+| `into_lookup(key_fn)`            | `ToLookup(key_fn)`               |
 
 ### Utility
 
@@ -267,7 +267,7 @@ assert_eq!(result, ["Eng: Alice, Bob", "Sales: Carol"]);
 use linq_rs::LinqExt;
 
 let data = vec![("fruit", "apple"), ("veggie", "carrot"), ("fruit", "banana")];
-let lookup = data.into_iter().to_lookup(|(cat, _)| *cat);
+let lookup = data.into_iter().into_lookup(|(cat, _)| *cat);
 
 assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 ```
@@ -289,6 +289,7 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 | `first_or` | `next` |
 | `first_or_default` | `next` |
 | `first_where` | `find` |
+| `into_hashmap` | `map().collect()` |
 | `last_` | `last` |
 | `last_or` | `last` |
 | `last_or_default` | `last` |
@@ -306,7 +307,6 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 | `sum_` | `sum` |
 | `sum_by` | `map().sum()` |
 | `take_` | `take` |
-| `to_hashmap` | `map().collect()` |
 | `where_` | `filter` |
 
 The remaining 35 have no direct std equivalent — that is the part of this crate with a reason to exist.
@@ -319,7 +319,7 @@ by default**, and require `Eq + Hash`:
 
 `distinct` · `distinct_by` · `except` · `intersect` · `union_` ·
 `group_by_key` · `count_by` · `aggregate_by` · `inner_join` · `group_join`
-— plus `to_lookup`, whose `Lookup` is hash-indexed throughout.
+— plus `into_lookup`, whose `Lookup` is hash-indexed throughout.
 
 Each also has a `*_partial_eq` counterpart that compares with `PartialEq` and
 scans linearly:
@@ -450,23 +450,23 @@ assert_eq!(tied.into_iter().min_by_key_(|(_, k)| *k), Some(("first", 5)));
 Porting a `MaxBy` whose result you care about on ties? Reverse the sequence
 first, or key on `(key, Reverse(index))`.
 
-### `to_hashmap` keeps the last duplicate; `ToDictionary` throws
+### `into_hashmap` keeps the last duplicate; `ToDictionary` throws
 
 C# `ToDictionary` raises `ArgumentException` when "`keySelector` produces
 duplicate keys for two elements"
 ([ToDictionary](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.todictionary)).
-`to_hashmap` is `HashMap::insert` in a loop, so a later duplicate silently
+`into_hashmap` is `HashMap::insert` in a loop, so a later duplicate silently
 overwrites an earlier one.
 
 ```rust
 use linq_rs::LinqExt;
 
-let m = vec![("a", 1), ("a", 2), ("b", 3)].into_iter().to_hashmap(|(k, _)| *k);
+let m = vec![("a", 1), ("a", 2), ("b", 3)].into_iter().into_hashmap(|(k, _)| *k);
 assert_eq!(m.len(), 2);              // C#: ArgumentException
 assert_eq!(m["a"], ("a", 2));        // last one wins
 ```
 
-Use `to_lookup` when the keys are genuinely one-to-many; it keeps every value.
+Use `into_lookup` when the keys are genuinely one-to-many; it keeps every value.
 
 ### `sum_` overflow is profile-dependent; C# `Sum` always throws
 
@@ -529,7 +529,7 @@ input. Same for `GroupBy`, whose groups "are yielded in an order based on the
 order of the elements in `source` that produced the first key"
 ([GroupBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.groupby)).
 
-`group_by_key` and `to_lookup` **do** match that: they carry an auxiliary index
+`group_by_key` and `into_lookup` **do** match that: they carry an auxiliary index
 so groups come out in first-appearance order. `count_by` and `aggregate_by` do
 not — they iterate a `HashMap` directly, and `std`'s `HashMap` iteration order
 is unspecified and varies run to run.
@@ -567,7 +567,7 @@ and [Reverse](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerabl
 A C# query that is built and never enumerated costs nothing.
 
 In this crate `order_by`, `order`, `reverse`, `group_by_key`, `union_`,
-`inner_join`, `group_join` and `to_lookup` consume the source **when you call
+`inner_join`, `group_join` and `into_lookup` consume the source **when you call
 them**, so building a query and dropping it still pays for the traversal.
 `OrderedQueryable` defers only the *sort* to `into_iter()`, not the buffering.
 The genuinely lazy adaptors — `where_`, `select`, `select_many`, `take_`,
