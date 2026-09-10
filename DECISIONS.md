@@ -99,8 +99,9 @@ seam, not the seam.
   defensible release without inventing architecture the code does not have.
 - **Forbids:** Any README claim implying database support. Any dependency on a
   driver crate in the default feature set.
-- **Enforced by:** CI step — `grep` the default-feature dependency tree for driver
-  crates; a non-empty result fails. Plus `D-016`'s README gate.
+- **Enforced by:** **IMPLEMENTED** — `packaging-gate.sh` asserts the crate has
+  **zero** dependencies via `cargo metadata`, so any driver or SQL crate fails
+  the build. (A grep for driver names would have been weaker; zero is exact.)
 
 ## D-002 — SQL translation is the v2 thesis: designed-for, not built
 - **Status:** SETTLED (2026-09-09). X-1 and X-2 resolved the same day.
@@ -120,8 +121,8 @@ seam, not the seam.
 - **Forbids:** Stabilising any v1.0 API that a deferred/translated provider could
   not satisfy. Specifically: returning RPITIT opaque types from anything the seam
   must reach (`D-101` … `D-105`).
-- **Enforced by:** `D-101`–`D-105` must be closed before any 1.0 tag; CI gate on
-  the tag, not on the branch.
+- **Enforced by:** *(NOT YET IMPLEMENTED — `W-19`.)* The intended gate is CI
+  refusing a `v1.*` tag while any `D-1xx` reads `Status: OPEN`.
 - **Resolved:** the owner ruled to keep the thesis (2026-09-09). `D-205` still
   applies to `src/sql/` as written — it is held on
   `feature/v0.1.0-and-sql-builder` pending the reshape (`W-20`).
@@ -137,8 +138,10 @@ seam, not the seam.
   `RefCell` in users' signatures or making every future `!Send`.
 - **Forbids:** `Rc`/`RefCell`/`Arc<Mutex<_>>` in any public signature for the
   purpose of entity identity.
-- **Enforced by:** CI `grep` over `src/` for `Rc<|RefCell|Arc<|Mutex` — currently
-  **zero hits in both trees**, so this is true today and the gate keeps it true.
+- **Enforced by:** **IMPLEMENTED** — `packaging-gate.sh` greps `src/` for
+  `Rc<|RefCell|Arc<|Mutex<|RwLock<` and fails on any hit. This was true by
+  accident; the gate makes it true on purpose, so a later contributor cannot
+  quietly reintroduce the identity map this decision forbids.
 - **Note:** `to_hashmap` must not be used as an identity map — it silently picks a
   winner between two reads of the same key. See `D-018`.
 
@@ -148,7 +151,9 @@ seam, not the seam.
   and explicitly into an owned field.
 - **Why:** Implicit loading needs interior mutability or a hidden global, and is
   the largest single source of N+1 pathologies in real EF codebases.
-- **Enforced by:** the `D-003` grep, plus code review on any `Deref` impl.
+- **Enforced by:** **IMPLEMENTED** for the interior-mutability half, via
+  `D-003`'s grep. The "no I/O behind field access" half is **not** gated — it
+  would need a check on `Deref`/`Index` impls, and there are none today.
 
 ## D-005 — Naming: idiomatic Rust, LINQ-shaped
 - **Status:** SETTLED (2026-09-09). X-3 resolved the same day.
@@ -232,9 +237,11 @@ seam, not the seam.
   table or column position. Any operator accepting a raw SQL fragment; if a raw
   escape hatch is ever added it takes a distinct, obviously-unsafe name and does
   not compose with the typed builder.
-- **Enforced by:** the branch's `src/sql/` already satisfies this — verified,
+- **Enforced by:** *(NOT APPLICABLE YET.)* `src/sql/` is held out of this line
+  (`D-015(c)`), so there is nothing here to gate. It was verified on the branch —
   `filter(name.eq("Alice'; DROP TABLE employees; --"))` renders `WHERE (name = ?)`
-  with the payload in `params`. Keep an injection-payload test as the gate.
+  with the payload in `params` — and an injection-payload test must land with the
+  code when it does.
 
 ## D-008 — Migrations are delegated
 - **Status:** SETTLED (2026-09-09)
@@ -285,8 +292,10 @@ seam, not the seam.
   `lock file version '4' was found, but this version of Cargo does not understand
   this lock file`. `.gitignore` already intends to ignore it; the tracked file
   defeats the pattern.
-- **Enforced by:** CI job on `1.75.0` running `cargo test` (not
-  `--all-targets`), from a clean clone, on every branch.
+- **Enforced by:** **IMPLEMENTED** — the `msrv` CI job pins `1.75.0` and runs
+  `test-count-floor.sh`, which covers both `--all-targets` and `--doc`; the
+  latter is the bucket a bare `cargo test --all-targets` would have skipped.
+  Verified locally: 236 tests pass on 1.75 from a clean export with no lockfile.
 
 ## D-011 — `std` only, `alloc` door left open
 - **Status:** PROVISIONAL (2026-09-09)
@@ -311,9 +320,6 @@ seam, not the seam.
   the field is reverted to `MIT`.
 - **Note:** 0.1.0 is published MIT-only and stays MIT forever. Dual licensing can
   only begin at the next version — done at 0.2.0.
-- **Enforced by:** *(NOT YET IMPLEMENTED — `W-17`.)* A CI step asserting
-  `Cargo.toml`'s `license` field is exactly `MIT OR Apache-2.0` and that both
-  `LICENSE-MIT` and `LICENSE-APACHE` exist. Today the field still reads `MIT`.
 
 ## D-013 — The tests must actually run, and the count must not drop
 - **Status:** SETTLED (2026-09-09)
@@ -324,8 +330,12 @@ seam, not the seam.
   them, and a genuine correctness bug sat undetected behind a test that already
   caught it. The branch fixed the wiring; the *gate* is what stops a recurrence.
 - **Forbids:** Treating "cargo test passed" as evidence without a test count.
-- **Enforced by:** CI parses `cargo test` output and fails on `running 0 tests` or
-  on a total below a committed floor.
+- **Enforced by:** **IMPLEMENTED** — `.github/scripts/test-count-floor.sh`,
+  run by both the `test` and `msrv` jobs. It enforces a floor **per bucket**
+  (`--all-targets` and `--doc` separately) as well as on the total, because one
+  bucket collapsing while the other grows is exactly the historical bug.
+  Verified against `main` @ `bd9fd4f`: `executed test count dropped from 236 to
+  17`, exit 1.
 
 ## D-014 — This file is the single source of truth
 - **Status:** SETTLED (2026-09-09)
@@ -334,9 +344,11 @@ seam, not the seam.
   `AUDIT.md` is a dated evidence snapshot, not a source of decisions — anything in
   it that constrains future work must be promoted to an entry here or it does not
   bind.
-- **Enforced by:** the X-table above is the outstanding work list; CI `grep` for
+- **Enforced by:** *(NOT YET IMPLEMENTED.)* The intended gate is a CI `grep` for
   scope keywords (`out of scope`, `non-goal`, `we do not`, `IQueryable`) in
-  `CLAUDE.md`/`ROADMAP.md`/`README.md` that are not accompanied by a `D-` citation.
+  `CLAUDE.md`/`ROADMAP.md`/`README.md` that are not accompanied by a `D-`
+  citation. Until it exists, this decision is enforced by review alone — which is
+  precisely how the four-way contradiction in the X-table arose.
 
 ## D-015 — The unmerged branch: merge correctness and hygiene, not surface
 - **Status:** SETTLED (2026-09-09)
@@ -350,7 +362,8 @@ seam, not the seam.
 - **Why:** (a) is pure win and fixes four audit findings. (b) grows the surface
   that is the crate's principal liability from 48 to 90 methods. (c) is `A-1` in
   code form.
-- **Enforced by:** three separate PRs, each citing this ID.
+- **Enforced by:** *(process only, and it was not followed — see the amendment
+  below.)* The intent was three separate PRs, each citing this ID.
 - **AMENDED 2026-09-09, same day.** The owner ruled to merge **(a) and (b)
   together**, minus (c), on the evidence that (b) is *not* cleanly separable: the
   branch is a single commit, `src/queryable.rs` is a full rewrite that git sees
@@ -382,8 +395,11 @@ seam, not the seam.
   45 of 75 names and 0 of 44 comparer overloads, and the flagship example passes
   only because its data is degenerate. Prose warnings about drift do not stop
   drift.
-- **Enforced by:** `#![doc = include_str!("README.md")]` so every README block is
-  a doctest, plus a generator + CI diff for every table.
+- **Enforced by:** *(NOT YET IMPLEMENTED — `W-6`/`W-18`.)*
+  `#![doc = include_str!("README.md")]` so every README block is a doctest, plus
+  a generator and CI diff for every derived table. This is the highest-value
+  unbuilt gate in the file: `D-016` has already been violated twice, once in the
+  fix for its own violation.
 
 ## D-017 — Document the deviations once, do not chase C# semantics
 - **Status:** SETTLED (2026-09-09)

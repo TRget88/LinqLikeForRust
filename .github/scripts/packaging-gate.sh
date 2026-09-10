@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Enforces DECISIONS.md D-009 (publishing prerequisites) and D-012 (licence).
+# Enforces DECISIONS.md D-009 (publishing prerequisites), D-012 (licence),
+# D-001 (zero dependencies) and D-003/D-004 (no interior mutability).
 #
 # Why this exists. 0.1.0 was published with no `repository` field, MIT-only
 # against a dual-licence ruling, and carrying 421 lines of never-compiled test
@@ -75,6 +76,28 @@ DECISIONS.md
 LICENSE-MIT
 LICENSE-APACHE
 REQUIRED
+
+echo
+echo "=== source invariants (D-001, D-003, D-004) ==="
+# D-001: v1.0 is LINQ-to-objects only, and the crate advertises zero
+# dependencies. Assert it rather than trusting it.
+deps="$(cargo metadata --no-deps --format-version 1 \
+  | python3 -c "import json,sys; print(','.join(d['name'] for d in json.load(sys.stdin)['packages'][0]['dependencies']))")"
+if [ -z "$deps" ]; then
+  echo "dependencies: none (D-001)"
+else
+  err "crate has dependencies: ${deps}. D-001 keeps v1.0 dependency-free; a driver or SQL crate here would also breach D-002's staging."
+fi
+
+# D-003 / D-004: no interior mutability in the library. This is currently true
+# by accident; the gate makes it true on purpose, so a later contributor cannot
+# quietly reintroduce the Rc<RefCell<_>> identity map those decisions forbid.
+if hits="$(grep -rnE 'Rc<|RefCell|Arc<|Mutex<|RwLock<' src/ 2>/dev/null)"; then
+  err "interior mutability found in src/ — D-003 and D-004 forbid it:"
+  printf '%s\n' "$hits"
+else
+  echo "no Rc/RefCell/Arc/Mutex/RwLock in src/ (D-003, D-004)"
+fi
 
 echo
 [ "$fail" -eq 0 ] || { echo "packaging gate FAILED"; exit 1; }
