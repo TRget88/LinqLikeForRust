@@ -431,6 +431,50 @@ seam, not the seam.
   gated rather than silently skipped; CI builds, clippies and documents the
   whole workspace.
 
+## D-021 — `pred!`: closure-shaped syntax, and why it is not `D-201`
+- **Status:** SETTLED (2026-09-10) — implemented.
+- **Ruling:** a `macro_rules!` front end, `pred!`, accepts closure-shaped source
+  and expands to the existing builder calls.
+  `pred!(employees, |e| e.salary > 100_000 && e.dept == "eng")` becomes
+  `employees::salary.gt(100_000).and(employees::dept.eq("eng"))`.
+- **Why a macro at all.** A closure cannot be translated: `|e| e.salary > 100_000`
+  compiles to a function, and nothing at runtime can ask it which column, which
+  operator, which value. C# escapes this with a compiler feature Rust lacks — a
+  lambda typed `Expression<Func<T,bool>>` is emitted as a syntax **tree** rather
+  than a method, and that tree is what EF walks. Rust's substitute is a macro,
+  because macros see syntax before it becomes code.
+- **This is not the DSL `D-201` rejects.** That rules out a
+  `from x in xs where … select …` comprehension replacing method chaining, on
+  the evidence that all three Rust crates which tried it are dead. `pred!` is
+  one expression macro in one argument position; the chain, the types and the
+  operators are unchanged, and removing it changes nothing but how the predicate
+  is spelled. It is a front end, not a language.
+- **The grammar is deliberately small:** `binding.field OP operand` for the six
+  comparison operators, joined by `&&`/`||` with correct precedence, and
+  parentheses. Nothing else parses — and **the grammar boundary and the
+  translation boundary are the same line**, which is convenient rather than
+  accidental: `|e| e.salary * 2 > budget` could not have become SQL either.
+- **Error quality, measured rather than assumed.** I expected macro-internal
+  spans and warned about them; both cases point at the user's own line and
+  token. Exceeding the grammar gives
+  `error: no rules expected '*' --> src/main.rs:7:70`; a wrong type still gives
+  `error[E0271]: type mismatch resolving '<&str as Expr>::SqlType == Integer' …
+  expected 'Integer', found 'Text'` at the call site.
+- **It forced a prelude, and that was a real find.** The comparison operators
+  live on type-specific traits so a `Text` column cannot be compared to an
+  integer, and they must be in scope. Without them, **`Iterator::gt` exists** and
+  rustc finds it instead, giving
+  `` error[E0599]: `salary` is not an iterator ``. `linq_rs_sql::prelude` now
+  exists for the same reason Diesel's does.
+- **Forbids:** growing the grammar to cover expressions that cannot be
+  translated. If it does not become SQL, it does not belong in `pred!` — use
+  `.to_memory()` and a real closure.
+- **Enforced by:** `linq_rs_sql/tests/pred.rs` — six tests asserting the macro
+  expands to *exactly* the builder form (same SQL, same params), that `&&` binds
+  tighter than `||`, that parentheses override it, that all six operators
+  translate, that the same macro-built value evaluates in memory, and that it
+  still streams.
+
 ## D-014 — This file is the single source of truth
 - **Status:** SETTLED (2026-09-09)
 - **Ruling:** Scope, naming, semantics and dependency decisions live here and

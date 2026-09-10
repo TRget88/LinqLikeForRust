@@ -73,6 +73,8 @@
 //! assert_eq!(q.params, vec![SqlValue::Integer(18)]);
 //! ```
 
+#[macro_use]
+pub mod pred;
 pub mod column;
 pub mod expr;
 pub mod query;
@@ -88,3 +90,30 @@ pub use query::{All, Direction, Query, QueryOutput, Selection, Table};
 pub use value::SqlValue;
 // Re-export the SQL type markers and the sealed `SqlType` trait.
 pub use types::{Boolean, Float, Integer, SqlType, Text};
+
+/// Everything `pred!` and the builder need, in one import.
+///
+/// The comparison operators live on type-specific traits (`IntOps`, `TextOps`,
+/// …) so that a `Text` column cannot be compared to an integer. They have to be
+/// in scope for `.gt(..)` to resolve — and if they are not, the error is
+/// confusing rather than helpful, because **`Iterator::gt` exists** and rustc
+/// finds that instead:
+///
+/// ```text
+/// error[E0599]: `salary` is not an iterator
+///    method `gt` not found for this struct because it doesn't satisfy `salary: Iterator`
+/// ```
+///
+/// So import the prelude:
+///
+/// ```rust
+/// use linq_rs_sql::prelude::*;
+/// ```
+pub mod prelude {
+    pub use crate::column::{BoolOps, Column, ExprExt, FloatOps, IntOps, TextOps};
+    pub use crate::expr::Expr;
+    pub use crate::rows::{query, Entity, Rows};
+    pub use crate::types::{Boolean, Float, Integer, Text};
+    pub use crate::value::SqlValue;
+    pub use crate::{entity, pred, table};
+}

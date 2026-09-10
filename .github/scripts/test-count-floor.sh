@@ -37,9 +37,9 @@ set -euo pipefail
 
 # Per-bucket floors. Keep them in this file only -- never restate a count in a
 # .md, or it becomes a second copy of the truth (D-016).
-FLOOR_ALL_TARGETS=176
-FLOOR_DOCTESTS=49
-FLOOR_TOTAL=225
+FLOOR_ALL_TARGETS=182
+FLOOR_DOCTESTS=53
+FLOOR_TOTAL=235
 
 total=0
 fail=0

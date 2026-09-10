@@ -6,6 +6,30 @@ Declare your columns once; from then on the compiler checks them, and every
 value you compare against becomes a bound parameter instead of text spliced
 into a query.
 
+### Write it like a closure
+
+```rust
+use linq_rs_sql::prelude::*;
+
+let q = query::<Employee>()
+    .filter(pred!(employees, |e| e.salary > 100_000 && e.dept == "eng"));
+
+q.to_sql();           // SELECT * FROM employees WHERE ((salary > ?) AND (dept = ?))
+q.to_memory(&staff);  // the same value, over a &[Employee], lazily
+```
+
+`pred!` is a front end over the builder below — same types, same SQL, same
+in-memory evaluation, just spelled the way you would spell a closure. It exists
+because a closure itself cannot be translated: C# gets `.Where(e => ...)` into
+SQL via `Expression<Func<T,bool>>`, a compiler feature Rust does not have, and a
+macro is the substitute.
+
+The grammar is comparisons joined by `&&`/`||` with parentheses — and that
+boundary is the same as the translation boundary, so anything it rejects could
+not have become SQL anyway.
+
+### Or build it explicitly
+
 ```rust
 use linq_rs_sql::*;
 

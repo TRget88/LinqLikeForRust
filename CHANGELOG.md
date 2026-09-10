@@ -84,6 +84,51 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Added — `pred!`, closure-shaped filters (D-021)
+
+- `linq_rs_sql` gained `pred!`, a front end over the predicate builder:
+
+  ```rust
+  .filter(pred!(employees, |e| e.salary > 100_000 && e.dept == "eng"))
+  ```
+
+  expands to exactly
+
+  ```rust
+  .filter(employees::salary.gt(100_000).and(employees::dept.eq("eng")))
+  ```
+
+  Same types, same SQL, same params, same in-memory evaluation, same laziness —
+  asserted, not assumed, by `linq_rs_sql/tests/pred.rs`.
+
+- **Why a macro.** A closure cannot be translated: `|e| e.salary > 100_000`
+  compiles to a function and nothing at runtime can ask it which column, which
+  operator, which value. C# escapes this with a compiler feature Rust lacks —
+  a lambda typed `Expression<Func<T,bool>>` is emitted as a syntax *tree*.
+  Rust's substitute is a macro, because macros see syntax before it becomes code.
+
+- **The grammar is small on purpose:** `binding.field OP operand` for the six
+  comparison operators, joined by `&&`/`||` with correct precedence, plus
+  parentheses. The grammar boundary and the translation boundary are the same
+  line — `|e| e.salary * 2 > budget` does not parse, and could not have become
+  SQL either. Two `compile_fail` doctests pin that boundary.
+
+- **Error quality, measured rather than assumed.** Both cases point at the
+  user's own line and token, not at macro internals: exceeding the grammar gives
+  `error: no rules expected '*'` at the `*`, and a mistyped comparison still
+  gives `error[E0271]: type mismatch resolving '<i64 as Expr>::SqlType == Text'`
+  at the call site.
+
+- **Added `linq_rs_sql::prelude`.** `pred!` expands to methods on the ops traits,
+  which must be in scope. Without them the error is actively misleading, because
+  `Iterator::gt` exists and rustc finds it instead:
+  ``error[E0599]: `salary` is not an iterator``.
+
+- This is **not** the DSL `D-201` rejects. That rules out a
+  `from … where … select …` comprehension replacing method chaining. `pred!` is
+  one expression macro in one argument position; delete it and nothing changes
+  but how the predicate is spelled.
+
 ### Added — the two-interpreter seam (W-20, D-002)
 
 **One query value, two interpreters.** The same expression renders to SQL and
