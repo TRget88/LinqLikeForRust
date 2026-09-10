@@ -74,6 +74,22 @@ jobs:
         shell: bash
         run: ./.github/scripts/packaging-gate.sh
 
+  # D-005. Real-crate interop, deliberately in its own job rather than as a
+  # dev-dependency: itertools never enters this crate's Cargo.toml, never ships
+  # in the published manifest, and a bare checkout still tests offline. The
+  # always-on mimic lives in tests/interop.rs; this catches what a mimic cannot,
+  # namely a future itertools release adding a method name that collides with
+  # one of ours.
+  itertools-interop:
+    name: Interop with real itertools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build a throwaway crate depending on both
+        shell: bash
+        run: ./.github/scripts/itertools-interop.sh
+
   msrv:
     name: MSRV (1.75)
     runs-on: ubuntu-latest

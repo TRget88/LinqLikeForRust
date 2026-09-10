@@ -181,6 +181,28 @@ operators were O(n²) where O(n) is achievable.
 
 ---
 
+## Phase 5.5 — To revisit
+
+Decided-for-now, with a named reason to look again. See `DECISIONS.md`.
+
+- [ ] **`itertools` as a dev-dependency for interop testing** — *deferred, not
+  rejected* (`D-005`). Today the real-crate check runs as a CI-only job
+  (`.github/scripts/itertools-interop.sh`) that builds a throwaway crate
+  depending on both, so `itertools` never enters `Cargo.toml`, never ships in the
+  published manifest, and a bare checkout still tests offline. The always-on
+  gate is the mimic in `tests/interop.rs`.
+
+  **To be clear about what this is not:** it is not a dependency on itertools'
+  *algorithms*. `linq_rs` has and keeps its own `distinct`, `order_by`, `join`
+  and everything else. The only thing under test is whether the two method-name
+  sets can coexist in one scope.
+
+  **Revisit if:** the CI job proves too flaky to keep (it needs the network), or
+  the interop surface grows enough that a throwaway crate stops being a
+  reasonable way to express it, or the zero-dev-dependency stance is relaxed for
+  another reason (benchmarks under `D-207` would be the likeliest trigger, since
+  a `criterion` dev-dependency raises the same question).
+
 ## Phase 6 — Optional / opt-in features
 
 Each of these would ship behind a cargo feature flag (no impact on the

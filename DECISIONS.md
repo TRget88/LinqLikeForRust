@@ -171,15 +171,27 @@ seam, not the seam.
   `fn group_by(self, key)`) coexists with `LinqExt` in one scope; `.skip(n)` on
   unrelated iterators still resolves to std; and the inherent `[T]::join` /
   `reverse` / `to_vec` still win on a `Vec`.
-  **What is still missing:** the file *mimics* the shape of a competing trait
-  rather than depending on the real `itertools`, because `CLAUDE.md`'s hard
-  constraints forbid adding a dependency — even a dev-dependency — without the
-  owner's explicit approval. The resolution rules exercised are the real ones, so
-  this catches the bug class; but a test against the real crate would be strictly
-  better and is the only thing that would catch a change in itertools itself.
-  Adding `itertools` under `[dev-dependencies]` would leave the zero-dependency
-  promise to *consumers* intact, since dev-dependencies never enter a downstream
-  dependency graph. **OPEN question for the owner.**
+  **Plus a real-crate check, added the same day:** the CI job
+  `itertools-interop` runs `.github/scripts/itertools-interop.sh`, which builds a
+  throwaway crate in a temp directory depending on both `linq_rs` and the real
+  `itertools`, and fails if they cannot coexist. Verified in both directions —
+  it passes on this tree, and against a copy with `inner_join` reverted to `join`
+  it reproduces the original three-error cascade and exits 1 with the correct
+  diagnosis. It also distinguishes a genuine collision from an infrastructure
+  failure rather than blaming the former for the latter.
+- **Ruling on the dev-dependency (2026-09-09):** `itertools` is **not** added
+  under `[dev-dependencies]`. Empirically, a dev-dependency never reaches
+  consumers — a downstream crate's tree stays `consumer → linq_rs` and
+  `itertools` appears zero times in its lockfile — so the zero-dependency promise
+  to *users* would have survived. It was declined for three other reasons: it
+  ships in the published manifest (verified by extracting the `.crate` tarball),
+  it ends the fully-offline `git clone && cargo test`, and it contradicts
+  `CLAUDE.md`'s hard constraint as literally written. The CI job gets the same
+  coverage at none of those costs. **Deferred, not rejected** — see
+  `ROADMAP.md` Phase 5.5 for the named triggers to revisit.
+- **Not a dependency on itertools' algorithms.** `linq_rs` keeps its own
+  `distinct`, `order_by`, `inner_join` and the rest. The only thing these gates
+  test is whether the two method-name sets can coexist in one scope.
 - **Accepted carve-out (2026-09-09), following the X-1 ruling:** `where_`,
   `select`, `order_by`/`then_by`, `join`, `group_join` and `group_by` are
   **kept**, because under `D-002`'s two-interpreter design they are clause
