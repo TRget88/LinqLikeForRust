@@ -462,13 +462,15 @@ seam, not the seam.
 
 All `OPEN`. Each is free now and a breaking change later.
 
-**Shared gate for this whole section.** None of `D-101`…`D-108` can carry a code
-gate while it is OPEN — there is no ruling to enforce yet. The gate is therefore
-at the release boundary, not in the source: **CI must refuse to build a `v1.*`
-tag while any `D-1xx` entry still reads `Status: OPEN`.** That check does not
-exist yet (`W-19`). Until it does, this section is enforced by nothing but this
-paragraph, which is exactly the state this file says not to rest in — so treat
-`W-19` as blocking 1.0, not as cleanup.
+**Shared gate for this whole section — IMPLEMENTED (`W-19`).** None of
+`D-101`…`D-108` can carry a code gate while it is OPEN: they are decisions, not
+code, so there is nothing in `src/` to check against an undecided ruling. The
+gate is therefore at the release boundary.
+`.github/scripts/release-gate.sh`, wired into CI on `refs/tags/v1.*`, parses
+this file and **fails the release while any `D-1xx` reads `Status: OPEN`**.
+Verified in both directions: it currently refuses (7 open), and passes when the
+statuses are settled. `v0.x` tags are unaffected, so pre-1.0 releases can ship
+while these remain open — which is exactly the intended latitude.
 
 ## D-101 — Key bound: `Hash + Eq`
 - **Status:** **SETTLED (2026-09-09)** — implemented by `W-10`.

@@ -84,6 +84,17 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Added — 1.0 release gate (W-19)
+
+`.github/scripts/release-gate.sh` parses `DECISIONS.md` and **fails a `v1.*` tag
+while any `D-1xx` API-stability decision still reads `Status: OPEN`.** Seven do
+today.
+
+These are decisions rather than code, so nothing in `src/` can be checked
+against them on a branch — but each is free to change now and a breaking change
+after 1.0, which makes the tag the exact moment they stop being deferrable.
+`v0.x` tags are unaffected, so pre-1.0 releases ship normally.
+
 ### Changed — API shape (W-13, E-8, E-9, W-14, W-15). All breaking.
 
 - **`f64` keys can be sorted (W-13).** `order_by` binds `K: Ord`, and the crate
