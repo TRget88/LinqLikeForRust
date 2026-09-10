@@ -275,7 +275,7 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 **This crate does not touch a database.** It has no driver, no connection, and
 no dependencies; it runs over in-memory iterators.
 
-Its sibling [`linq_rs_sql`](linq_rs_sql/) builds SQL — compile-time-checked
+Its sibling [`linq_rs_sql`](https://github.com/TRget88/LinqLikeForRust/tree/main/linq_rs_sql) builds SQL — compile-time-checked
 columns, bound parameters, no interpolation — and hands you a string plus its
 parameters for whatever driver you already use. The two vocabularies are
 deliberately separate: this crate says `where_`, that one says `filter`, and no

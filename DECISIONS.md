@@ -459,11 +459,18 @@ seam, not the seam.
   the gate below runs before either crate is published.
 - **This does not weaken `D-020`.** Dev-dependencies never enter a consumer's
   graph; the gate asserts zero *runtime* dependencies, unchanged.
+- **The link defect had a second instance, in the crate about to publish.** The
+  root README linked `[`linq_rs_sql`](linq_rs_sql/)` — a workspace member, which
+  is *not* in the root tarball, so that link 404s on crates.io and docs.rs too.
+  The gate therefore checks link targets against each package's own
+  `cargo package --list` rather than pattern-matching `../`: a relative link is
+  valid iff the tarball actually ships it.
 - **Enforced by:** `packaging-gate.sh` §"sibling crate tarball" — asserts the
   sibling's tarball ships `LICENSE-MIT`, `LICENSE-APACHE`, `README.md` and
   `tests/`, that both licence texts are byte-identical to the workspace copies,
-  and that no `](../` appears in its README. All three verified to fail when the
-  defect is reintroduced, not just to pass today.
+  and (for **both** READMEs) that every relative link resolves to something in
+  that package's own tarball. Every check verified to fail when the defect is
+  reintroduced, not just to pass today.
 
 ## D-021 — `pred!`: closure-shaped syntax, and why it is not `D-201`
 - **Status:** SETTLED (2026-09-10) — implemented.

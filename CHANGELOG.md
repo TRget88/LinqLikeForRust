@@ -104,8 +104,14 @@ none of which any existing check caught:
   This imposes a publish **order**: `linq_rs 0.2.0` must be live before
   `linq_rs_sql` can be packaged or published. That is the natural order anyway.
 
-The packaging gate now asserts all of it against the sibling's actual tarball,
-and each check was verified to fail when the defect is reintroduced.
+The link defect had a second instance in `linq_rs` itself: the root README
+linked `[`linq_rs_sql`](linq_rs_sql/)`, and workspace members are not in the
+root tarball either. Now a GitHub URL.
+
+The packaging gate now checks both READMEs' relative links against each
+package's own `cargo package --list` — a relative link is valid iff the tarball
+actually ships it — plus the sibling's licence texts and required files. Each
+check was verified to fail when the defect is reintroduced.
 
 ### Added — `pred!`, closure-shaped filters (D-021)
 

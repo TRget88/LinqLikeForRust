@@ -130,13 +130,29 @@ for f in LICENSE-MIT LICENSE-APACHE; do
   fi
 done
 echo "licence texts are byte-identical to the workspace copies"
-# A `../path` link resolves in the git tree and 404s on crates.io and docs.rs,
-# because the sibling's tarball has no parent. Caught after both were live in
-# the README for the whole life of the crate.
-if grep -n '](\.\./' "$ROOT/linq_rs_sql/README.md"; then
-  err "linq_rs_sql/README.md has a '../' link, which breaks outside the git tree"
-fi
-echo "no parent-relative links in linq_rs_sql/README.md"
+# A relative link resolves in the git tree and 404s on crates.io and docs.rs,
+# where the tarball is the whole world. Two flavours, both found live:
+#   ../LICENSE-MIT   in the sibling  -- the tarball has no parent
+#   linq_rs_sql/     in the root     -- workspace members are not in the root
+#                                       tarball, so the target is simply absent
+# Anchors (#...) are fine; so is anything the tarball actually ships.
+check_relative_links() {
+  local readme="$1" pkg="$2" listing="$3" bad=0 target
+  while read -r target; do
+    [ -z "$target" ] && continue
+    case "$target" in \#*) continue ;; esac
+    if [ "${target#../}" != "$target" ]; then
+      echo "  ${pkg}/README.md -> ${target} (escapes the tarball)"; bad=1; continue
+    fi
+    printf '%s\n' "$listing" | grep -q "^${target%/}" \
+      || { echo "  ${pkg}/README.md -> ${target} (not in the tarball)"; bad=1; }
+  done < <(grep -oE '\]\([^)]+\)' "$readme" \
+           | sed -E 's/^\]\(//; s/\)$//' | grep -vE '^[a-z]+:' | sort -u)
+  [ "$bad" -eq 0 ] || err "${pkg}/README.md has links that break outside the git tree"
+  echo "${pkg}/README.md: every relative link resolves inside the tarball"
+}
+check_relative_links "$ROOT/linq_rs_sql/README.md" linq_rs_sql "$sib_listing"
+check_relative_links "$ROOT/README.md" linq_rs "$listing"
 
 echo
 echo "=== source invariants (D-001, D-003, D-004) ==="
