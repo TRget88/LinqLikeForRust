@@ -51,6 +51,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dangling intra-doc link in `src/adaptors.rs` left by the `skip` → `skip_`
   rename. It survived because `cargo doc --no-deps` exits 0 on broken links.
 
+### Known issues in 0.2.0
+
+Recorded here rather than discovered later. The yank notice above lists three
+defects in 0.1.0; **two of the three are fixed. This is the third.**
+
+- **`concat_` is still unusable mid-chain.** Its bound
+  `I2: IntoIterator<Item = Self::Item, IntoIter = Self>` requires the argument's
+  iterator type to be identical to the receiver's, so
+  `v.into_iter().where_(..).concat_(other)` fails with `E0271`. Head-of-chain
+  same-container calls do work. Use `Iterator::chain`. Unchanged from 0.1.0 —
+  fixing it means changing the public `Concat<I>` type, so it is not a
+  patch-level change. `AUDIT.md` finding E-8.
+- **The operator surface grew from 48 to 90 methods, against this project's own
+  stated direction.** `D-005` rules that methods which merely rename an existing
+  `Iterator` method should not exist, and `AUDIT.md` finding A-2 identifies the
+  alias surface as the crate's principal liability. The growth was merged anyway,
+  deliberately, because the 42 new operators were not cleanly separable from the
+  correctness fixes in the same commit — see the amendment on `D-015`. The v1.0
+  cut line (`AUDIT.md` §7.3) reverses it.
+- **Two methods land against DO-NOT-BUILD entries and must not be published.**
+  `cast::<U>()` is a fallible conversion that panics via `.expect(...)` with no
+  `Result` alternative (`D-204`). The ten `*_hashed` twins leave the quadratic
+  implementation as the default a caller reaches for first, doubling the surface
+  to avoid a breaking change (`D-206`). `W-10` makes the hash-backed algorithm
+  the default instead of a twin.
+- **The quadratic defaults are unchanged.** `distinct`, `except`, `intersect`,
+  `union_`, `group_by`, `to_lookup`, `join` and `group_join` are all O(n²) in the
+  default form, and `Lookup::get`/`contains_key` are linear scans. Measured
+  crossover into visible slowness is around n≈17,000–30,000. `AUDIT.md` §4.3.
+- **`D-005`'s own enforcement gate cannot be written yet.** It requires a test
+  importing `LinqExt` and `itertools::Itertools` together, which cannot compile
+  while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
+  on `W-12`.
+
+### Not yet done before publishing 0.2.0
+
+`D-009` gates publishing on these; none is complete.
+
+- `repository` is unset, so a published tarball has no path back to source.
+- No `exclude`, so `cargo package` ships `AUDIT.md`, `DECISIONS.md`,
+  `QUESTIONS.md`, `.github/` and both integration-test files.
+- `license` is still `MIT`, not the `MIT OR Apache-2.0` that `D-012` requires,
+  and there is no `LICENSE-APACHE`.
+
 ### Added
 
 #### Phase 1 — close the C# LINQ feature gap

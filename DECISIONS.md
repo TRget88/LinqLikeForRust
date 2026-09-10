@@ -79,7 +79,7 @@ restate a scope claim of its own.
 | X-1 | `CLAUDE.md` Non-goals | "We are not building an `IQueryable`/expression-tree analogue… We do not target databases" | **RESOLVED** 2026-09-09 — replaced with a scope-by-reference list citing `D-001`…`D-205`; the non-goal is struck, `D-002` stands |
 | X-2 | `ROADMAP.md` *Rejected* | "`IQueryable` / expression trees — out of scope. We target in-memory iterators only." | **RESOLVED** 2026-09-09 — entry now reads "no longer rejected", cites `D-002`, and records that the SQL builder was committed as "ORM Phase 1" against a roadmap with no ORM phase |
 | X-3 | `CLAUDE.md` Mission | "familiar to C# devs **and** idiomatic to Rust devs at the same time" | **RESOLVED** 2026-09-09 — now states that idiom wins, citing `D-005` |
-| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | **RESOLVED** 2026-09-09 — replaced with the measured count (45 of 75 names, 0 of 44 comparer overloads) and a `D-016` pointer. The count is still hand-written; `D-016`'s generator is `W-18` and remains OPEN |
+| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | **RESOLVED** 2026-09-09, then **re-fixed the same day.** The first fix replaced the claim with a hand-written count ("45 of C#'s 75 operator names") that was measured on `main` and wrong by ~20 names for this tree — written, with no irony intended, in the same sentence as a `D-016` citation saying counts must be generated. The README now states the C# denominators (75 names, 234 overloads, 44 comparer overloads — verified against learn.microsoft.com), states that this crate covers neither set completely, and **refuses to give a coverage figure** until `W-18` derives one |
 | X-5 | `Cargo.toml` | `license = "MIT"` | **OPEN** — `W-17`. Must be `MIT OR Apache-2.0` with both licence files before the next publish |
 
 The thesis ruling that closed X-1..X-3 (2026-09-09): **keep the SQL thesis.**
@@ -163,10 +163,17 @@ seam, not the seam.
   (`concat_`, `union_`, `contains_`, `is_empty_`) collide with nothing at all.
 - **Forbids:** New pure-alias methods. Trailing underscores on names that do not
   collide.
-- **Enforced by:** a test that imports `LinqExt`, `Iterator` **and**
-  `itertools::Itertools` in one scope and calls `.skip(1)`, `.join(", ")` and
-  `.group_by(..)` — it must compile. That single test pins `D-005`, `E-1`, `E-2`
-  and `E-3` shut at once.
+- **Enforced by:** *(NOT YET IMPLEMENTED — blocked on `W-12`.)* The intended gate
+  is a test that imports `LinqExt`, `Iterator` **and** `itertools::Itertools` in
+  one scope and calls `.skip_(1)`, `.join(", ")` and `.group_by(..)`, and must
+  compile. **As of today that test cannot compile**, and the reason matters: the
+  carve-out below keeps `LinqExt::join` and `LinqExt::group_by`, which are
+  precisely the two names that collide with `Itertools` — `join` silently
+  (by-value `self` wins receiver adjustment, no diagnostic) and `group_by` as a
+  hard `E0034`. So this decision is currently enforced by nothing. The gate
+  becomes writable only after `W-12` renames them to `inner_join` and
+  `group_by_key`; until then, treat `D-005` as prose. itertools also has to
+  become a dev-dependency for the test to exist at all.
 - **Accepted carve-out (2026-09-09), following the X-1 ruling:** `where_`,
   `select`, `order_by`/`then_by`, `join`, `group_join` and `group_by` are
   **kept**, because under `D-002`'s two-interpreter design they are clause
@@ -192,6 +199,9 @@ seam, not the seam.
 - **Note:** `sea-query` 1.0.2 is the obvious rendering backend rather than a
   competitor, but its MSRV is 1.88 / edition 2024, so it can only ever be an
   optional feature — never a default. See `D-010`.
+- **Enforced by:** *prose only, and nothing to gate until v2 exists.* At that
+  point: a CI matrix pinned to exactly the declared backends, so adding a fourth
+  requires editing this decision first.
 
 ## D-007 — Query construction (v2): runtime-built plan, compile-time-checked inputs
 - **Status:** SETTLED (2026-09-09)
@@ -214,6 +224,8 @@ seam, not the seam.
 - **Trigger to revisit:** v2 shipped and in real use.
 
 ---
+- **Enforced by:** *prose only.* There is nothing to gate while no schema-diff
+  code exists; the gate becomes a CI grep for a migrations module if v2 ships.
 
 # Product and process
 
@@ -261,6 +273,8 @@ seam, not the seam.
   `to_hashmap`/`to_hashset`, so an `alloc`-only build would cover 46 of 48 methods.
   It is *achievable*, which is exactly why it will keep coming up. It has no user.
 - **Trigger to revisit:** an actual embedded user asks.
+- **Enforced by:** *prose only, deliberately.* A `no_std` CI target would be
+  the gate, and by this ruling it should not exist. Revisit with the trigger.
 
 ## D-012 — License: dual `MIT OR Apache-2.0`
 - **Status:** SETTLED (2026-09-09). X-5 still OPEN in `Cargo.toml` — see `W-17`.
@@ -269,6 +283,9 @@ seam, not the seam.
   contributors arrive.
 - **Note:** 0.1.0 is published MIT-only and stays MIT forever. Dual licensing can
   only begin at the next version.
+- **Enforced by:** *(NOT YET IMPLEMENTED — `W-17`.)* A CI step asserting
+  `Cargo.toml`'s `license` field is exactly `MIT OR Apache-2.0` and that both
+  `LICENSE-MIT` and `LICENSE-APACHE` exist. Today the field still reads `MIT`.
 
 ## D-013 — The tests must actually run, and the count must not drop
 - **Status:** SETTLED (2026-09-09)
@@ -306,6 +323,25 @@ seam, not the seam.
   that is the crate's principal liability from 48 to 90 methods. (c) is `A-1` in
   code form.
 - **Enforced by:** three separate PRs, each citing this ID.
+- **AMENDED 2026-09-09, same day.** The owner ruled to merge **(a) and (b)
+  together**, minus (c), on the evidence that (b) is *not* cleanly separable: the
+  branch is a single commit, `src/queryable.rs` is a full rewrite that git sees
+  as delete+add, and the 192 tests in `tests/linq_tests.rs` and
+  `tests/edge_cases.rs` cover the old and new methods together. Extracting (b)
+  would have meant hand-splitting a 1,513-line file with no green-test safety
+  net, to remove methods that the v1.0 cut line deletes anyway. So `LinqExt`
+  went **48 → 90 methods** on this branch, deliberately and unpublished.
+  Two consequences must be recorded rather than left implicit, because the merge
+  landed methods that this file forbids:
+  - `cast::<U>()` violates **`D-204`** — `TryInto` plus `.expect(...)`, a fallible
+    data conversion that panics with no `Result` alternative.
+  - The ten `*_hashed` twins (`distinct_hashed`, `distinct_by_hashed`,
+    `except_hashed`, `intersect_hashed`, `union_hashed`, `group_by_hashed`,
+    `group_join_hashed`, `join_hashed`, `count_by_hashed`, `aggregate_by_hashed`)
+    violate **`D-206`** — a second implementation of every operator that leaves
+    the quadratic version as the default a user reaches for first.
+  Both are on the `W-10`/`W-18` cut-line list. Neither may be published: `D-009`
+  gates publishing, and the cut line comes first.
 
 ## D-016 — Claims about coverage must be derived, not written
 - **Status:** SETTLED (2026-09-09)
@@ -330,6 +366,10 @@ seam, not the seam.
 - **Why:** Six audit findings dissolved into "this behaves exactly like the `std`
   method it delegates to". Chasing the C# contract would make the crate worse Rust,
   and culture-aware collation needs an ICU dependency `D-001` forbids. See `D-203`.
+- **Enforced by:** *(NOT YET IMPLEMENTED — `W-6`/`W-7`.)*
+  `#![doc = include_str!("README.md")]` makes every README block a doctest, plus
+  a CI grep asserting no doc comment says "Equivalent to <C# name>" without
+  linking the `# Differences from C# LINQ` section.
 
 ## D-018 — `Option<T>` null semantics are documented, never SQL-shaped
 - **Status:** SETTLED (2026-09-09)
@@ -345,13 +385,26 @@ seam, not the seam.
   lying.
 
 ---
+- **Enforced by:** *(NOT YET IMPLEMENTED.)* Tests asserting the measured
+  behaviour — `where_(|x| *x < Some(2))` keeps the `None` rows, `sum_` returns
+  `None` on any `None`, `order_by` sorts `None` first — so that a well-meaning
+  "fix" toward SQL semantics fails the build instead of landing silently.
 
 # API stability — must be closed before any 1.0
 
 All `OPEN`. Each is free now and a breaking change later.
 
+**Shared gate for this whole section.** None of `D-101`…`D-108` can carry a code
+gate while it is OPEN — there is no ruling to enforce yet. The gate is therefore
+at the release boundary, not in the source: **CI must refuse to build a `v1.*`
+tag while any `D-1xx` entry still reads `Status: OPEN`.** That check does not
+exist yet (`W-19`). Until it does, this section is enforced by nothing but this
+paragraph, which is exactly the state this file says not to rest in — so treat
+`W-19` as blocking 1.0, not as cleanup.
+
 ## D-101 — Key bound: `Hash + Eq` or `PartialEq`?
-- **Status:** OPEN. **Recommended: `Hash + Eq`**, with `*_by` comparator variants
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: `Hash + Eq`**, with `*_by` comparator variants
   *named in the 1.0 docs* so adding them later is purely additive.
 - **Why it matters:** determines the complexity class of every hash-backed
   operator *and* whether `f64` keys compile at all. `PartialEq` gives no
@@ -362,7 +415,8 @@ All `OPEN`. Each is free now and a breaking change later.
   `HashSet`/`HashMap`/`Itertools::unique` already do.
 
 ## D-102 — The v2 translation boundary
-- **Status:** OPEN. **Recommended: compile error, with an explicit one-token
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: compile error, with an explicit one-token
   opt-in** (`.to_memory()`) that consumes the queryable and returns a plain
   `Iterator` on which the full surface reappears.
 - **Why it matters:** EF Core ran this experiment — silent client-side fallback
@@ -380,7 +434,8 @@ All `OPEN`. Each is free now and a breaking change later.
   fix it. Plan a *second* method (`where_expr`), never a widened `where_`.
 
 ## D-103 — Three-valued logic across the seam
-- **Status:** OPEN. **Recommended:** do not promise result identity. Promise a
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended:** do not promise result identity. Promise a
   **stability class per operator, declared per provider**.
 - **Why it matters:** "same query, two backends, same answer" is not achievable by
   default. Rust `Ord for str` is byte-ordinal, C# `OrderBy` is culture-aware,
@@ -389,7 +444,8 @@ All `OPEN`. Each is free now and a breaking change later.
   land on opposite sides of `"f"`. Add `D-018`'s null split on top.
 
 ## D-104 — Key-selector signature
-- **Status:** OPEN. **Recommended:** decide explicitly between an HRTB/GAT form,
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended:** decide explicitly between an HRTB/GAT form,
   `K: Borrow<..>`, and accept-and-document-with-the-clone-cost-stated.
 - **Why it matters:** every key selector is `FnMut(&Self::Item) -> K` with `K`
   free, so a key cannot borrow from an owned item. Every shipped method takes a
@@ -400,7 +456,8 @@ All `OPEN`. Each is free now and a breaking change later.
   clones.
 
 ## D-105 — `Fn` vs `FnMut` on predicates and selectors
-- **Status:** OPEN. **Recommended: `Fn`** on anything the plan vocabulary might
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: `Fn`** on anything the plan vocabulary might
   ever contain.
 - **Why it matters:** currently inconsistent — `order_by` binds `FnMut`
   (`queryable.rs:229`), `join` binds `Fn` (`:460`). A translator needs purity, and
@@ -409,7 +466,8 @@ All `OPEN`. Each is free now and a breaking change later.
   variable in a 'Fn' closure`.
 
 ## D-106 — Named return types for anything the seam must reach
-- **Status:** OPEN. **Recommended: return named types** from `join`, `group_join`,
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: return named types** from `join`, `group_join`,
   `group_by` and any future relational operator.
 - **Why it matters:** `B-1`, compiler-verified — the eight `-> impl Iterator` sites
   in trait position permanently seal those operators against any future trait
@@ -418,13 +476,15 @@ All `OPEN`. Each is free now and a breaking change later.
   1.75 with zero headroom.
 
 ## D-107 — Seal the public traits
-- **Status:** OPEN. **Recommended: seal both.**
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended: seal both.**
 - **Why it matters:** `LinqExt` is de facto sealed by its blanket impl, but
   `ThenBy` is a public unsealed trait with exactly one impl, so any added method is
   potentially breaking for a downstream implementor. Free now, impossible later.
 
 ## D-108 — `to_` vs `into_`, and `#[must_use]`
-- **Status:** OPEN. **Recommended:** rename consuming conversions to `into_`; add
+- **Status:** OPEN
+- **Enforced by:** nothing yet — see the shared gate above (`W-19`).. **Recommended:** rename consuming conversions to `into_`; add
   `#[must_use]` to every deferred return.
 - **Why it matters:** `to_lookup` consumes `self` against the convention reserving
   `to_` for borrow-to-owned, and clippy does not catch it. And there is **zero**

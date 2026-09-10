@@ -19,10 +19,19 @@ name: CI
 #      tracked Cargo.lock was lockfile v4, which Cargo 1.75 cannot parse. The
 #      lockfile is now untracked (D-010).
 
-on:
+# Quoted so YAML 1.1 parsers keep this a string key. Unquoted, `on` coerces to
+# boolean true and any home-grown validator looking up cfg["on"] silently sees
+# nothing. GitHub accepts both forms.
+"on":
   push:
   pull_request:
   workflow_dispatch:
+
+# Both push and pull_request fire for a same-repo PR, and an unfiltered push
+# also fires on tag pushes. Cancel superseded runs rather than paying for them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -66,9 +75,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.75
       - name: Build on MSRV
         run: cargo build --all-targets
-      - name: Test on MSRV
-        run: cargo test --all-targets
-      # --all-targets above does NOT include doctests. Without this step the
-      # MSRV claim covers no documented example at all.
-      - name: Doctests on MSRV
-        run: cargo test --doc
+      # Same gate as the stable job, not a bare `cargo test`. `--all-targets`
+      # alone excludes doctests, so the MSRV claim would cover no documented
+      # example -- and an ungated `cargo test` is the exact no-op this workflow
+      # exists to eliminate. The script runs both buckets and enforces both
+      # floors.
+      - name: Test on MSRV (with executed-count floor)
+        shell: bash
+        run: ./.github/scripts/test-count-floor.sh

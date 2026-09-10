@@ -11,10 +11,16 @@ A LINQ-style query library for Rust iterators: LINQ-shaped operators over any
 `Iterator`, via a blanket extension trait.
 
 Where familiarity to C# and idiomatic Rust conflict, **idiom wins** — that is
-`D-005`, and it is a ruling, not a balance to strike per API. Do not describe the
-crate as bringing "the full surface" or "the full power" of C# LINQ; measured, the
-surface is 45 of C#'s 75 operator names and 0 of its 44 comparer overloads, and
-`D-016` requires any such count to be generated rather than written.
+`D-005`, and it is a ruling, not a balance to strike per API.
+
+Do not describe the crate as bringing "the full surface" or "the full power" of
+C# LINQ: `System.Linq.Enumerable` has 75 operator names and 44 comparer
+overloads, and this crate covers neither set completely. **Do not write a
+coverage count anywhere** — `D-016` requires it to be generated from the source,
+and the first draft of this very paragraph shipped a hand-written figure that was
+measured on a different tree and was wrong by ~20 names. That is the failure mode
+`D-016` exists to prevent, and it caught itself here. `W-18` lands the
+generator.
 
 **Scope, by reference — read the entry before assuming:**
 - `D-001` v1.0 is LINQ-to-objects only.
@@ -53,7 +59,8 @@ LinqLikeForRust/
 │   ├── ordered.rs          OrderedQueryable<T> + ThenBy trait
 │   └── sources.rs          range / repeat / empty — free fns at crate root
 ├── tests/
-│   └── linq_tests.rs       integration tests
+│   ├── linq_tests.rs       integration tests (128)
+│   └── edge_cases.rs       edge-case + regression tests (64)
 ├── examples/               runnable demos: basic_pipeline, join, group_aggregate
 ├── .github/workflows/ci.yml CI — build / test / clippy / fmt / doc on Linux + Windows
 ├── README.md
@@ -73,7 +80,14 @@ a trailing underscore:
 | Reason for `_` suffix | Examples |
 |---|---|
 | Reserved keyword       | `where_` |
-| Shadows `Iterator` method | `take_`, `any_`, `all_`, `min_`, `max_`, `sum_`, `concat_`, `union_`, `zip_`, `is_empty_`, `for_each_`, `take_while_`, `skip_while_`, `min_by_key_`, `max_by_key_` |
+| Shadows `Iterator` method | `skip_`, `take_`, `any_`, `all_`, `min_`, `max_`, `sum_`, `concat_`, `union_`, `zip_`, `is_empty_`, `for_each_`, `take_while_`, `skip_while_`, `min_by_key_`, `max_by_key_` |
+
+`skip_` carries the suffix for a reason worth remembering: as bare `skip` it
+collided with `Iterator::skip`, and merely importing `LinqExt` turned every
+unqualified `.skip(n)` in the module into `error[E0034]` — including calls on
+iterators unrelated to this crate. The rename is why 0.2.0 is a breaking bump.
+Four suffixes (`concat_`, `union_`, `contains_`, `is_empty_`) collide with
+nothing and are gratuitous; see `D-005`.
 | Clarity from `std`     | `flatten_` (parallels `Iterator::flatten`) |
 
 When adding a new operator, the rule is: **if Rust or the prelude already
@@ -89,7 +103,7 @@ type, suffix with `_item` or `_where` (e.g. `append_item`, `first_where`).
 Mirror C# LINQ behaviour:
 
 - **Lazy** (return an adaptor struct that lazily implements `Iterator`):
-  `where_`, `select`, `select_many`, `flatten_`, `skip`, `skip_while_`, `take_`,
+  `where_`, `select`, `select_many`, `flatten_`, `skip_`, `skip_while_`, `take_`,
   `take_while_`, `chunk`, `distinct`, `distinct_by`, `concat_`, `zip_`.
 - **Eager** (collect into `Vec` first, then re-yield):
   `order_by`, `order_by_descending`, `reverse`, `union_`, `except`, `intersect`,
@@ -131,7 +145,7 @@ this pattern — don't merge a method without a doctest.
 
 ## Tests
 
-Integration tests live in `linq_tests.rs` at the project root (run by
+Integration tests live in `tests/` — `linq_tests.rs` and `edge_cases.rs` (run by
 `cargo test`). Each operator has at least one happy-path test; aim to also
 cover:
 - empty-input behaviour,
@@ -147,7 +161,10 @@ When changing an operator's behaviour, **update its tests in the same diff**
 ```powershell
 # from D:\RandomProgrammingProjects\LinqLikeForRust
 cargo build
-cargo test               # runs linq_tests.rs + doctests
+cargo test               # tests/linq_tests.rs + tests/edge_cases.rs + doctests
+# CI does not run bare `cargo test` -- it runs the gate below, because
+# `cargo test` exits 0 while running zero tests (D-013):
+./.github/scripts/test-count-floor.sh
 cargo doc --no-deps      # build docs locally
 ```
 

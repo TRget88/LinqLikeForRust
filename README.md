@@ -5,11 +5,19 @@ A **LINQ-style query library for Rust** — zero external dependencies.
 LINQ-shaped query operators over any `Iterator`, as composable extension methods.
 
 Where familiarity to C# and idiomatic Rust conflict, this crate picks idiomatic
-Rust ([`D-005`](DECISIONS.md)). It covers 45 of C#'s 75 `System.Linq.Enumerable`
-operator names and none of its 44 comparer overloads — the latter deliberately
-([`D-202`](DECISIONS.md)). Scope and API rulings live in
-**[DECISIONS.md](DECISIONS.md)**; current-state evidence lives in
-[AUDIT.md](AUDIT.md).
+Rust (`D-005`).
+
+`System.Linq.Enumerable` has 75 operator names across 234 overloads, 44 of which
+take an `IEqualityComparer` or `IComparer`. This crate implements **none** of the
+comparer overloads, deliberately — Rust expresses that with traits and newtypes
+(`D-202`) — and it does not implement all 75 names. The exact coverage figure is
+deliberately **not** stated here: a hand-written count is a second copy of the
+truth and will drift, so `D-016` requires it to be generated from the source.
+Until that generator lands (`W-18`), read the API tables below as the surface,
+and treat any coverage number you find elsewhere in this repo as unverified.
+
+Scope and API rulings live in **[DECISIONS.md](DECISIONS.md)**; current-state
+evidence lives in [AUDIT.md](AUDIT.md).
 
 ---
 
@@ -35,11 +43,18 @@ linq_rs = "0.2"
 ```
 
 > **Do not use 0.1.0.** It shipped a `then_by` that discarded the primary sort
-> key, a `skip` that turned every unqualified `.skip(n)` in an importing module
-> into a compile error, and a `concat_` that rejected almost every call. See
-> [CHANGELOG.md](CHANGELOG.md). It is being yanked from crates.io per
-> [`D-009`](DECISIONS.md); update this note to "yanked" once that has run, not
-> before.
+> key and a `skip` that turned every unqualified `.skip(n)` in an importing
+> module into a compile error. Both are fixed in 0.2.0. 0.1.0 is being yanked
+> from crates.io per `D-009`; update this note to "yanked" once that has run,
+> not before.
+>
+> **Still broken in 0.2.0:** `concat_`'s bound requires the argument's iterator
+> type to be identical to the receiver's, so it cannot be used mid-chain
+> (`AUDIT.md` finding E-8). Use `Iterator::chain` instead. Fixing it changes a
+> public type, so it is not a patch-level change.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full 0.2.0 entry, including what is
+knowingly still wrong.
 
 ---
 
@@ -325,7 +340,8 @@ project-specific clarifications:
 ## Design Notes
 
 - **Lazy by default** — filtering, projection, and slicing adaptors are lazy iterators; no allocation happens until you `collect()` or iterate.
-- **Eager where necessary** — `order_by`, `reverse`, `distinct`, set operations, and joins must buffer the sequence. This mirrors C# LINQ's behaviour.
+- **Eager where necessary** — `order_by`/`then_by` (buffered at call time, sorted once at `into_iter`), `reverse`, `group_by`, `union_`, `join` and `group_join` buffer the sequence. `distinct`/`distinct_by` do **not** — they stream, keeping a seen-set, and terminate on an infinite source. `except`/`intersect` stream the receiver but drain their argument at call time.
+- **This is not C#'s deferral.** C# `OrderBy`/`GroupBy`/`Union`/`Join`/`Reverse` do nothing at call time and process the source on the first `MoveNext`; the operators above do the work at **call** time, so a query that is built and then discarded still pays full cost. (This list is hand-maintained and therefore suspect; `D-016` / `W-7` will derive it from a measurement.)
 - **Zero dependencies** — only `std`.
 - **Naming** — methods that shadow Rust keywords or `std` trait methods are suffixed with `_` (`where_`, `take_`, `any_`, etc.).
 - **size_hint / ExactSizeIterator / DoubleEndedIterator** — propagated through the lazy adaptors where possible (`Select`, `Skip`, `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`) so downstream consumers can pre-allocate or iterate in reverse.

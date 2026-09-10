@@ -21,17 +21,25 @@
 #   - We do NOT fail on an individual "running 0 tests" line. The lib target
 #     legitimately has no unit tests (every test is an integration test or a
 #     doctest), so that line is expected there.
-#   - We sum across `--all-targets` (which EXCLUDES doctests) and `--doc`
-#     (which is the only way to run them). Missing that split is how a repo
-#     ends up with an MSRV job that never type-checks a single example.
+#   - We enforce a floor PER BUCKET, not one sum. `--all-targets` EXCLUDES
+#     doctests and `--doc` is the only way to run them, so a single total would
+#     let one bucket collapse while the other grew -- and the historical bug was
+#     exactly a whole bucket disappearing (main: all-targets 0, doctests 17).
+#     Missing that split is also how a repo ends up with an MSRV job that never
+#     type-checks a single example.
 #   - Output is never truncated. A `| tail -n` here would defeat the purpose.
 
 set -euo pipefail
 
-FLOOR=232
+# Per-bucket floors. Keep them in this file only -- never restate a count in a
+# .md, or it becomes a second copy of the truth (D-016).
+FLOOR_ALL_TARGETS=192
+FLOOR_DOCTESTS=40
+FLOOR_TOTAL=232
 
 total=0
 fail=0
+declare -A counts=()
 
 run_and_count() {
   local label="$1"; shift
@@ -52,6 +60,7 @@ run_and_count() {
        | awk '{s+=$1} END {print s+0}')"
   echo "--- ${label}: ${n} tests passed ---"
   echo
+  counts[$label]=$n
   total=$((total + n))
 }
 
@@ -59,26 +68,47 @@ run_and_count "all-targets" cargo test --all-targets
 run_and_count "doctests"    cargo test --doc
 
 echo "======================================================"
-echo "executed tests: ${total}   floor: ${FLOOR}"
 
+# A failed run makes every count meaningless: a target reporting
+# "test result: FAILED. 64 passed; 1 failed" contributes 0 to the sum, so
+# printing a total here would read as a count regression rather than a test
+# failure. Report the failure and stop.
 if [ "$fail" -ne 0 ]; then
   echo "FAIL: a cargo test invocation exited non-zero (see above)."
+  echo "      Counts are not reported: a FAILED target contributes 0 to the sum,"
+  echo "      so any total printed here would be misleading."
   exit 1
 fi
+
+echo "all-targets: ${counts[all-targets]:-0} (floor ${FLOOR_ALL_TARGETS})"
+echo "doctests:    ${counts[doctests]:-0} (floor ${FLOOR_DOCTESTS})"
+echo "total:       ${total} (floor ${FLOOR_TOTAL})"
 
 if [ "$total" -eq 0 ]; then
   echo "FAIL: zero tests executed. Exit status 0 is not evidence -- see D-013."
   exit 1
 fi
 
-if [ "$total" -lt "$FLOOR" ]; then
-  echo "FAIL: executed test count dropped from ${FLOOR} to ${total}."
-  echo "      If this is intentional, lower FLOOR in the same commit and say why."
-  exit 1
-fi
+status=0
+check() {
+  local label="$1" got="$2" floor="$3"
+  if [ "$got" -lt "$floor" ]; then
+    echo "FAIL: ${label} executed count dropped from ${floor} to ${got}."
+    status=1
+  elif [ "$got" -gt "$floor" ]; then
+    echo "NOTE: ${label} rose to ${got}. Consider raising its floor to match."
+  fi
+}
+check "all-targets" "${counts[all-targets]:-0}" "$FLOOR_ALL_TARGETS"
+check "doctests"    "${counts[doctests]:-0}"    "$FLOOR_DOCTESTS"
+check "total"       "$total"                    "$FLOOR_TOTAL"
 
-if [ "$total" -gt "$FLOOR" ]; then
-  echo "NOTE: count rose to ${total}. Consider raising FLOOR to match."
+if [ "$status" -ne 0 ]; then
+  echo
+  echo "If a drop is intentional, lower the matching FLOOR_* in THIS FILE in the"
+  echo "same commit that removes the tests, and say why in the commit message."
+  echo "Never lower it in a separate \"fix CI\" commit."
+  exit 1
 fi
 
 echo "PASS"
