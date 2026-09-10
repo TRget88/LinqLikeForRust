@@ -1,0 +1,63 @@
+method	class	source_pulled_at_call	arg_pulled_at_call	short_circuits	note
+where_	lazy	0	-	yes	streams; take_(2) pulls 2
+select	lazy	0	-	yes	streams; take_(2) pulls 2
+select_many	lazy	0	-	yes	streams outer and inner; take_(2) pulls 2
+skip_	lazy	0	-	yes	take_(2) pulls 12 = n + 2; the skip happens on first next()
+take_	lazy	0	-	yes	take_(2) pulls 2
+distinct	lazy	0	-	yes	HASH-BACKED AND STILL STREAMING: HashSet built empty, filled during iteration; terminates on an endless source; matches C# Distinct (deferred streaming)
+distinct_by	lazy	0	-	yes	streaming; terminates on an endless source
+distinct_partial_eq	lazy	0	-	yes	O(n^2) escape hatch but equally streaming
+distinct_by_partial_eq	lazy	0	-	yes	streaming
+union_	lazy	0	0	yes	FULLY LAZY: self.chain(other).filter(seen.insert(..)) at queryable.rs:555; streams an endless receiver; matches C# Union (deferred streaming)
+union_partial_eq	eager_at_call	1000	1000	no	buffers both sides into a Vec at call; hangs on an endless source; diverges from C# Union (deferred streaming)
+union_by	eager_at_call	1000	1000	no	buffers both sides into a Vec at call; diverges from C# Union/UnionBy
+except	half_eager	0	1000	yes	receiver streams, argument drained into a HashSet at call; C# Except defers both to enumeration
+except_partial_eq	half_eager	0	1000	yes	receiver streams, argument drained into a Vec at call
+except_by	half_eager	0	1000	yes	argument supplies KEYS, not items; drained into a Vec at call
+intersect	half_eager	0	1000	yes	receiver streams, argument drained into a HashSet at call; C# Intersect defers both to enumeration
+intersect_partial_eq	half_eager	0	1000	yes	receiver streams, argument drained into a Vec at call
+intersect_by	half_eager	0	1000	yes	argument supplies KEYS, not items; drained into a Vec at call
+order_by	eager_at_call	1000	-	no	collects at call, sorts at into_iter(); C# OrderBy is deferred nonstreaming, so both phases happen at first MoveNext
+order_by_descending	eager_at_call	1000	-	no	collects at call, sorts at into_iter()
+order	eager_at_call	1000	-	no	collects at call, sorts at into_iter()
+order_descending	eager_at_call	1000	-	no	collects at call, sorts at into_iter()
+inner_join	eager_at_call	1000	1000	no	builds the inner hash index AND drains the outer, materialising every result row at call
+inner_join_partial_eq	eager_at_call	1000	1000	no	nested loop over both sides, fully materialised at call
+group_join	eager_at_call	1000	1000	no	drains inner and outer at call; the trailing .collect::<Vec<_>>() defeats the lazy .map()
+group_join_partial_eq	eager_at_call	1000	1000	no	drains inner and outer at call; same trailing .collect()
+group_by_key	eager_at_call	1000	-	no	hash-indexed but fully materialised at call; C# GroupBy is deferred nonstreaming
+group_by_key_partial_eq	eager_at_call	1000	-	no	linear-scan grouping, materialised at call
+group_by_with_element	eager_at_call	1000	-	no	materialised at call
+group_by_with_result	eager_at_call	1000	-	no	groups materialised at call; only the final result_fn map is lazy
+count_by	eager_at_call	1000	-	no	materialised at call; yields in HashMap order
+count_by_partial_eq	eager_at_call	1000	-	no	materialised at call
+aggregate_by	eager_at_call	1000	-	no	materialised at call; yields in HashMap order
+aggregate_by_partial_eq	eager_at_call	1000	-	no	materialised at call
+sum_	terminal	1000	-	no	drains
+sum_by	terminal	1000	-	no	drains
+count_where	terminal	1000	-	no	drains
+min_	terminal	1000	-	no	drains
+max_	terminal	1000	-	no	drains
+min_by_key_	terminal	1000	-	no	drains
+max_by_key_	terminal	1000	-	no	drains
+average	terminal	1000	-	no	drains
+first	terminal	1	-	yes	pulls exactly 1; panics only when empty
+first_or_default	terminal	1	-	yes	pulls exactly 1
+first_where	terminal	6	-	yes	pulls until the predicate matches (6 for the first match at index 5)
+first_or	terminal	1	-	yes	pulls exactly 1
+last_	terminal	1000	-	no	must reach the end
+last_or_default	terminal	1000	-	no	must reach the end
+last_where	terminal	1000	-	no	must reach the end
+last_or	terminal	1000	-	no	must reach the end
+single	terminal	2	-	yes	pulls exactly 2 then panics on a longer source (measured under catch_unwind)
+try_single	terminal	2	-	yes	pulls exactly 2; returns SingleError rather than panicking
+single_or_default	terminal	2	-	yes	pulls exactly 2; returns None rather than panicking
+single_or	terminal	2	-	yes	pulls exactly 2 then panics on a longer source (measured under catch_unwind)
+any_	terminal	6	-	yes	stops at the first match (6 for a match at index 5)
+all_	terminal	6	-	yes	stops at the first counterexample (6 for a failure at index 5)
+contains_	terminal	6	-	yes	stops at the first match
+into_hashmap	terminal	1000	-	no	drains
+into_lookup	terminal	1000	-	no	drains
+order_by_with	eager_at_call	1000	-	no	collects at call, sorts on first next()
+min_by_	terminal	1000	-	no	drains
+max_by_	terminal	1000	-	no	drains

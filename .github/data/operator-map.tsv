@@ -1,0 +1,81 @@
+rust_name	kind	csharp	variant_of	std_equivalent	notes	translatable
+where_	linqext	Where		filter	Trailing _ avoids the `where` keyword; returns adaptors::Where	clause
+select	linqext	Select		map		clause
+select_many	linqext	SelectMany		flat_map		clause
+skip_	linqext	Skip		skip	Trailing _ avoids Iterator::skip collision	clause
+take_	linqext	Take		take		clause
+distinct_partial_eq	linqext	Distinct	distinct		Escape hatch, O(n^2) PartialEq linear scan (D-101)	clause
+distinct_by_partial_eq	linqext	DistinctBy	distinct_by		Escape hatch, O(n^2)	clause
+distinct	linqext	Distinct			HashSet-backed default; lazy (filter over a seen-set)	clause
+distinct_by	linqext	DistinctBy	distinct		HashSet-backed default	clause
+except_partial_eq	linqext	Except	except		Escape hatch, O(n*m)	clause
+intersect_partial_eq	linqext	Intersect	intersect		Escape hatch, O(n*m)	clause
+union_partial_eq	linqext	Union	union_		Escape hatch, O(n^2); eager (buffers into a Vec)	clause
+except_by	linqext	ExceptBy	except		`other` supplies KEYS; K: PartialEq + Vec::contains, so O(n*m) with NO hash-backed twin	clause
+intersect_by	linqext	IntersectBy	intersect		`other` supplies KEYS; O(n*m), no hash-backed twin	clause
+except	linqext	Except			HashSet-backed default; streams receiver, drains `other` at call time	clause
+intersect	linqext	Intersect			HashSet-backed default; streams receiver, drains `other` at call time	clause
+union_	linqext	Union			HashSet-backed default; LAZY (self.chain(other).filter(...), queryable.rs:546-547)	clause
+union_by	linqext	UnionBy	union_		`other` supplies ITEMS not keys; K: PartialEq + Vec::contains, O(n^2), no hash-backed twin	clause
+order_by	linqext	OrderBy			Buffers at call time, sorts at into_iter; returns OrderedQueryable	clause
+order_by_descending	linqext	OrderByDescending	order_by			clause
+order	linqext	Order			.NET 7+; Vec::sort, not an Iterator method	clause
+order_descending	linqext	OrderDescending	order		.NET 7+	clause
+sum_	linqext	Sum		sum	Body: self.sum()	terminal
+sum_by	linqext	Sum	sum_	map().sum()	C# Sum(selector) overload	terminal
+count_where	linqext	Count		filter().count()	C# Count(predicate) overload; crate has no plain `count` (uses Iterator::count)	terminal
+min_	linqext	Min		min		terminal
+max_	linqext	Max		max		terminal
+min_by_key_	linqext	MinBy	min_	min_by_key	Body: self.min_by_key(key_fn)	terminal
+max_by_key_	linqext	MaxBy	max_	max_by_key	Body: self.max_by_key(key_fn)	terminal
+average	linqext	Average			Selector-only; no no-arg form. No std equivalent	terminal
+first	linqext	First		next	Panics on empty	terminal
+first_or_default	linqext	FirstOrDefault	first	next	Body: self.next()	terminal
+first_where	linqext	FirstOrDefault	first	find	C# FirstOrDefault(predicate) overload	terminal
+last_	linqext	Last		last	Panics on empty	terminal
+last_or_default	linqext	LastOrDefault	last_	last	Implemented as fold(None,..), not Iterator::last	terminal
+last_where	linqext	LastOrDefault	last_	filter().last()	C# LastOrDefault(predicate) overload	terminal
+single	linqext	Single			Panics on 0 or 2+	terminal
+try_single	linqext	Single	single		Result-returning form of Single; C# throws, this returns SingleError so Empty and MoreThanOne are distinguishable	terminal
+single_or_default	linqext	SingleOrDefault	single		Returns None on 0 OR 2+	terminal
+first_or	linqext	FirstOrDefault	first	next	C# FirstOrDefault(defaultValue), .NET 6+ (overload confirmed present)	terminal
+last_or	linqext	LastOrDefault	last_	last	C# LastOrDefault(defaultValue), .NET 6+ (overload confirmed present)	terminal
+single_or	linqext	SingleOrDefault	single		C# SingleOrDefault(defaultValue), .NET 6+; still panics on 2+	terminal
+any_	linqext	Any		any		terminal
+all_	linqext	All		all		terminal
+contains_	linqext	Contains		any()	Body: self.any(|x| x == *value)	terminal
+inner_join_partial_eq	linqext	Join	inner_join		Escape hatch, O(n*m); supports asymmetric PartialEq keys. Renamed from join_ in W-12	clause
+inner_join	linqext	Join			Hash-indexed default; eager (collects results into a Vec). Renamed from join in W-12	clause
+group_join_partial_eq	linqext	GroupJoin	group_join		Escape hatch, O(n*m)	clause
+group_join	linqext	GroupJoin			Hash-indexed default; eager	clause
+group_by_key_partial_eq	linqext	GroupBy	group_by_key		Escape hatch, O(n*k)	clause
+group_by_with_element	linqext	GroupBy	group_by_key		C# GroupBy(keySelector,elementSelector); K: PartialEq linear find, NOT hash-backed	clause
+group_by_with_result	linqext	GroupBy	group_by_key		C# GroupBy(keySelector,resultSelector); K: PartialEq linear find, NOT hash-backed	clause
+count_by_partial_eq	linqext	CountBy	count_by		Escape hatch, O(n*k)	clause
+group_by_key	linqext	GroupBy			Hash-indexed default; first-appearance order. Renamed from group_by in W-12	clause
+count_by	linqext	CountBy			.NET 9+; yields in HASH order, not insertion order	clause
+aggregate_by	linqext	AggregateBy			.NET 9+; seed_fn(&K)->Acc matches the seedSelector overload. Hash order	clause
+aggregate_by_partial_eq	linqext	AggregateBy	aggregate_by		Escape hatch, O(n*k)	clause
+into_hashmap	linqext	ToDictionary		map().collect()	Last key wins on duplicates (C# ToDictionary throws)	terminal
+into_lookup	linqext	ToLookup			Returns the crate's Lookup type	terminal
+OrderedQueryable::then_by	type_method	ThenBy			On OrderedQueryable via the ThenBy trait; pushes a comparator (ordered.rs:68)	n/a
+OrderedQueryable::then_by_descending	type_method	ThenByDescending	OrderedQueryable::then_by			n/a
+range	free_fn	Range		(start..).take(n)	Body: (start..).take(count); i32-only (sources.rs:16)	n/a
+repeat	free_fn	Repeat		std::iter::repeat().take()	Body: std::iter::repeat(value).take(count)	n/a
+empty	free_fn	Empty		std::iter::empty	Body: std::iter::empty()	n/a
+Grouping::key	type_method				Accessor for the pub field `key`; corresponds to IGrouping<K,V>.Key, not an Enumerable method	n/a
+Grouping::elements	type_method				Accessor for the pub field `elements`; both field and method are public (grouping.rs:14,31)	n/a
+Grouping::into_elements	type_method			into_iter	IGrouping<K,V> is itself IEnumerable<V>	n/a
+Lookup::new	type_method					n/a
+Lookup::insert	type_method				Made public so Lookup::default() is fillable; no C# counterpart (ILookup is read-only)	n/a
+Lookup::len	type_method				Corresponds to ILookup.Count	n/a
+Lookup::is_empty	type_method					n/a
+Lookup::get	type_method				Corresponds to the ILookup this[key] indexer; O(1), returns &[] for a missing key	n/a
+Lookup::contains_key	type_method				Corresponds to ILookup.Contains(key)	n/a
+Lookup::groups	type_method				First-appearance order	n/a
+Lookup::into_groups	type_method			into_iter		n/a
+OrderedQueryable::then_by_with	type_method				Comparator form of then_by, for PartialOrd-only keys (W-13)	n/a
+Grouping::into_parts	type_method				Takes key and elements out at once; the fields are private (W-15)	n/a
+order_by_with	linqext	OrderBy	order_by	sort_by	Comparator form; C# OrderBy accepts double, order_by binds K: Ord (W-13)	clause
+min_by_	linqext	Min	min_	min_by	Comparator form for PartialOrd-only keys (W-13)	terminal
+max_by_	linqext	Max	max_	max_by	Comparator form; ties keep the LAST maximum, unlike C# MaxBy (W-13)	terminal

@@ -1,14 +1,39 @@
+# The root package is also the workspace root; `linq_rs_sql` is a sibling, not a
+# dependency. Neither crate depends on the other -- see DECISIONS.md D-205 and
+# the split recorded in D-020.
+[workspace]
+members = ["linq_rs_sql", "seam-tests"]
+
 [package]
 name = "linq_rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+rust-version = "1.65"
 description = "A LINQ-like query library for Rust iterators — no external dependencies"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 keywords = ["linq", "iterator", "query", "collection"]
+categories = ["rust-patterns", "algorithms", "data-structures"]
+readme = "README.md"
+documentation = "https://docs.rs/linq_rs"
+repository = "https://github.com/TRget88/LinqLikeForRust"
 
-[lib]
-name = "linq_rs"
-path = "lib.rs"
+# Keep the published tarball to things a consumer can use. Without this,
+# `cargo package` ships the audit deliverables and the CI config to crates.io
+# and docs.rs. Verify any change here with `cargo package --list`.
+#
+# Deliberately NOT excluded:
+#   tests/        so the executed-test count is verifiable from the artifact
+#                 itself, not just from a claim in the README (D-013).
+#   DECISIONS.md  it is normative and the README links to it.
+#   ROADMAP.md, CHANGELOG.md  a consumer deciding whether to depend on this
+#                 should be able to read where it is going and what broke.
+exclude = [
+    "/.github/",
+    "/AUDIT.md",
+    "/QUESTIONS.md",
+    "/PUBLISHING.md",
+    "/CLAUDE.md",
+]
 
 [dev-dependencies]
 # none — zero dependencies

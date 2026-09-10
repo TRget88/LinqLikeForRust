@@ -1,0 +1,24 @@
+[package]
+name = "linq_rs_sql"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.65"
+description = "A typed SQL query builder — compile-time checked columns, bound parameters, no driver and no dependencies"
+license = "MIT OR Apache-2.0"
+keywords = ["sql", "query", "builder", "typed"]
+categories = ["database"]
+readme = "README.md"
+documentation = "https://docs.rs/linq_rs_sql"
+repository = "https://github.com/TRget88/LinqLikeForRust"
+
+# Deliberately none, like its sibling. This crate builds SQL text; executing it
+# is your driver's job, so it needs no driver and no runtime.
+[dependencies]
+
+# Deliberately none, including dev-dependencies. The cross-crate seam tests
+# live in the workspace's `seam-tests` crate (`publish = false`), because a
+# dev-dependency here would (a) make this manifest not actually
+# dependency-free and (b) force `linq_rs 0.2.0` to be published before this
+# crate could be published at all -- cargo strips a dev-dep's `path` but keeps
+# its `version`, turning it into a hard registry requirement. See D-024.
+[dev-dependencies]

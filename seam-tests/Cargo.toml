@@ -1,0 +1,28 @@
+# A test-only crate. It exists so the two published crates can both declare
+# zero dependencies while the cross-crate seam is still exercised in CI.
+#
+# `linq_rs_sql` used to carry `linq_rs` as a dev-dependency for exactly two
+# files, and that one line cost two things: the sibling's manifest was not
+# genuinely dependency-free, and `cargo publish` would not accept
+# `linq_rs_sql` until `linq_rs 0.2.0` was live on crates.io (cargo strips the
+# `path` from a dev-dep but keeps the `version`, turning it into a registry
+# requirement). Moving the files here removes both. See DECISIONS.md D-024.
+#
+# `publish = false` is the whole point: nothing here is ever uploaded, so it is
+# free to depend on both crates by path.
+[package]
+name = "seam-tests"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.65"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Cross-crate tests for the linq_rs / linq_rs_sql seam. Never published."
+
+# No library and no binary -- this crate is only its tests and examples.
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+linq_rs = { path = ".." }
+linq_rs_sql = { path = "../linq_rs_sql" }

@@ -1,0 +1,31 @@
+//! The crate-level documentation is `README.md`, included below. It is not
+//! duplicated here: a hand-maintained second description of the crate is
+//! exactly the drift `DECISIONS.md` `D-016` exists to stop, and the block
+//! that used to live here had already drifted — it claimed the operators are
+//! "all lazy", which `group_by_key`, `inner_join` and `group_join` disprove.
+//! (An earlier version of this note also named `union_`. That was wrong:
+//! `union_` is fully lazy, and W-10 is what made it so. The measured
+//! classification is generated into the README and asserted by
+//! `tests/laziness.rs`.)
+//!
+//! Note the path: `include_str!` resolves relative to *this file*, so
+//! `"README.md"` would look for `src/README.md` and fail to compile.
+#![doc = include_str!("../README.md")]
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+
+pub mod adaptors;
+pub mod error;
+pub mod grouping;
+pub mod lookup;
+pub mod ordered;
+pub mod queryable;
+pub mod sources;
+
+pub use adaptors::*;
+pub use error::SingleError;
+pub use grouping::Grouping;
+pub use lookup::Lookup;
+pub use ordered::OrderedQueryable;
+pub use queryable::LinqExt;
+pub use sources::{empty, range, repeat};

@@ -1,0 +1,171 @@
+name: CI
+
+# W-5 / D-013 / D-010. Four things were wrong with this workflow and none of
+# them were visible, because it had never run:
+#
+#   1. `branches: [main, master]` meant feature/v0.1.0-and-sql-builder -- five
+#      months of work, 5,873 insertions -- never triggered it once. Now every
+#      branch runs.
+#   2. `cargo test` exits 0 while running zero tests, so "Test" proved nothing.
+#      Replaced by scripts/test-count-floor.sh, which gates on the executed
+#      count (D-013).
+#   3. `cargo doc --no-deps` exits 0 on a broken intra-doc link. It did: the
+#      skip -> skip_ rename left adaptors.rs pointing at a method that no
+#      longer existed, and this step would have passed anyway. Now runs with
+#      RUSTDOCFLAGS: -D warnings.
+#   4. The MSRV job ran `cargo test --all-targets`, which EXCLUDES doctests, so
+#      the declared 1.75 floor was never checked against a single documented
+#      example. It also would have failed on its first run regardless: the
+#      tracked Cargo.lock was lockfile v4, which Cargo 1.75 cannot parse. The
+#      lockfile is now untracked (D-010).
+
+# Quoted so YAML 1.1 parsers keep this a string key. Unquoted, `on` coerces to
+# boolean true and any home-grown validator looking up cfg["on"] silently sees
+# nothing. GitHub accepts both forms.
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Both push and pull_request fire for a same-repo PR, and an unfiltered push
+# also fires on tag pushes. Cancel superseded runs rather than paying for them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Build
+        run: cargo build --workspace --all-targets
+      # Runs --all-targets AND --doc, sums the executed test count, and fails if
+      # it is zero or below the committed floor. Exit status alone is not the
+      # gate -- see the script header.
+      - name: Test (with executed-count floor)
+        shell: bash
+        run: ./.github/scripts/test-count-floor.sh
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Format check
+        run: cargo fmt --check
+      # D-016. The README's coverage figures and C#-mapping tables are
+      # generated from src/ plus .github/data/, and this fails if the committed
+      # README has drifted -- or if a method was renamed without updating the
+      # map. Three hand-written counts in this project have been wrong, one of
+      # them inside the fix for the previous one.
+      # D-106. Opaque returns in the trait carry no operator identity --
+      # distinct/except/intersect were all `Filter<I, closure>`, so a downstream
+      # trait could not give them different behaviour. They also pinned the MSRV.
+      - name: No opaque returns in LinqExt (D-106)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          n="$(grep -c -- '-> impl Iterator' src/queryable.rs || true)"
+          echo "opaque return sites: $n"
+          if [ "$n" -ne 0 ]; then
+            echo "FAIL: $n method(s) return an opaque type. D-106 requires named"
+            echo "      return types: only they let a downstream trait dispatch"
+            echo "      per operator, and they are what unpinned the MSRV."
+            grep -n -- '-> impl Iterator' src/queryable.rs
+            exit 1
+          fi
+      - name: Derived docs are current
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./.github/scripts/gen-docs.py --check
+      - name: Docs (broken intra-doc links are errors)
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+      # D-009 / D-012. A ruling in DECISIONS.md that is checked by nothing is a
+      # ruling that gets broken again: 0.1.0 shipped with no `repository`, the
+      # wrong licence, and 421 lines of dead test code in the tarball.
+      - name: Packaging and licence gate
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./.github/scripts/packaging-gate.sh
+
+  # D-005. Real-crate interop, deliberately in its own job rather than as a
+  # dev-dependency: itertools never enters this crate's Cargo.toml, never ships
+  # in the published manifest, and a bare checkout still tests offline. The
+  # always-on mimic lives in tests/interop.rs; this catches what a mimic cannot,
+  # namely a future itertools release adding a method name that collides with
+  # one of ours.
+  itertools-interop:
+    name: Interop with real itertools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build a throwaway crate depending on both
+        shell: bash
+        run: ./.github/scripts/itertools-interop.sh
+
+  # W-19 / DECISIONS.md D-101..D-108. These are decisions, not code, so there is
+  # nothing to check on a branch -- but each is free now and a breaking change
+  # after 1.0, which makes the tag the moment they stop being deferrable.
+  # Guards v1.* only; v0.x tags are unaffected.
+  release-gate:
+    name: 1.0 release gate
+    if: startsWith(github.ref, 'refs/tags/v1.')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every API-stability decision must be settled
+        shell: bash
+        run: ./.github/scripts/release-gate.sh
+
+  msrv:
+    name: MSRV (1.65)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.65
+      # Assert the toolchain is actually 1.65 before trusting anything below.
+      # Verifying an MSRV against the wrong compiler is worse than not
+      # verifying it: it produces a confident, false claim. That happened
+      # twice during this remediation, locally, via a PATH that silently fell
+      # through to stable.
+      - name: Confirm the toolchain really is 1.65
+        shell: bash
+        run: |
+          v="$(rustc --version)"
+          echo "$v"
+          case "$v" in
+            *"1.65."*) echo "confirmed 1.65" ;;
+            *) echo "FAIL: expected rustc 1.65.x, got: $v"; exit 1 ;;
+          esac
+      - name: Build on MSRV
+        run: cargo build --workspace --all-targets
+      # Same gate as the stable job, not a bare `cargo test`. `--all-targets`
+      # alone excludes doctests, so the MSRV claim would cover no documented
+      # example -- and an ungated `cargo test` is the exact no-op this workflow
+      # exists to eliminate. The script runs both buckets and enforces both
+      # floors.
+      - name: Test on MSRV (with executed-count floor)
+        shell: bash
+        run: ./.github/scripts/test-count-floor.sh
+      # The steps above build the REPO. Consumers get the TARBALL, which is a
+      # different artifact -- `cargo package` writes its own Cargo.lock,
+      # generated by whatever toolchain publishes. `linq_rs 0.2.0` packaged a
+      # v4 lockfile against `rust-version = "1.65"` and could not build on 1.65
+      # at all; every check above passed because none looked inside the
+      # tarball. (D-023)
+      - name: Build the packaged tarballs on MSRV
+        shell: bash
+        run: ./.github/scripts/msrv-tarball.sh
+
