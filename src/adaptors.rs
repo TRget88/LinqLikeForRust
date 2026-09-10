@@ -86,7 +86,7 @@ where
 
 // ── Skip ─────────────────────────────────────────────────────────────────────
 
-/// Iterator adaptor for [`skip`](crate::LinqExt::skip).
+/// Iterator adaptor for [`skip_`](crate::LinqExt::skip_).
 pub struct Skip<I> {
     pub(crate) inner: I,
     pub(crate) remaining: usize,
