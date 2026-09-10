@@ -343,9 +343,21 @@ fn entity_accepts_every_lossless_field_type() {
         size: 7,
         ratio: 0.5,
     }];
-    let q = linq_rs_sql::rows::query::<Widget>().filter(widgets::size.gt(5i64));
-    assert_eq!(q.to_sql().sql, "SELECT * FROM widgets WHERE (size > ?)");
-    // The in-memory interpreter must agree with what the SQL would return.
-    let ids: Vec<i64> = q.to_memory(&rows).map(|w| w.id).collect();
+    // Exercise BOTH widening paths: i32 -> i64 through `Integer`, and
+    // f32 -> f64 through `Float`. Each must agree across the two interpreters.
+    let by_size = linq_rs_sql::rows::query::<Widget>().filter(widgets::size.gt(5i64));
+    assert_eq!(
+        by_size.to_sql().sql,
+        "SELECT * FROM widgets WHERE (size > ?)"
+    );
+    let ids: Vec<i64> = by_size.to_memory(&rows).map(|w| w.id).collect();
     assert_eq!(ids, [1]);
+
+    let by_ratio = linq_rs_sql::rows::query::<Widget>().filter(widgets::ratio.lt(1.0f64));
+    assert_eq!(
+        by_ratio.to_sql().sql,
+        "SELECT * FROM widgets WHERE (ratio < ?)"
+    );
+    let ids: Vec<i64> = by_ratio.to_memory(&rows).map(|w| w.id).collect();
+    assert_eq!(ids, [1], "0.5f32 widened to f64 must still be < 1.0");
 }
