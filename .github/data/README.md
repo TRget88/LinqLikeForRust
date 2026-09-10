@@ -37,8 +37,19 @@ superset. Measured:
 
 ## `operator-map.tsv`
 
-One row per public linq_rs item. `csharp` is empty where there is genuinely no
-correspondence — `for_each_` and `is_empty_` are the two, since `ForEach` is
-`List<T>.ForEach` and `!Any()` is an expression, not an operator.
-`std_equivalent` is the load-bearing column: it is what lets the generated table
-tell a reader to use `std` instead.
+One row per public linq_rs item. `csharp` is empty where there is genuinely no correspondence.
+`std_equivalent` is the load-bearing column for the overlap table: it is what
+lets the generated docs tell a reader to use `std` instead.
+
+`translatable` is the load-bearing column for scope. It records whether an
+operator could become a SQL clause (`clause`), a translatable execution of one
+(`terminal`), or neither (`none`) — the criterion `D-019` used for the v1.0 cut.
+`gen-docs.py` fails on any `LinqExt` method it cannot classify, so a new
+operator cannot be added without deciding whether it belongs.
+
+## `laziness.tsv`
+
+The measured evaluation timing of every operator: `lazy`, `eager_at_call`,
+`half_eager`, or `terminal`, with how many elements each pulls at call time.
+Measured with a counting source, generated into the README, and re-measured by
+`tests/laziness.rs` — three places that must agree, so none can drift alone.

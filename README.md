@@ -50,14 +50,10 @@ linq_rs = "0.2"
 > module into a compile error. Both are fixed in 0.2.0. 0.1.0 is being yanked
 > from crates.io per `D-009`; update this note to "yanked" once that has run,
 > not before.
->
-> **Still broken in 0.2.0:** `concat_`'s bound requires the argument's iterator
-> type to be identical to the receiver's, so it cannot be used mid-chain
-> (`AUDIT.md` finding E-8). Use `Iterator::chain` instead. Fixing it changes a
-> public type, so it is not a patch-level change.
 
-See [CHANGELOG.md](https://github.com/TRget88/LinqLikeForRust/blob/main/CHANGELOG.md) for the full 0.2.0 entry, including what is
-knowingly still wrong.
+See [CHANGELOG.md](https://github.com/TRget88/LinqLikeForRust/blob/main/CHANGELOG.md)
+for the full 0.2.0 entry. It is a large one: 0.2.0 cuts the operator surface by a
+third, renames two methods, and lowers the MSRV to 1.65.
 
 ---
 
@@ -388,11 +384,11 @@ assert_eq!(empty.into_iter().sum_::<i32>(), 0);
 ```
 
 The same substitution runs through the `*_or_default` family. C#
-`FirstOrDefault`/`LastOrDefault`/`ElementAtOrDefault` return `default(T)` — `0`
+`FirstOrDefault`/`LastOrDefault` return `default(T)` — `0`
 for `int`, `null` for a reference type — which is indistinguishable from a
 sequence that really contained `0`. `first_or_default`, `last_or_default` and
-`element_at` return `Option<T>` instead. If you want C#'s "supply a fallback"
-shape, use `first_or` / `last_or` / `element_at_or`.
+return `Option<T>` instead. If you want C#'s "supply a fallback" shape, use
+`first_or` / `last_or`.
 
 ### `single_or_default` returns a `Result`; C# throws on 2+ elements
 
@@ -566,13 +562,10 @@ that must buffer, such as
 and [Reverse](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.reverse).
 A C# query that is built and never enumerated costs nothing.
 
-In this crate `order_by`, `order`, `reverse`, `group_by_key`, `union_`,
-`inner_join`, `group_join` and `into_lookup` consume the source **when you call
-them**, so building a query and dropping it still pays for the traversal.
-`OrderedQueryable` defers only the *sort* to `into_iter()`, not the buffering.
-The genuinely lazy adaptors — `where_`, `select`, `select_many`, `take_`,
-`skip_`, `distinct`, `distinct_by`, `chunk`, `skip_last`, `zip_` — do behave
-like their C# counterparts and terminate on infinite sources.
+In this crate the eager operators do their work when they are **called**, not
+on first `next()` as C# does. The full classification is generated above under
+*Evaluation timing* and asserted by `tests/laziness.rs`; it is not restated here,
+because a second copy would drift (`D-016`).
 
 ### Operators with no C# counterpart
 
@@ -580,11 +573,12 @@ Three convenience methods here are named after things that are not on
 `System.Linq.Enumerable` at all. They are kept because they are useful, but do
 not go looking for them in the C# docs:
 
-| linq_rs | what people assume | reality |
-|---|---|---|
-| `for_each_(action)` | `Enumerable.ForEach` | No such method. `ForEach` is `List<T>.ForEach`; `Do` is Rx, not LINQ. This is `Iterator::for_each`. |
-| `element_at_or(index, default)` | `ElementAtOrDefault(index, defaultValue)` | `ElementAtOrDefault` has exactly two overloads, `(Index)` and `(Int32)`. Neither takes a fallback value. |
-| `zip3(second, third, selector)` | `Zip(second, third, resultSelector)` | `Zip`'s three-sequence overload returns tuples and takes no selector; the selector overload takes only two sequences. |
+All three operators that previously appeared here — `for_each_`,
+`element_at_or` and `zip3` — named C# methods or overloads that do not exist,
+and all three were cut by `D-019` for a different reason: none of them names a
+SQL concept. The lesson survives them: `ForEach` is `List<T>.ForEach` not LINQ,
+`ElementAtOrDefault` has no fallback-value overload, and `Zip`'s three-sequence
+overload takes no selector.
 
 Verified against the [Enumerable method
 list](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable).

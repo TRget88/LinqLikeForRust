@@ -84,6 +84,24 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Fixed — the documentation prose had drifted (D-016)
+
+The *generated* blocks were gated from the start. The paragraphs around them
+were not — and between them `README.md`, `CLAUDE.md` and `.github/data/README.md`
+named **28 methods that had been renamed or cut**, `CLAUDE.md` described a
+`src/` layout missing `error.rs` and four test files, still documented the
+deleted `ThenBy` trait, and still told a contributor to return `impl Iterator`
+from eager operators — which `D-106` now forbids and CI now rejects.
+
+- All three live docs corrected against the current surface.
+- `ROADMAP.md` gains a supersession header rather than 38 edits: its phase log
+  is accurate as *history*, and rewriting it would falsify the trail. It now
+  says so and points at the generated API Reference for what exists.
+- **New gate.** `.github/data/removed.tsv` records every removed name with when
+  and why, and `gen-docs.py` fails if a live doc mentions one — unless the
+  surrounding lines are explaining the removal. Verified: appending
+  "use `to_vec()` and `chunk(3)`" to the README fails the build with both names.
+
 ### Changed — named return types everywhere (D-106). Breaking, and it unpins the MSRV.
 
 No method on `LinqExt` returns an opaque type any more. All **23** sites now

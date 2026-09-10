@@ -1,0 +1,49 @@
+name	removed_in	reason
+aggregate	D-019	cut by the v1.0 cut line: names no SQL concept
+aggregate_by_hashed	W-10	renamed: the hash implementation took the plain name
+aggregate_with_selector	D-019	cut by the v1.0 cut line: names no SQL concept
+append_item	D-019	cut by the v1.0 cut line: names no SQL concept
+cast	D-019	cut by the v1.0 cut line: names no SQL concept
+chunk	D-019	cut by the v1.0 cut line: names no SQL concept
+concat_	D-019	cut by the v1.0 cut line: names no SQL concept
+count_by_hashed	W-10	renamed: the hash implementation took the plain name
+default_if_empty	D-019	cut by the v1.0 cut line: names no SQL concept
+distinct_by_hashed	W-10	renamed: the hash implementation took the plain name
+distinct_hashed	W-10	renamed: the hash implementation took the plain name
+element_at	D-019	cut by the v1.0 cut line: names no SQL concept
+element_at_or	D-019	cut by the v1.0 cut line: names no SQL concept
+element_at_strict	D-019	cut by the v1.0 cut line: names no SQL concept
+ensure_sorted	D-019	cut by the v1.0 cut line: names no SQL concept
+except_hashed	W-10	renamed: the hash implementation took the plain name
+flatten_	D-019	cut by the v1.0 cut line: names no SQL concept
+for_each_	D-019	cut by the v1.0 cut line: names no SQL concept
+group_by	W-12	renamed: collided with itertools
+group_by_hashed	W-10	renamed: the hash implementation took the plain name
+group_join_hashed	W-10	renamed: the hash implementation took the plain name
+index_	D-019	cut by the v1.0 cut line: names no SQL concept
+intersect_hashed	W-10	renamed: the hash implementation took the plain name
+is_empty_	D-019	cut by the v1.0 cut line: names no SQL concept
+join	W-12	renamed: collided with itertools
+join_hashed	W-10	renamed: the hash implementation took the plain name
+of_type	D-019	cut by the v1.0 cut line: names no SQL concept
+prepend_item	D-019	cut by the v1.0 cut line: names no SQL concept
+push_comparator	D-019	cut by the v1.0 cut line: names no SQL concept
+reduce_	D-019	cut by the v1.0 cut line: names no SQL concept
+reverse	D-019	cut by the v1.0 cut line: names no SQL concept
+select_indexed	D-019	cut by the v1.0 cut line: names no SQL concept
+select_many_indexed	D-019	cut by the v1.0 cut line: names no SQL concept
+sequence_equal	D-019	cut by the v1.0 cut line: names no SQL concept
+skip_last	D-019	cut by the v1.0 cut line: names no SQL concept
+skip_while_	D-019	cut by the v1.0 cut line: names no SQL concept
+skip_while_indexed	D-019	cut by the v1.0 cut line: names no SQL concept
+take_last	D-019	cut by the v1.0 cut line: names no SQL concept
+take_while_	D-019	cut by the v1.0 cut line: names no SQL concept
+take_while_indexed	D-019	cut by the v1.0 cut line: names no SQL concept
+to_hashmap	D-108	renamed to into_*: it consumes self
+to_hashset	D-019	cut by the v1.0 cut line: names no SQL concept
+to_lookup	D-108	renamed to into_*: it consumes self
+to_vec	D-019	cut by the v1.0 cut line: names no SQL concept
+union_hashed	W-10	renamed: the hash implementation took the plain name
+where_indexed	D-019	cut by the v1.0 cut line: names no SQL concept
+zip3	D-019	cut by the v1.0 cut line: names no SQL concept
+zip_	D-019	cut by the v1.0 cut line: names no SQL concept

@@ -56,14 +56,23 @@ LinqLikeForRust/
 │   ├── adaptors.rs         iterator adaptor structs (Where, Select, Take, ...)
 │   ├── grouping.rs         Grouping<K, V> — output of group_by
 │   ├── lookup.rs           Lookup<K, V> — one-to-many dictionary
-│   ├── ordered.rs          OrderedQueryable<T> + ThenBy trait
+│   ├── ordered.rs          OrderedQueryable<'a, T> + its inherent then_by*
+│   ├── error.rs            SingleError — the crate's only error type
 │   └── sources.rs          range / repeat / empty — free fns at crate root
 ├── tests/
-│   ├── linq_tests.rs       integration tests (128)
-│   └── edge_cases.rs       edge-case + regression tests (64)
-├── examples/               runnable demos: basic_pipeline, join, group_aggregate
-├── .github/workflows/ci.yml CI — build / test / clippy / fmt / doc on Linux + Windows
-├── README.md
+│   ├── linq_tests.rs       operator tests
+│   ├── edge_cases.rs       edge cases and regressions
+│   ├── adaptor_contracts.rs  contracts only visible when driving by hand
+│   ├── laziness.rs         re-measures the evaluation-timing classification
+│   └── interop.rs          coexistence with a competing extension trait
+├── examples/               basic_pipeline, join, group_aggregate
+├── .github/
+│   ├── workflows/ci.yml    nine gates; see "Gates" below
+│   ├── scripts/            the gates themselves
+│   └── data/               inputs to the derived-docs generator
+├── README.md               ALSO the crate docs, via include_str! in lib.rs
+├── DECISIONS.md            NORMATIVE — read before assuming anything
+├── AUDIT.md                dated evidence snapshot; not normative
 ├── CHANGELOG.md
 ├── ROADMAP.md
 └── CLAUDE.md               this file
@@ -80,15 +89,16 @@ a trailing underscore:
 | Reason for `_` suffix | Examples |
 |---|---|
 | Reserved keyword       | `where_` |
-| Shadows `Iterator` method | `skip_`, `take_`, `any_`, `all_`, `min_`, `max_`, `sum_`, `concat_`, `union_`, `zip_`, `is_empty_`, `for_each_`, `take_while_`, `skip_while_`, `min_by_key_`, `max_by_key_` |
+| Shadows `Iterator` method | `all_`, `any_`, `contains_`, `last_`, `max_`, `max_by_`, `max_by_key_`, `min_`, `min_by_`, `min_by_key_`, `skip_`, `sum_`, `take_`, `union_` |
 
 `skip_` carries the suffix for a reason worth remembering: as bare `skip` it
 collided with `Iterator::skip`, and merely importing `LinqExt` turned every
 unqualified `.skip(n)` in the module into `error[E0034]` — including calls on
-iterators unrelated to this crate. The rename is why 0.2.0 is a breaking bump.
-Four suffixes (`concat_`, `union_`, `contains_`, `is_empty_`) collide with
-nothing and are gratuitous; see `D-005`.
-| Clarity from `std`     | `flatten_` (parallels `Iterator::flatten`) |
+iterators unrelated to this crate. That rename is why 0.2.0 is a breaking bump.
+`union_` and `contains_` collide with nothing on `Iterator` and keep the suffix
+only for family consistency; see `D-005`.
+
+| Clarity from `std`     | `union_` (parallels the set-operation family) |
 
 When adding a new operator, the rule is: **if Rust or the prelude already
 binds the name, add `_`; otherwise don't.** Don't invent cute alternative
@@ -96,26 +106,23 @@ names (`filter_via_predicate`, `pick`, etc.) — match C# LINQ semantics first
 and resolve the collision with `_`.
 
 For operators that take a value instead of a closure where C# overloads on
-type, suffix with `_item` or `_where` (e.g. `append_item`, `first_where`).
+type, suffix with `_where` (e.g. `first_where`, `last_where`).
 
 ## Lazy vs eager semantics
 
-Mirror C# LINQ behaviour:
+**Do not restate the classification here.** It is measured with a counting
+source, committed to `.github/data/laziness.tsv`, generated into the README's
+*Evaluation timing* section, and re-measured by `tests/laziness.rs`. A copy in
+this file would be a second source of truth, which is what `D-016` forbids — and
+the copy that used to live here had already drifted.
 
-- **Lazy** (return an adaptor struct that lazily implements `Iterator`):
-  `where_`, `select`, `select_many`, `flatten_`, `skip_`, `skip_while_`, `take_`,
-  `take_while_`, `chunk`, `distinct`, `distinct_by`, `concat_`, `zip_`.
-- **Eager** (collect into `Vec` first, then re-yield):
-  `order_by`, `order_by_descending`, `reverse`, `union_`, `except`, `intersect`,
-  `group_by_key`, `group_join`, `inner_join`, `to_lookup`.
-- **Terminal** (consume the iterator, return a non-iterator value):
-  `aggregate`, `sum_`, `count_where`, `min_*`, `max_*`, `average`,
-  `first_*`, `last_*`, `element_at`, `single_or_default`, `any_`, `all_`,
-  `contains_`, `is_empty_`, `sequence_equal`, `to_vec`, `to_hashmap`,
-  `to_hashset`, `for_each_`.
+The four classes are `lazy`, `eager_at_call`, `half_eager` (receiver streams,
+argument drained at call time) and `terminal`. When you add an operator you must
+add its row to `laziness.tsv`; `gen-docs.py` fails if a method has no
+classification.
 
-When adding new operators, **document which bucket they fall in** at the top of
-the doc comment.
+Note this crate's eager operators drain the source when **called**, where C#
+defers to the first `MoveNext`. That difference is real and documented.
 
 ## How adaptors are wired
 
@@ -129,9 +136,13 @@ A new lazy operator requires three pieces:
 3. A re-export. `adaptors.rs` is already glob re-exported from `lib.rs`, so
    anything `pub` there is exposed.
 
-Eager operators usually skip the adaptor struct and just return
-`impl Iterator<Item = T>` after collecting internally — see `union_`, `except`,
-`intersect`, `inner_join` in `queryable.rs`.
+**No method may return `impl Iterator`.** `D-106` requires named return types
+and CI enforces it by grepping `queryable.rs` for `-> impl Iterator` and failing
+on any hit. Eager operators return a named newtype over `vec::IntoIter` — see
+`InnerJoin<R>`, `GroupByKey<K, V>`, `Except<I>` in `adaptors.rs`. Opaque returns
+carry no operator identity (`distinct`, `except` and `intersect` were all
+`Filter<I, closure>`, so one blanket impl covered all three), and they were what
+pinned the MSRV at 1.75.
 
 ## Doc comments
 
@@ -159,7 +170,7 @@ When changing an operator's behaviour, **update its tests in the same diff**
 ## Build / test commands
 
 ```powershell
-# from D:\RandomProgrammingProjects\LinqLikeForRust
+# from the repository root
 cargo build
 cargo test               # tests/linq_tests.rs + tests/edge_cases.rs + doctests
 # CI does not run bare `cargo test` -- it runs the gate below, because

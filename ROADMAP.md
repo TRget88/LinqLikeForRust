@@ -13,6 +13,19 @@ Legend: `[x]` shipped · `[ ]` todo · `[~]` partial / has gaps
 
 ---
 
+> ## ⚠ Phases 0–2 are superseded by `D-019`
+>
+> Those phases record what was *built*, and they are accurate as history. They
+> are **not** a description of the current surface: the v1.0 cut line removed 32
+> of the 94 operators they list, on the criterion "could this become a SQL
+> clause under the v2 thesis". `to_lookup`/`to_hashmap` were also renamed to
+> `into_*` (`D-108`), and `join`/`group_by` to `inner_join`/`group_by_key`
+> (`W-12`).
+>
+> **For what exists today, read the API Reference in `README.md`** — it is
+> generated from the source and CI-diffed, so it cannot drift. This file is kept
+> for the reasoning trail, not as a surface listing.
+
 ## Phase 0 — Currently shipped
 
 These are already implemented. They form the baseline to build on.

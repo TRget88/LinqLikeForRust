@@ -436,7 +436,7 @@ seam, not the seam.
   45 of 75 names and 0 of 44 comparer overloads, and the flagship example passes
   only because its data is degenerate. Prose warnings about drift do not stop
   drift.
-- **Enforced by:** **IMPLEMENTED** (`W-6`, `W-18`) — two mechanisms:
+- **Enforced by:** **IMPLEMENTED** (`W-6`, `W-18`) — three mechanisms:
   - `src/lib.rs` carries `#![doc = include_str!("../README.md")]`, so every
     ```` ```rust ```` block in the README is a doctest CI runs. Two blocks that
     stated their expected output in a *comment* — passing whether or not it was
@@ -446,8 +446,19 @@ seam, not the seam.
     surface from `src/`, cross-checks it against `.github/data/operator-map.tsv`
     in both directions, cross-checks that file's C# column against
     `.github/data/csharp-operators.tsv`, verifies every public method appears in
-    the README's API Reference, computes every count, and fails if the committed
+    the README's API Reference **and that no API Reference row names a method
+    that does not exist**, computes every count, and fails if the committed
     README differs from what it generates.
+  - The same script checks the **prose**, not just the generated blocks. The
+    tables were gated from the start; the paragraphs around them were not, and
+    they drifted badly — `README.md`, `CLAUDE.md` and `.github/data/README.md`
+    between them named 28 methods that had been renamed or cut, and `CLAUDE.md`
+    still told a contributor to return `impl Iterator`, which `D-106` forbids.
+    Every removed name now lives in `.github/data/removed.tsv` with when and
+    why, and a live doc naming one fails the build unless the surrounding lines
+    are *explaining* the removal. `AUDIT.md`, `QUESTIONS.md`, `CHANGELOG.md` and
+    `ROADMAP.md` are exempt by design: they are dated records, and rewriting
+    them would falsify the trail.
 - **Vindicated three times over.** `D-016` was violated twice before this gate
   existed, and a third time was found while building it: the README's
   "75 operator names / 234 overloads / 44 comparer overloads" is the **.NET 11

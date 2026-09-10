@@ -252,6 +252,46 @@ def render_laziness(mapping, csharp=None):
     ])
 
 
+def check_docs_for_removed_methods():
+    """A live doc must not name a method that no longer exists.
+
+    The generated blocks were always gated; the prose around them was not, and
+    it drifted badly -- README, CLAUDE.md and the data README between them named
+    28 methods that had been renamed or cut. This closes that.
+
+    A mention is allowed when it is *explaining* the removal: if the surrounding
+    few lines say so, it is documentation, not drift. The window looks both ways,
+    because "X and Y were cut" reads naturally with the names first.
+    """
+    removed = {r["name"]: r for r in read_tsv(os.path.join(DATA, "removed.tsv"))}
+    # Historical by design: AUDIT.md and QUESTIONS.md are dated snapshots,
+    # CHANGELOG.md and ROADMAP.md are records of what happened. Rewriting them
+    # would falsify the trail.
+    LIVE_DOCS = ["README.md", "CLAUDE.md", os.path.join(".github", "data", "README.md")]
+    EXPLAINING = re.compile(
+        r"remov|\bcut\b|no longer|renamed|were cut|D-019|D-108|W-10\b|W-12\b|superseded",
+        re.I)
+    errors = []
+    for rel in LIVE_DOCS:
+        path = os.path.join(ROOT, rel)
+        if not os.path.exists(path):
+            errors.append(f"{rel} is missing")
+            continue
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for i, line in enumerate(lines):
+            for name in re.findall(r"`([a-z_][a-z_0-9]*)[`(<:]", line):
+                if name not in removed:
+                    continue
+                context = "\n".join(lines[max(0, i - 4):i + 5])
+                if EXPLAINING.search(context):
+                    continue
+                r = removed[name]
+                errors.append(
+                    f"{rel}:{i + 1} names `{name}`, {r['reason']} ({r['removed_in']}). "
+                    f"Either update the passage or say that it was removed.")
+    return errors
+
+
 BLOCKS = {"coverage": render_coverage, "std-overlap": render_std_overlap,
           "laziness": render_laziness}
 
@@ -277,6 +317,7 @@ def main():
     errors = cross_check(surface, mapping, csharp)
     text = open(README, encoding="utf-8").read()
     errors += check_api_reference(surface, text)
+    errors += check_docs_for_removed_methods()
     if errors:
         die("source and documentation data disagree", errors)
 
