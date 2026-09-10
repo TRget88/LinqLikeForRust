@@ -103,8 +103,37 @@ seam, not the seam.
   **zero** dependencies via `cargo metadata`, so any driver or SQL crate fails
   the build. (A grep for driver names would have been weaker; zero is exact.)
 
-## D-002 — SQL translation is the v2 thesis: designed-for, not built
-- **Status:** SETTLED (2026-09-09). X-1 and X-2 resolved the same day.
+## D-002 — SQL translation: the seam is built
+- **Status:** SETTLED (2026-09-09); **implemented 2026-09-10 by `W-20`.**
+- **What shipped:** `linq_rs_sql::rows` — one query value with two interpreters.
+  `query::<Employee>().filter(employees::salary.gt(100_000))` renders to
+  `SELECT * FROM employees WHERE (salary > ?)` with bound parameters, *and*
+  evaluates over a `&[Employee]` via `.to_memory()`. No Rust library offered
+  this; the audit verified the gap from primary sources.
+- **Three design findings, each compiled rather than argued:**
+  - **The seam lives in `linq_rs_sql`, and a third crate is impossible.**
+    Evaluating a predicate tree needs to read the node fields, which are
+    `pub(crate)`; from outside it is `error[E0616]: field 'left' of struct 'Gt'
+    is private`. A third crate would have forced 12 node structs' fields public.
+    Rendering-only would have worked from outside — the asymmetry is the whole
+    argument. The seam needs **no** dependency on `linq_rs`: `LinqExt` is
+    blanket-implemented, so `.to_memory()` returning a named `Iterator` is
+    enough.
+  - **The predicate must be a type, not runtime data.** Measured across five
+    designs: a `Vec<Step>` interpreter, `Box<dyn Iterator>`, and named-adaptor
+    hybrids all land **2.3–13× slower** than `where_().select()`. A typed nest
+    lands at **0.96–1.14×**, allocates identically to `filter().map()`, and
+    streams to 10M rows. Verified end to end: 80.7 ms for the seam vs 86.6 ms
+    for `linq_rs` and 94.2 ms for hand-written `filter().map()`, same checksum.
+  - **The prototype's dynamic `Val` enum is unnecessary.** `Repr` is a type
+    function from the column's declared SQL type to its Rust type, so a
+    `Text`-vs-integer comparison is unrepresentable rather than silently
+    `false`: `error[E0053]: method 'eval' has an incompatible type for trait`.
+- **The prototype's three gaps are all closed:** it materialised (now streams,
+  at parity), it lost type safety (now a compile error), and it needed two
+  vocabularies (now one `entity!` line per column).
+- **`linq_rs` is untouched.** Byte-identical; someone who never wants SQL never
+  sees any of this.
 - **Ruling:** Query translation is the stated next product. v1.0 does not ship it,
   but v1.0's public API must not foreclose it.
 - **Why:** It is the only capability no Rust library holds. Verified from primary
@@ -592,9 +621,11 @@ while these remain open — which is exactly the intended latitude.
   every call site with `error: implementation of 'FnMut' is not general enough`,
   and `for<'a>` does not fix it. v2 adds `where_expr`; it never re-bounds
   `where_`.
-- **Enforced by:** *prose until v2 exists* — there is no boundary to gate yet.
-  When there is: the SQL type must not implement `LinqExt`, and a `compile_fail`
-  test must pin a non-translatable operator against it.
+- **Enforced by:** **IMPLEMENTED** (`W-20`) — `linq_rs_sql::rows` is the seam,
+  and `Rows<Row, P, O>` deliberately does **not** implement `LinqExt`. A
+  differential doctest pair pins the boundary: the negative half is
+  `compile_fail` on `query::<Employee>().select_many(..)`, and the positive half
+  is the byte-identical expression after `.to_memory(&people)`.
 
 ## D-103 — Three-valued logic: promise a stability class, not identity
 - **Status:** **SETTLED (2026-09-10).**

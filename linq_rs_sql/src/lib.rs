@@ -76,6 +76,7 @@
 pub mod column;
 pub mod expr;
 pub mod query;
+pub mod rows;
 pub mod types;
 pub mod value;
 

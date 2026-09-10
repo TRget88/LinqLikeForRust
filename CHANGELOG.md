@@ -84,6 +84,45 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Added — the two-interpreter seam (W-20, D-002)
+
+**One query value, two interpreters.** The same expression renders to SQL and
+evaluates over a `Vec`:
+
+```rust
+let q = query::<Employee>()
+    .filter(employees::salary.gt(100_000i64))
+    .filter(employees::dept.eq("eng"))
+    .order_by_desc(employees::salary)
+    .limit(2);
+
+q.to_sql();              // SELECT * FROM employees WHERE ((salary > ?) AND (dept = ?))
+                         //   ORDER BY salary DESC LIMIT 2   params [Integer(100000), Text("eng")]
+q.to_memory(&people);    // the same query, over a &[Employee], lazily
+```
+
+No Rust library offered this. Diesel's terminal operations all take
+`conn: &mut Conn`; SeaORM's `MockDatabase` replays scripted rows rather than
+evaluating; sqlx's checking dies at runtime assembly; polars and datafusion
+query columnar frames, not a `Vec<MyStruct>`.
+
+- **It streams, at parity.** 10M rows: **80.7 ms** for the seam, 86.6 ms for
+  `linq_rs`, 94.2 ms for hand-written `filter().map()`, same checksum. Laziness
+  is pinned by counters, not timing — `LIMIT 1` over 5 rows pulls exactly 1, and
+  building the iterator pulls 0. Five designs were measured; runtime-data plans
+  came in 2.3–13× slower, so **the predicate is a type**, not a `Vec` of steps.
+- **Wrong-typed comparisons do not compile.** `Repr` maps a column's declared
+  SQL type to its Rust type, so comparing `Text` to an integer is
+  unrepresentable rather than silently `false`.
+- **The `D-102` boundary is a compile error**, pinned by a differential doctest
+  pair: `query::<Employee>().select_many(..)` is `compile_fail`, and the
+  byte-identical expression after `.to_memory(&people)` passes.
+- **`linq_rs` is byte-identical.** The seam lives in `linq_rs_sql`, which needs
+  no dependency on it. A third crate turned out to be *impossible*: evaluating a
+  predicate needs the node fields, which are `pub(crate)` — `error[E0616]` from
+  outside.
+- Builds on **Rust 1.65**, no dependencies, no proc macro.
+
 ### Added — `linq_rs_sql`, a sibling crate (D-020)
 
 The typed SQL query builder now ships, as its own crate in the same workspace.
