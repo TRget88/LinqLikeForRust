@@ -1,17 +1,32 @@
 # linq_rs — Project Context
 
+> **Scope lives in [DECISIONS.md](DECISIONS.md), not here.** This file describes
+> how to work in the repo. It must not state scope of its own — cite a `D-NNN`
+> instead. Three earlier versions of this file stated scope directly and all
+> three drifted out of agreement with the code (see `AUDIT.md` finding A-1).
+
 ## Mission
 
-A LINQ-style query library for Rust iterators. Brings the full surface of C# LINQ
-(filter, project, group, join, aggregate, etc.) to any `Iterator` as a blanket
-extension trait. The aim is to feel **familiar to C# devs** and **idiomatic to
-Rust devs** at the same time.
+A LINQ-style query library for Rust iterators: LINQ-shaped operators over any
+`Iterator`, via a blanket extension trait.
 
-**Non-goals:**
-- We are not building a query expression DSL (no `from x in xs where ...` macro).
-- We are not building an `IQueryable`/expression-tree analogue. Operators run
-  against in-memory `Iterator`s, period.
-- We do not target databases, async streams, or remote execution.
+Where familiarity to C# and idiomatic Rust conflict, **idiom wins** — that is
+`D-005`, and it is a ruling, not a balance to strike per API. Do not describe the
+crate as bringing "the full surface" or "the full power" of C# LINQ; measured, the
+surface is 45 of C#'s 75 operator names and 0 of its 44 comparer overloads, and
+`D-016` requires any such count to be generated rather than written.
+
+**Scope, by reference — read the entry before assuming:**
+- `D-001` v1.0 is LINQ-to-objects only.
+- `D-002` **SQL translation is the v2 product.** One query value, two
+  interpreters — evaluate over a collection, or render to SQL. This is the
+  crate's thesis and the only capability no Rust library holds.
+- `D-003` no ORM change tracking or identity map; `D-004` no lazy loading.
+- `D-201` no `from x in xs where ...` macro DSL.
+- `D-205` **one vocabulary per concept.** A second, parallel query surface in
+  this crate is forbidden even when it works — that is why `src/sql/` is held on
+  `feature/v0.1.0-and-sql-builder` rather than merged.
+- `D-101`..`D-108` are **OPEN** and must close before any 1.0.
 
 ## Hard constraints
 

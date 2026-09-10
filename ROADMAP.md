@@ -3,6 +3,12 @@
 This roadmap translates the **C# LINQ surface** into concrete tasks for `linq_rs`.
 It is organized by phase, with each phase shippable on its own.
 
+**This file is a work list, not a source of decisions.** Scope and API rulings
+live in [DECISIONS.md](DECISIONS.md); cite `D-NNN` rather than restating them.
+Phases 1 and 2 grew the surface from 48 to 90 methods, which `AUDIT.md` finding
+A-2 identifies as the crate's principal liability — see the v1.0 cut line in
+`AUDIT.md` §7.3 before adding another operator.
+
 Legend: `[x]` shipped · `[ ]` todo · `[~]` partial / has gaps
 
 ---
@@ -190,10 +196,23 @@ These are speculative — defer until someone actually asks for them.
 
 ## Rejected / out of scope (decisions we've made)
 
-- **`IQueryable` / expression trees** — out of scope. We target in-memory iterators only.
-- **A `from/select/where` macro DSL** — out of scope. Method chaining is the idiom.
-- **Pluggable `IEqualityComparer<T>` per call** — out of scope. Rust uses the `Eq`/`Ord`/`Hash` traits; pluggable comparers don't fit the model. Users who need custom equality should wrap items in a newtype.
-- **`Cast<T>`** — *(pending — see Phase 1.5)*.
+> Superseded by [DECISIONS.md](DECISIONS.md). Do not add rulings here — add a
+> `D-NNN` entry there and cite it. This section previously read "`IQueryable` /
+> expression trees — out of scope. We target in-memory iterators only", while
+> the same branch shipped a 1,104-line SQL query builder committed as "ORM
+> Phase 1" against a roadmap that has no ORM phase. That is `AUDIT.md` finding
+> A-1, and it is the reason `DECISIONS.md` exists.
+
+- **`IQueryable` / expression trees** — **no longer rejected.** `D-002` makes SQL
+  translation the v2 product, on a one-query-two-interpreters design. Not built;
+  designed-for. `D-101`..`D-108` are the decisions that keep it reachable.
+- **A `from/select/where` macro DSL** — out of scope. See `D-201`: three Rust
+  crates tried it (2017, 2019, 2021) and all three are dead.
+- **Pluggable `IEqualityComparer<T>` per call** — out of scope. See `D-202`. The
+  legitimate subset is `*_by` key/comparator variants, which are wanted (`W-13`).
+- **`Cast<T>`** — shipped in Phase 1.5, and `D-204` says it should not have been:
+  a fallible data conversion that panics, with no `Result` alternative. C# needs
+  it for runtime downcasting; Rust has none. Slated for removal.
 
 ---
 

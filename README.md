@@ -2,7 +2,14 @@
 
 A **LINQ-style query library for Rust** — zero external dependencies.
 
-Brings the full power of C# LINQ to Rust iterators as lazy, composable extension methods.
+LINQ-shaped query operators over any `Iterator`, as composable extension methods.
+
+Where familiarity to C# and idiomatic Rust conflict, this crate picks idiomatic
+Rust ([`D-005`](DECISIONS.md)). It covers 45 of C#'s 75 `System.Linq.Enumerable`
+operator names and none of its 44 comparer overloads — the latter deliberately
+([`D-202`](DECISIONS.md)). Scope and API rulings live in
+**[DECISIONS.md](DECISIONS.md)**; current-state evidence lives in
+[AUDIT.md](AUDIT.md).
 
 ---
 
@@ -24,8 +31,15 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-linq_rs = { path = "." }
+linq_rs = "0.2"
 ```
+
+> **Do not use 0.1.0.** It shipped a `then_by` that discarded the primary sort
+> key, a `skip` that turned every unqualified `.skip(n)` in an importing module
+> into a compile error, and a `concat_` that rejected almost every call. See
+> [CHANGELOG.md](CHANGELOG.md). It is being yanked from crates.io per
+> [`D-009`](DECISIONS.md); update this note to "yanked" once that has run, not
+> before.
 
 ---
 

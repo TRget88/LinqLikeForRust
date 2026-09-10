@@ -71,16 +71,21 @@ settled before any 1.0 · `D-2xx` DO-NOT-BUILD.
 `AUDIT.md` §1 finding **A-1**. Until these are reconciled, nothing downstream can
 be sequenced.
 
-| # | Document | Says | Conflicts with |
-|---|---|---|---|
-| X-1 | `CLAUDE.md:12-14` | "We are not building an `IQueryable`/expression-tree analogue… We do not target databases" | `D-002`, and the branch's own `src/sql/` |
-| X-2 | `ROADMAP.md` *Rejected / out of scope* | "`IQueryable` / expression trees — out of scope. We target in-memory iterators only." | `D-002`, and the commit that shipped "ORM Phase 1" |
-| X-3 | `CLAUDE.md:7-8` | the aim is to feel "familiar to C# devs **and** idiomatic to Rust devs at the same time" | `D-005`, which ruled for idiomatic Rust when the two conflict |
-| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | `D-016`; measured at 45 of 75 C# operator names and 0 of 44 comparer overloads |
-| X-5 | `Cargo.toml` (both trees) | `license = "MIT"` | `D-012` |
+**Resolution rule:** each document must *cite the relevant `D-NNN`* rather than
+restate a scope claim of its own.
 
-**Resolution rule:** each of the above documents must be edited to *cite the
-relevant `D-NNN`* rather than restate a scope claim of its own.
+| # | Document | Was | Status |
+|---|---|---|---|
+| X-1 | `CLAUDE.md` Non-goals | "We are not building an `IQueryable`/expression-tree analogue… We do not target databases" | **RESOLVED** 2026-09-09 — replaced with a scope-by-reference list citing `D-001`…`D-205`; the non-goal is struck, `D-002` stands |
+| X-2 | `ROADMAP.md` *Rejected* | "`IQueryable` / expression trees — out of scope. We target in-memory iterators only." | **RESOLVED** 2026-09-09 — entry now reads "no longer rejected", cites `D-002`, and records that the SQL builder was committed as "ORM Phase 1" against a roadmap with no ORM phase |
+| X-3 | `CLAUDE.md` Mission | "familiar to C# devs **and** idiomatic to Rust devs at the same time" | **RESOLVED** 2026-09-09 — now states that idiom wins, citing `D-005` |
+| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | **RESOLVED** 2026-09-09 — replaced with the measured count (45 of 75 names, 0 of 44 comparer overloads) and a `D-016` pointer. The count is still hand-written; `D-016`'s generator is `W-18` and remains OPEN |
+| X-5 | `Cargo.toml` | `license = "MIT"` | **OPEN** — `W-17`. Must be `MIT OR Apache-2.0` with both licence files before the next publish |
+
+The thesis ruling that closed X-1..X-3 (2026-09-09): **keep the SQL thesis.**
+`D-002` is the crate's reason to exist; `src/sql/` is held rather than merged
+because it is a disjoint second vocabulary (`D-205`), and is raw material for the
+seam, not the seam.
 
 ---
 
@@ -98,7 +103,7 @@ relevant `D-NNN`* rather than restate a scope claim of its own.
   crates; a non-empty result fails. Plus `D-016`'s README gate.
 
 ## D-002 — SQL translation is the v2 thesis: designed-for, not built
-- **Status:** **CONFLICTED** (see X-1, X-2) — SETTLED here (2026-09-09)
+- **Status:** SETTLED (2026-09-09). X-1 and X-2 resolved the same day.
 - **Ruling:** Query translation is the stated next product. v1.0 does not ship it,
   but v1.0's public API must not foreclose it.
 - **Why:** It is the only capability no Rust library holds. Verified from primary
@@ -117,8 +122,9 @@ relevant `D-NNN`* rather than restate a scope claim of its own.
   must reach (`D-101` … `D-105`).
 - **Enforced by:** `D-101`–`D-105` must be closed before any 1.0 tag; CI gate on
   the tag, not on the branch.
-- **Blocked on:** X-1 and X-2. If the resolution is that v2 is abandoned, this
-  decision is superseded and `D-205` applies to `src/sql/`.
+- **Resolved:** the owner ruled to keep the thesis (2026-09-09). `D-205` still
+  applies to `src/sql/` as written — it is held on
+  `feature/v0.1.0-and-sql-builder` pending the reshape (`W-20`).
 
 ## D-003 — Full ORM / EF change tracking is out of scope
 - **Status:** SETTLED (2026-09-09)
@@ -145,7 +151,7 @@ relevant `D-NNN`* rather than restate a scope claim of its own.
 - **Enforced by:** the `D-003` grep, plus code review on any `Deref` impl.
 
 ## D-005 — Naming: idiomatic Rust, LINQ-shaped
-- **Status:** **CONFLICTED** (see X-3) — SETTLED here (2026-09-09)
+- **Status:** SETTLED (2026-09-09). X-3 resolved the same day.
 - **Ruling:** Keep LINQ names only where `std` lacks the concept. Do not add a
   public method whose only content is delegating to a same-named `Iterator`
   method. Where familiarity and idiom conflict, **idiom wins**.
@@ -161,10 +167,18 @@ relevant `D-NNN`* rather than restate a scope claim of its own.
   `itertools::Itertools` in one scope and calls `.skip(1)`, `.join(", ")` and
   `.group_by(..)` — it must compile. That single test pins `D-005`, `E-1`, `E-2`
   and `E-3` shut at once.
-- **Recorded dissent:** under a two-interpreter design `where_` and `select` are
-  *not* renames of `filter`/`map` — they are clause constructors, and `std` has no
-  concept of "a clause that may or may not be a clause". If X-1/X-2 resolve in
-  favour of v2, revisit this decision explicitly rather than reading it literally.
+- **Accepted carve-out (2026-09-09), following the X-1 ruling:** `where_`,
+  `select`, `order_by`/`then_by`, `join`, `group_join` and `group_by` are
+  **kept**, because under `D-002`'s two-interpreter design they are clause
+  constructors, not renames of `filter`/`map`/`sort_by_key` — `std` has no
+  concept of "a clause that may or may not be a clause". The deletion list is
+  therefore the *terminal and scalar* aliases (`sum_`, `min_`, `max_`,
+  `min_by_key_`, `max_by_key_`, `any_`, `all_`, `for_each_`, `aggregate`,
+  `to_vec`, `to_hashset`, `first_or_default`, `first_where`, `last_or_default`,
+  `element_at`, `sequence_equal`, `flatten_`, `skip_`, `take_`, `skip_while_`,
+  `take_while_`, `index_`, and the `*_indexed` family), which translate to
+  nothing and delegate to std one line down. This narrows `D-005` from ~31
+  deletions to ~25 and is the version the v1.0 cut line should use.
 
 ## D-006 — Backends (v2 only): PostgreSQL, async only, on `sqlx`
 - **Status:** SETTLED (2026-09-09)
@@ -249,7 +263,7 @@ relevant `D-NNN`* rather than restate a scope claim of its own.
 - **Trigger to revisit:** an actual embedded user asks.
 
 ## D-012 — License: dual `MIT OR Apache-2.0`
-- **Status:** **CONFLICTED** (see X-5) — SETTLED here (2026-09-09)
+- **Status:** SETTLED (2026-09-09). X-5 still OPEN in `Cargo.toml` — see `W-17`.
 - **Ruling:** `license = "MIT OR Apache-2.0"`, both licence files present.
 - **Why:** Ecosystem norm; trivial now, consent-requiring once outside
   contributors arrive.
