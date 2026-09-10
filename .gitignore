@@ -30,3 +30,7 @@ Cargo.lock
 # OS junk
 .DS_Store
 Thumbs.db
+# Cargo.lock is intentionally untracked for this library. It was tracked as
+# lockfile v4, which Cargo 1.75 (our declared MSRV, see DECISIONS.md D-010)
+# cannot parse -- a fresh clone failed before compiling a line. Tracked files
+# bypass the ignore pattern above, so the pattern alone was not enough.
