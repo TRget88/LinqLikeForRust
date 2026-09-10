@@ -63,9 +63,21 @@ impl<'a, T> OrderedQueryable<'a, T> {
     }
 
     fn push_comparator(mut self, c: Comparator<'a, T>) -> Self {
-        debug_assert!(
+        // `assert!`, not `debug_assert!`. Once iteration has begun the buffer is
+        // already sorted, so a comparator pushed afterwards is silently ignored
+        // and the caller gets a plausible, wrongly-ordered answer -- in release
+        // only, where it is hardest to find. Measured before this changed:
+        // `order_by(|x| x.1)`, one `next()`, then `then_by(|x| x.0)` yielded
+        // `[("b", 2), ("a", 2)]` with the secondary key discarded.
+        //
+        // This is a programming error, not a runtime condition, so it panics
+        // rather than returning an error: there is no correct answer to give.
+        // See D-025.
+        assert!(
             self.pending.is_some(),
-            "comparators cannot be added once iteration has begun"
+            "then_by/then_by_with cannot be called after iteration has begun: \
+             the buffer is already sorted, so the added comparator would be \
+             silently ignored"
         );
         self.comparators.push(c);
         self

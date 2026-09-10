@@ -477,6 +477,60 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-025 — a wrong answer is worse than a compile error or a panic
+- **Status:** SETTLED (2026-09-10) — three defects fixed in published crates.
+- Found by probing the published surface with compiled code rather than reading
+  it. All three shipped. All three were **silent**: no warning, no error, a
+  plausible wrong result.
+
+### 1. `entity!` made the two interpreters disagree
+`entity!` generated `row.$field as i64`. `as` is a silent lossy cast, so a field
+whose Rust type did not match its declared SQL type gave **different answers in
+SQL and in memory, for the same data**. Measured, with zero warnings:
+```
+struct M { n: f64 }   entity! { M => m { n: Integer = n } }   // n = 2.9
+SQL      : SELECT * FROM m WHERE (n > ?)  params=[Integer(2)]  -> row returned (2.9 > 2)
+in-memory: []                                                  -> row dropped (2.9 as i64 == 2)
+```
+This is the seam's central promise — one value, two interpreters, one answer —
+broken by a cast. **Ruling:** the macro emits `From::from`, which exists only
+for lossless widening, so the mismatch is a compile error at the `entity!` call
+site: `` error[E0277]: the trait bound `i64: From<f64>` is not satisfied ``.
+`i32 -> i64` and `f32 -> f64` still compile, and must.
+
+### 2. `OFFSET` without `LIMIT` emitted SQL that does not parse
+`.offset(20)` alone emitted `SELECT * FROM users OFFSET 20`. PostgreSQL accepts
+a bare `OFFSET`; **SQLite and MySQL parse `OFFSET` only as part of a `LIMIT`
+clause and reject it.** Verified against real SQLite:
+`near "2": syntax error`. A passing test asserted the broken string as correct,
+which is worse than no test — it pinned the defect. **Ruling:** emit
+`LIMIT 9223372036854775807 OFFSET n`. `LIMIT -1` is the usual SQLite idiom but
+PostgreSQL rejects a negative limit, so `i64::MAX` is the portable spelling of
+"no limit". Verified executing on real SQLite.
+- **Note the underlying gap:** this crate has no dialect layer. That is the real
+  fix and it is not this one. Until then, prefer emission that is valid
+  everywhere over emission that is idiomatic somewhere.
+
+### 3. `then_by` after iteration was wrong only in release
+`push_comparator` used `debug_assert!`, which compiles to nothing in release. In
+a release build the comparator was silently discarded and the caller got a
+plausible, wrongly-ordered result — `[("b", 2), ("a", 2)]`, secondary key gone —
+while a debug build panicked. **Ruling:** `assert!`. This is a programming
+error, not a runtime condition; there is no correct answer to return, so it
+panics in every profile.
+
+- **The pattern in all three:** each preferred producing *something* over
+  refusing. A cast over a compile error, a string over a rejection, a skipped
+  check over a panic. Prefer the loud failure; it is the cheap one.
+- **Enforced by:** `tests/adaptor_contracts.rs::then_by_after_iteration_panics_in_every_profile`
+  (`#[should_panic]`, so it runs in both profiles);
+  `linq_rs_sql/tests/sql_phase1.rs::entity_accepts_every_lossless_field_type`
+  (asserts the two interpreters agree) plus a `compile_fail` doctest on
+  `entity!` for the rejection side; and
+  `offset_only_still_emits_a_limit_because_offset_alone_is_not_portable`,
+  renamed from `offset_only` so the assertion states the rule rather than
+  restating the output.
+
 ## D-024 — zero dependencies means zero, dev-dependencies included
 - **Status:** SETTLED (2026-09-10) — implemented.
 - **Ruling:** `linq_rs` and `linq_rs_sql` each declare **no dependencies of any

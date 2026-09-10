@@ -6,7 +6,7 @@ members = ["linq_rs_sql", "seam-tests"]
 
 [package]
 name = "linq_rs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.65"
 description = "A LINQ-like query library for Rust iterators — no external dependencies"

@@ -174,3 +174,17 @@ fn ordering_accepts_a_non_static_comparator() {
         .collect();
     assert_eq!(v[0].dept, "eng");
 }
+
+/// D-025. `then_by` after iteration has begun used to be guarded by
+/// `debug_assert!`, so in a release build the comparator was silently dropped
+/// and the caller got a plausible, wrongly-ordered answer. Measured then:
+/// `[("b", 2), ("a", 2)]`, secondary key discarded. It now panics in every
+/// profile, because there is no correct answer to return.
+#[test]
+#[should_panic(expected = "cannot be called after iteration has begun")]
+fn then_by_after_iteration_panics_in_every_profile() {
+    let v = vec![("b", 2), ("a", 2), ("c", 1)];
+    let mut ordered = v.into_iter().order_by(|x| x.1);
+    let _ = ordered.next(); // iteration has begun; the buffer is now sorted
+    let _ = ordered.then_by(|x| x.0);
+}

@@ -16,7 +16,7 @@ use crate::ordered::OrderedQueryable;
 /// (`D-005`). The normative list of divergences — empty sequences, tie-breaking,
 /// overflow, string collation, duplicate keys, evaluation timing — is the
 /// *Differences from C# LINQ* section of the crate documentation. Three
-/// operators (`for_each_`, `element_at_or`, `zip3`) name C# methods or overloads
+/// operators (`element_at_or`, `zip3`) name C# methods or overloads
 /// that **do not exist**; they are marked below.
 ///
 /// Import this trait to unlock all methods:
@@ -1303,7 +1303,7 @@ pub trait LinqExt: Iterator + Sized {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Collects into a `HashMap` by a key selector. C# analogue: `ToDictionary`.
-    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
+    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each` from std instead"]
     fn into_hashmap<K, F>(self, key_fn: F) -> std::collections::HashMap<K, Self::Item>
     where
         K: std::hash::Hash + Eq,

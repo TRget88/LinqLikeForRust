@@ -203,10 +203,18 @@ fn limit_only() {
     assert_eq!(q.sql, "SELECT * FROM users LIMIT 10");
 }
 
+/// `OFFSET` alone is not portable: SQLite and MySQL parse `OFFSET` only as part
+/// of a `LIMIT` clause and reject it on its own. This test used to assert the
+/// bare form and so pinned invalid SQL as correct. `LIMIT i64::MAX` is the
+/// portable spelling of "no limit" -- `LIMIT -1` is the SQLite idiom but
+/// PostgreSQL rejects a negative limit. See D-025.
 #[test]
-fn offset_only() {
+fn offset_only_still_emits_a_limit_because_offset_alone_is_not_portable() {
     let q = users::table().offset(20).to_sql();
-    assert_eq!(q.sql, "SELECT * FROM users OFFSET 20");
+    assert_eq!(
+        q.sql,
+        "SELECT * FROM users LIMIT 9223372036854775807 OFFSET 20"
+    );
 }
 
 #[test]
@@ -313,4 +321,31 @@ fn explicit_lit_text() {
         .filter(users::name.eq(Lit::<Text>::text("Alice")))
         .to_sql();
     assert_eq!(q.params, vec![SqlValue::Text("Alice".to_string())]);
+}
+
+/// D-025. `entity!` used to generate `row.$field as i64`, a silent lossy cast,
+/// and the two interpreters then disagreed on the same data. It now generates
+/// `i64::from`, so a mismatched field is a compile error at the `entity!` call.
+/// This test pins the conversions that must KEEP working; the rejection side is
+/// covered by the `compile_fail` doctest on the macro.
+#[test]
+fn entity_accepts_every_lossless_field_type() {
+    table! { widgets (id) { id -> Integer, size -> Integer, ratio -> Float } }
+    pub struct Widget {
+        pub id: i64,
+        pub size: i32,  // widening i32 -> i64 is lossless, and must compile
+        pub ratio: f32, // widening f32 -> f64 is lossless, and must compile
+    }
+    entity! { Widget => widgets { id: Integer = id, size: Integer = size, ratio: Float = ratio } }
+
+    let rows = vec![Widget {
+        id: 1,
+        size: 7,
+        ratio: 0.5,
+    }];
+    let q = linq_rs_sql::rows::query::<Widget>().filter(widgets::size.gt(5i64));
+    assert_eq!(q.to_sql().sql, "SELECT * FROM widgets WHERE (size > ?)");
+    // The in-memory interpreter must agree with what the SQL would return.
+    let ids: Vec<i64> = q.to_memory(&rows).map(|w| w.id).collect();
+    assert_eq!(ids, [1]);
 }
