@@ -25,7 +25,7 @@
 //! code. `pred!` is a **front end and nothing more**: it expands to the same
 //! builder calls you could write by hand, so the type checking, the SQL, and
 //! the in-memory evaluation are all unchanged. It is not a query language, and
-//! it does not replace method chaining — see `DECISIONS.md` `D-201`, which
+//! it does not replace method chaining — see [`DECISIONS.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/DECISIONS.md) `D-201`, which
 //! rejects a `from … where … select …` comprehension, and `D-021`, which
 //! records why this is a different thing.
 //!

@@ -88,7 +88,7 @@ They are siblings in one repository and **neither depends on the other**.
 iterators. This crate builds SQL. The two vocabularies are deliberately separate
 — this one says `filter`, that one says `where_` — because a single crate with
 two names for one concept is a worse thing to hand a user than two crates with
-one each. (`DECISIONS.md` `D-205`, and the split itself is `D-020`.)
+one each. ([`DECISIONS.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/DECISIONS.md) `D-205`, and the split itself is `D-020`.)
 
 Joining them properly means one query value with two interpreters: evaluate it
 over a `Vec` in a unit test, render it to SQL in production. That is `D-002`,

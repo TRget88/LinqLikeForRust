@@ -35,7 +35,7 @@
 //! over in-memory iterators, and the two vocabularies are deliberately
 //! separate: this one says `filter`, that one says `where_`, and no value
 //! passes between them. Keeping them in one crate would have meant two names
-//! for one concept in a single API — see `DECISIONS.md` `D-205` in the
+//! for one concept in a single API — see [`DECISIONS.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/DECISIONS.md) `D-205` in the
 //! repository. Joining them properly is the two-interpreter design tracked as
 //! `D-002`, and this crate is intended to become its rendering backend.
 //!
