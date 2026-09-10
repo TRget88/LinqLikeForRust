@@ -1,22 +1,13 @@
-//! # linq_rs
+//! The crate-level documentation is `README.md`, included below. It is not
+//! duplicated here: a hand-maintained second description of the crate is
+//! exactly the drift `DECISIONS.md` `D-016` exists to stop, and the block
+//! that used to live here had already drifted — it claimed the operators are
+//! "all lazy", which `group_by_key`, `union_`, `inner_join` and `group_join`
+//! disprove.
 //!
-//! A LINQ-style query library for Rust. Extends any `Iterator` with familiar
-//! C# LINQ methods — all lazy, zero-copy where possible, and with no external
-//! dependencies.
-//!
-//! ## Quick start
-//!
-//! ```rust
-//! use linq_rs::LinqExt;
-//!
-//! let result: Vec<_> = vec![1, 2, 3, 4, 5, 6]
-//!     .into_iter()
-//!     .where_(|x| x % 2 == 0)
-//!     .select(|x| x * x)
-//!     .to_vec();
-//!
-//! assert_eq!(result, vec![4, 16, 36]);
-//! ```
+//! Note the path: `include_str!` resolves relative to *this file*, so
+//! `"README.md"` would look for `src/README.md` and fail to compile.
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 

@@ -1,0 +1,108 @@
+rust_name	kind	csharp	variant_of	std_equivalent	notes
+where_	linqext	Where		filter	Trailing _ avoids the `where` keyword; returns adaptors::Where
+where_indexed	linqext	Where	where_	enumerate().filter_map()	C# Where((item,index)=>...) overload
+select	linqext	Select		map	
+select_indexed	linqext	Select	select	enumerate().map()	C# Select((item,index)=>...) overload
+select_many	linqext	SelectMany		flat_map	
+select_many_indexed	linqext	SelectMany	select_many	enumerate().flat_map()	C# SelectMany((item,index)=>...) overload
+flatten_	linqext	SelectMany		flatten	Same C# operator as select_many (SelectMany(x=>x)); no suffix marks it a variant
+of_type	linqext	OfType		filter_map()	Body: self.filter_map(|x| x.try_into().ok()) (queryable.rs:158)
+cast	linqext	Cast		map()	Body: self.map(|x| x.try_into().expect("cast failed")) (queryable.rs:177); panics
+skip_	linqext	Skip		skip	Trailing _ avoids Iterator::skip collision
+skip_while_	linqext	SkipWhile		skip_while	
+skip_while_indexed	linqext	SkipWhile	skip_while_	enumerate().skip_while().map()	C# SkipWhile((item,index)=>...) overload
+take_	linqext	Take		take	
+take_while_	linqext	TakeWhile		take_while	
+take_while_indexed	linqext	TakeWhile	take_while_	enumerate().take_while().map()	C# TakeWhile((item,index)=>...) overload
+chunk	linqext	Chunk			No stable Iterator method; slice::chunks is not an Iterator adaptor
+skip_last	linqext	SkipLast			Lazy, ring buffer of size n
+take_last	linqext	TakeLast			Eager; returns std::vec::IntoIter
+distinct_partial_eq	linqext	Distinct	distinct		Escape hatch, O(n^2) PartialEq linear scan (D-101)
+distinct_by_partial_eq	linqext	DistinctBy	distinct_by		Escape hatch, O(n^2)
+distinct	linqext	Distinct			HashSet-backed default; lazy (filter over a seen-set)
+distinct_by	linqext	DistinctBy	distinct		HashSet-backed default
+concat_	linqext	Concat		chain	Broken bound (AUDIT E-8): requires I2::IntoIter == Self, so unusable mid-chain; README:53 says use Iterator::chain
+except_partial_eq	linqext	Except	except		Escape hatch, O(n*m)
+intersect_partial_eq	linqext	Intersect	intersect		Escape hatch, O(n*m)
+union_partial_eq	linqext	Union	union_		Escape hatch, O(n^2); eager (buffers into a Vec)
+except_by	linqext	ExceptBy	except		`other` supplies KEYS; K: PartialEq + Vec::contains, so O(n*m) with NO hash-backed twin
+intersect_by	linqext	IntersectBy	intersect		`other` supplies KEYS; O(n*m), no hash-backed twin
+except	linqext	Except			HashSet-backed default; streams receiver, drains `other` at call time
+intersect	linqext	Intersect			HashSet-backed default; streams receiver, drains `other` at call time
+union_	linqext	Union			HashSet-backed default; LAZY (self.chain(other).filter(...), queryable.rs:546-547)
+union_by	linqext	UnionBy	union_		`other` supplies ITEMS not keys; K: PartialEq + Vec::contains, O(n^2), no hash-backed twin
+order_by	linqext	OrderBy			Buffers at call time, sorts at into_iter; returns OrderedQueryable
+order_by_descending	linqext	OrderByDescending	order_by		
+order	linqext	Order			.NET 7+; Vec::sort, not an Iterator method
+order_descending	linqext	OrderDescending	order		.NET 7+
+reverse	linqext	Reverse		rev	Buffers into a Vec, so unlike Iterator::rev it does not need DoubleEndedIterator
+aggregate	linqext	Aggregate		fold	Body: self.fold(seed, f)
+reduce_	linqext	Aggregate	aggregate	reduce	C# Aggregate(func) no-seed overload; body: self.reduce(f)
+aggregate_with_selector	linqext	Aggregate	aggregate	fold	C# Aggregate(seed,func,resultSelector) overload; body: result_selector(self.fold(seed,f))
+sum_	linqext	Sum		sum	Body: self.sum()
+sum_by	linqext	Sum	sum_	map().sum()	C# Sum(selector) overload
+count_where	linqext	Count		filter().count()	C# Count(predicate) overload; crate has no plain `count` (uses Iterator::count)
+min_	linqext	Min		min	
+max_	linqext	Max		max	
+min_by_key_	linqext	MinBy	min_	min_by_key	Body: self.min_by_key(key_fn)
+max_by_key_	linqext	MaxBy	max_	max_by_key	Body: self.max_by_key(key_fn)
+average	linqext	Average			Selector-only; no no-arg form. No std equivalent
+first	linqext	First		next	Panics on empty
+first_or_default	linqext	FirstOrDefault	first	next	Body: self.next()
+first_where	linqext	FirstOrDefault	first	find	C# FirstOrDefault(predicate) overload
+last_	linqext	Last		last	Panics on empty
+last_or_default	linqext	LastOrDefault	last_	last	Implemented as fold(None,..), not Iterator::last
+last_where	linqext	LastOrDefault	last_	filter().last()	C# LastOrDefault(predicate) overload
+element_at	linqext	ElementAtOrDefault		nth	Body: Iterator::skip(self,index).next()
+element_at_strict	linqext	ElementAt	element_at	nth	Panics; the plain-named Rust method is the OrDefault one
+single	linqext	Single			Panics on 0 or 2+
+single_or_default	linqext	SingleOrDefault	single		Returns None on 0 OR 2+
+first_or	linqext	FirstOrDefault	first	next	C# FirstOrDefault(defaultValue), .NET 6+ (overload confirmed present)
+last_or	linqext	LastOrDefault	last_	last	C# LastOrDefault(defaultValue), .NET 6+ (overload confirmed present)
+single_or	linqext	SingleOrDefault	single		C# SingleOrDefault(defaultValue), .NET 6+; still panics on 2+
+element_at_or	linqext	ElementAtOrDefault	element_at	nth	C# has NO ElementAtOrDefault(index,defaultValue) overload - only (Int32) and (Index)
+default_if_empty	linqext	DefaultIfEmpty			C# DefaultIfEmpty(value) overload
+any_	linqext	Any		any	
+all_	linqext	All		all	
+contains_	linqext	Contains		any()	Body: self.any(|x| x == *value)
+inner_join_partial_eq	linqext	Join	inner_join		Escape hatch, O(n*m); supports asymmetric PartialEq keys. Renamed from join_ in W-12
+inner_join	linqext	Join			Hash-indexed default; eager (collects results into a Vec). Renamed from join in W-12
+group_join_partial_eq	linqext	GroupJoin	group_join		Escape hatch, O(n*m)
+group_join	linqext	GroupJoin			Hash-indexed default; eager
+group_by_key_partial_eq	linqext	GroupBy	group_by_key		Escape hatch, O(n*k)
+group_by_with_element	linqext	GroupBy	group_by_key		C# GroupBy(keySelector,elementSelector); K: PartialEq linear find, NOT hash-backed
+group_by_with_result	linqext	GroupBy	group_by_key		C# GroupBy(keySelector,resultSelector); K: PartialEq linear find, NOT hash-backed
+count_by_partial_eq	linqext	CountBy	count_by		Escape hatch, O(n*k)
+group_by_key	linqext	GroupBy			Hash-indexed default; first-appearance order. Renamed from group_by in W-12
+count_by	linqext	CountBy			.NET 9+; yields in HASH order, not insertion order
+aggregate_by	linqext	AggregateBy			.NET 9+; seed_fn(&K)->Acc matches the seedSelector overload. Hash order
+aggregate_by_partial_eq	linqext	AggregateBy	aggregate_by		Escape hatch, O(n*k)
+to_vec	linqext	ToList		collect	Body: self.collect()
+to_hashmap	linqext	ToDictionary		map().collect()	Last key wins on duplicates (C# ToDictionary throws)
+to_hashset	linqext	ToHashSet		collect	Body: self.collect()
+to_lookup	linqext	ToLookup			Returns the crate's Lookup type
+zip_	linqext	Zip		zip().map()	C# Zip(second,resultSelector) overload
+zip3	linqext	Zip	zip_	zip().zip().map()	C# has NO 3-sequence+resultSelector overload; Zip(first,second,third) returns tuples only
+for_each_	linqext			for_each	NOT a System.Linq.Enumerable method (0 hits on the class page); ForEach is List<T>.ForEach. `Do` is Rx/MoreLINQ
+append_item	linqext	Append		chain(once())	
+prepend_item	linqext	Prepend		once().chain()	
+is_empty_	linqext			next()	No C# operator; it is the expression !Any(). Body: self.next().is_none()
+index_	linqext	Index		enumerate	.NET 9+; body: self.enumerate()
+sequence_equal	linqext	SequenceEqual		eq	Iterator::eq is exactly this
+then_by	thenby	ThenBy			On OrderedQueryable via the ThenBy trait; pushes a comparator (ordered.rs:68)
+then_by_descending	thenby	ThenByDescending	then_by		
+range	free_fn	Range		(start..).take(n)	Body: (start..).take(count); i32-only (sources.rs:16)
+repeat	free_fn	Repeat		std::iter::repeat().take()	Body: std::iter::repeat(value).take(count)
+empty	free_fn	Empty		std::iter::empty	Body: std::iter::empty()
+Grouping::key	type_method				Accessor for the pub field `key`; corresponds to IGrouping<K,V>.Key, not an Enumerable method
+Grouping::elements	type_method				Accessor for the pub field `elements`; both field and method are public (grouping.rs:14,31)
+Grouping::into_elements	type_method			into_iter	IGrouping<K,V> is itself IEnumerable<V>
+Lookup::new	type_method				
+Lookup::insert	type_method				Made public so Lookup::default() is fillable; no C# counterpart (ILookup is read-only)
+Lookup::len	type_method				Corresponds to ILookup.Count
+Lookup::is_empty	type_method				
+Lookup::get	type_method				Corresponds to the ILookup this[key] indexer; O(1), returns &[] for a missing key
+Lookup::contains_key	type_method				Corresponds to ILookup.Contains(key)
+Lookup::groups	type_method				First-appearance order
+Lookup::into_groups	type_method			into_iter	
+

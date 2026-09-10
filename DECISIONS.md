@@ -401,11 +401,24 @@ seam, not the seam.
   45 of 75 names and 0 of 44 comparer overloads, and the flagship example passes
   only because its data is degenerate. Prose warnings about drift do not stop
   drift.
-- **Enforced by:** *(NOT YET IMPLEMENTED — `W-6`/`W-18`.)*
-  `#![doc = include_str!("README.md")]` so every README block is a doctest, plus
-  a generator and CI diff for every derived table. This is the highest-value
-  unbuilt gate in the file: `D-016` has already been violated twice, once in the
-  fix for its own violation.
+- **Enforced by:** **IMPLEMENTED** (`W-6`, `W-18`) — two mechanisms:
+  - `src/lib.rs` carries `#![doc = include_str!("../README.md")]`, so every
+    ```` ```rust ```` block in the README is a doctest CI runs. Two blocks that
+    stated their expected output in a *comment* — passing whether or not it was
+    true — now `assert_eq!`. Mutation-tested: changing one expected value fails
+    the build.
+  - `.github/scripts/gen-docs.py --check`, run in CI. It **derives** the public
+    surface from `src/`, cross-checks it against `.github/data/operator-map.tsv`
+    in both directions, cross-checks that file's C# column against
+    `.github/data/csharp-operators.tsv`, verifies every public method appears in
+    the README's API Reference, computes every count, and fails if the committed
+    README differs from what it generates.
+- **Vindicated three times over.** `D-016` was violated twice before this gate
+  existed, and a third time was found while building it: the README's
+  "75 operator names / 234 overloads / 44 comparer overloads" is the **.NET 11
+  preview** superset. The docs page ships every version's rows in one table and
+  filters client-side, so a row count returns the newest. The .NET 10 figures are
+  74 / 228 / 38 — now generated, and version-pinned by `TARGET_DOTNET`.
 
 ## D-017 — Document the deviations once, do not chase C# semantics
 - **Status:** SETTLED (2026-09-09)

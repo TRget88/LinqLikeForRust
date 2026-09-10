@@ -1,0 +1,76 @@
+name	overloads	comparer_overloads	category	is_static	dotnet_added	notes
+Aggregate	3	0	aggregation	no		immediate (not deferred). Seedless overload throws InvalidOperationException when source is empty; seeded overloads do not.
+AggregateBy	2	2	aggregation	no	net-9.0	deferred. Comparer param is optional-with-default (IEqualityComparer<TKey>? = null) so the doc lists 2 rows, both comparer-taking. Like GroupBy but folds each group instead of allocating a collection per group.
+All	1	0	quantifier	no		immediate. Returns true for an empty sequence.
+Any	2	0	quantifier	no		immediate. Overload with predicate and without.
+Append	1	0	concat	no	netcore-1.0	deferred. Single-element append, not sequence concat.
+AsEnumerable	1	0	conversion	no		identity cast to IEnumerable<T>; used to force the Enumerable overload over IQueryable. No Rust analogue needed.
+Average	20	0	aggregation	no		immediate. 20 overloads = 5 numeric types x {plain, nullable} x {no selector, selector}. Non-nullable overloads throw InvalidOperationException on empty; nullable ones return null. Can throw OverflowException.
+Cast	1	0	conversion	no		deferred. Extends non-generic IEnumerable. Throws InvalidCastException on a bad element. No safe Rust analogue.
+Chunk	1	0	partitioning	no	net-6.0	deferred. Throws ArgumentOutOfRangeException if size < 1. Yields TSource[] chunks; last chunk may be shorter.
+Concat	1	0	concat	no		deferred.
+Contains	2	1	quantifier	no		immediate.
+Count	2	0	aggregation	no		immediate. Int32; overflows for huge sequences (use LongCount).
+CountBy	1	1	aggregation	no	net-9.0	deferred. Comparer param is optional-with-default so only 1 doc row exists and it is comparer-taking. Yields KeyValuePair<TKey,int>.
+DefaultIfEmpty	2	0	element	no		deferred. Yields a one-element sequence when source is empty.
+Distinct	2	1	set	no		deferred. Hash-based (IEqualityComparer), not sort-based.
+DistinctBy	2	1	set	no	net-6.0	deferred. Comparer applies to the key, not the element.
+ElementAt	2	0	element	no		immediate. Throws ArgumentOutOfRangeException. Int32 and System.Index overloads (Index overload added net-6.0).
+ElementAtOrDefault	2	0	element	no		immediate. Int32 and System.Index overloads (Index overload added net-6.0). No throw.
+Empty	1	0	generation	yes		static generator on Enumerable; free function in Rust. Returns a cached empty sequence.
+Except	2	1	set	no		deferred. Set difference; buffers the second sequence.
+ExceptBy	2	1	set	no	net-6.0	deferred. Second sequence is IEnumerable<TKey>, not IEnumerable<TSource>.
+First	2	0	element	no		immediate. Throws InvalidOperationException when the source sequence is empty (or no element matches the predicate).
+FirstOrDefault	4	0	element	no		immediate. 4 overloads: {no predicate, predicate} x {no defaultValue, defaultValue}; the defaultValue pair was added net-6.0.
+FullJoin	2	2	joining	no	net-11.0	NOT IN .NET 10 - net-11.0 preview only. Excluded from the .NET 10 totals. Both overloads take a comparer (optional-with-default).
+GroupBy	8	4	grouping	no		deferred. 8 overloads = {key only, key+element, key+result, key+element+result} x {no comparer, comparer}. Yields IGrouping<TKey,TElement>.
+GroupJoin	2	1	joining	no		deferred. 2 overloads in net-10 (with and without comparer); net-11 adds a third, result-selector-less overload.
+Index	1	0	projection	no	net-9.0	deferred. Yields (int Index, TSource Item) tuples; equivalent to Rust Iterator::enumerate.
+InfiniteSequence	1	0	generation	yes	net-10.0	static generator on Enumerable; free function in Rust. Never terminates; T is INumber<T>-constrained (start, step).
+Intersect	2	1	set	no		deferred. Buffers the second sequence.
+IntersectBy	2	1	set	no	net-6.0	deferred. Second sequence is IEnumerable<TKey>.
+Join	2	1	joining	no		deferred. Inner (equi) join. 2 overloads in net-10 (with and without comparer); net-11 adds a third, result-selector-less overload. Renamed inner_join in this crate (W-12).
+Last	2	0	element	no		immediate. Throws InvalidOperationException when the source sequence is empty.
+LastOrDefault	4	0	element	no		immediate. 4 overloads; defaultValue pair added net-6.0.
+LeftJoin	2	1	joining	no	net-10.0	deferred. Added net-10.0. 2 overloads in net-10; net-11 adds a result-selector-less overload.
+LongCount	2	0	aggregation	no		immediate. Int64 counterpart of Count.
+Max	23	1	aggregation	no		immediate. 23 overloads = 10 numeric/nullable-numeric + 10 selector forms + generic no-arg + generic selector + IComparer overload (IComparer overload added net-6.0). Throws InvalidOperationException on empty for non-nullable value types; returns null for nullable/reference element types.
+MaxBy	2	1	aggregation	no	net-6.0	immediate. Returns the element, not the key. Comparer applies to the key.
+Min	23	1	aggregation	no		immediate. Same 23-overload shape as Max, including the net-6.0 IComparer overload. Same empty-sequence behaviour.
+MinBy	2	1	aggregation	no	net-6.0	immediate. Returns the element, not the key.
+OfType	1	0	filtering	no		deferred. Extends non-generic IEnumerable; filters by runtime type. No Rust analogue.
+Order	2	1	ordering	no	net-7.0	deferred, added net-7.0. Sorts by the element itself; stable.
+OrderBy	2	1	ordering	no		deferred. Stable sort (documented). Returns IOrderedEnumerable<T>, which is what makes ThenBy possible - a Rust port needs the same two-stage type.
+OrderByDescending	2	1	ordering	no		deferred. Stable sort. Returns IOrderedEnumerable<T>.
+OrderDescending	2	1	ordering	no	net-7.0	deferred, added net-7.0. Sorts by the element itself, descending.
+Prepend	1	0	concat	no	netcore-1.0	deferred. Single-element prepend.
+Range	1	0	generation	yes		static generator on Enumerable; free function in Rust. Throws ArgumentOutOfRangeException on negative count or overflow. Int32 only.
+Repeat	1	0	generation	yes		static generator on Enumerable; free function in Rust. Throws ArgumentOutOfRangeException on negative count. Bounded (count), unlike Rust iter::repeat.
+Reverse	2	0	ordering	no		deferred but buffers the entire source. 2 overloads in net-10: the classic IEnumerable<TSource> one and Reverse<TSource>(TSource[]) added net-10.0 to disambiguate from MemoryExtensions.Reverse.
+RightJoin	2	1	joining	no	net-10.0	deferred. Added net-10.0. 2 overloads in net-10; net-11 adds a result-selector-less overload.
+Select	2	0	projection	no		deferred. 2 overloads: selector and indexed selector.
+SelectMany	4	0	projection	no		deferred. 4 overloads = {selector, indexed selector} x {no result selector, result selector}.
+Sequence	1	0	generation	yes	net-10.0	static generator on Enumerable; free function in Rust. Added net-10.0. (start, endInclusive, step); T is INumber<T>-constrained. Throws ArgumentOutOfRangeException on a step that cannot reach the end.
+SequenceEqual	2	1	equality	no		immediate. Element-wise equality plus length equality.
+Shuffle	1	0	ordering	no	net-10.0	deferred, added net-10.0. Docs state randomization uses a non-cryptographically-secure RNG. Needs a source of randomness, so a zero-dependency Rust port cannot match it without an RNG.
+Single	2	0	element	no		immediate. Throws InvalidOperationException both when the sequence is empty and when it has more than one element.
+SingleOrDefault	4	0	element	no		immediate. Still throws InvalidOperationException when more than one element matches; only the empty case returns the default. 4 overloads; defaultValue pair added net-6.0.
+Skip	1	0	partitioning	no		deferred. Negative count is treated as zero.
+SkipLast	1	0	partitioning	no	netcore-2.0	deferred, added netcore-2.0. Buffers a window of count elements.
+SkipWhile	2	0	partitioning	no		deferred. 2 overloads: predicate and indexed predicate.
+Sum	20	0	aggregation	no		immediate. 20 overloads with the same shape as Average. Returns zero (not an error) for an empty sequence. Can throw OverflowException in a checked context.
+Take	2	0	partitioning	no		deferred. 2 overloads: Int32 count and System.Range (Range overload added net-6.0).
+TakeLast	1	0	partitioning	no	netcore-2.0	deferred, added netcore-2.0. Buffers a window of count elements.
+TakeWhile	2	0	partitioning	no		deferred. 2 overloads: predicate and indexed predicate.
+ThenBy	2	1	ordering	no		deferred. Extension on IOrderedEnumerable<T>, NOT on IEnumerable<T> - only callable after OrderBy/Order. Stable secondary sort.
+ThenByDescending	2	1	ordering	no		deferred. Extension on IOrderedEnumerable<T>, not on IEnumerable<T>.
+ToArray	1	0	conversion	no		immediate.
+ToDictionary	8	4	conversion	no		immediate. Throws ArgumentException on duplicate keys. 8 overloads in net-10; the KeyValuePair and ValueTuple source overloads were added net-8.0.
+ToHashSet	2	1	conversion	no	netcore-2.0	immediate, added netcore-2.0.
+ToList	1	0	conversion	no		immediate.
+ToLookup	4	2	conversion	no		immediate. Returns ILookup (one-to-many), unlike ToDictionary; duplicate keys are allowed and grouped.
+TryGetNonEnumeratedCount	1	0	aggregation	no	net-6.0	immediate, added net-6.0. Non-enumerating count probe via ICollection tests; typically O(1). Maps to Rust Iterator::size_hint, not to len().
+Union	2	1	set	no		deferred. Set union preserving first-seen order.
+UnionBy	2	1	set	no	net-6.0	deferred. Comparer applies to the key.
+Where	2	0	filtering	no		deferred. 2 overloads: predicate and indexed predicate.
+Zip	3	0	projection	no	netframework-4.0	deferred. 3 overloads in net-10: 2-sequence with result selector (netframework-4.0), 2-sequence tuple form (netcore-3.0), 3-sequence tuple form (net-6.0). Stops at the shortest sequence.

@@ -84,6 +84,44 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Added — the README is now executable and its tables are generated (W-6, W-18)
+
+`D-016` says any coverage count or C#-mapping table must be generated from the
+source and CI-diffed, never hand-written. It had been violated twice — and a
+third time was found while building the gate, in the sentence written to fix the
+second.
+
+- **`src/lib.rs` now carries `#![doc = include_str!("../README.md")]`.** Every
+  ```` ```rust ```` block in the README is a doctest CI runs (41 → 44 doctests).
+  Two blocks stated their expected output in a *comment*, so they passed whether
+  or not it was true; both now `assert_eq!`, mutation-tested to confirm they bite.
+- **The old `//!` crate-doc block is gone.** It was a hand-maintained second copy
+  of the crate's pitch and had already drifted — it claimed the operators are
+  "all lazy", which `group_by_key`, `union_`, `inner_join` and `group_join`
+  disprove.
+- **`.github/scripts/gen-docs.py`** derives the public surface from `src/`,
+  cross-checks it against `.github/data/operator-map.tsv` both ways, cross-checks
+  that file's C# column against `.github/data/csharp-operators.tsv`, verifies
+  every public method appears in the README's API Reference, computes every
+  count, and fails if the committed README differs. Wired into CI.
+- **The corrected figure.** The README claimed `System.Linq.Enumerable` has
+  "75 operator names across 234 overloads, 44 comparer overloads". That is the
+  **.NET 11 preview** superset: the docs page ships every version's rows in one
+  HTML table and filters client-side via `data-moniker`, so counting rows returns
+  the newest. Measured per version — net-8: 66/216/33, net-9: 69/220/36,
+  **net-10: 74/228/38**, net-11: 75/234/44. The README now says 74/228/38, of
+  which this crate implements 65, and the version is pinned in the generator.
+- **Ten `*_partial_eq` methods were public but in no API Reference table.** Added.
+- **Five relative links (`DECISIONS.md`, `AUDIT.md`, …) 404 on docs.rs** —
+  verified against the live 0.1.0 docs — and rustdoc does not warn about them
+  even under `-D rustdoc::all`. Now absolute GitHub URLs.
+
+### Fixed — six self-referential doc links (W-10 fallout)
+
+The W-10 rename left `distinct`, `distinct_by`, `except`, `intersect`, `union_`
+and `group_by_key` each telling the reader to "prefer this over" *itself*. Found
+mechanically, not by reading.
+
 ### Changed — hash-backed by default (W-10, breaking)
 
 `D-101` is settled: **`Eq + Hash` is the default bound.**

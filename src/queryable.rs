@@ -355,9 +355,11 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Returns distinct elements using a `HashSet` for O(1) lookup —
-    /// **prefer this** over [`distinct`](Self::distinct) when your item type
-    /// implements `Eq + Hash`. Equivalent semantics, O(n) rather than O(n²).
+    /// Returns distinct elements, hash-backed and O(n).
+    ///
+    /// Requires `Eq + Hash`; for element types that are only `PartialEq` —
+    /// `f64`, say — use [`distinct_partial_eq`](Self::distinct_partial_eq),
+    /// which is O(n²).
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
@@ -373,7 +375,8 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Returns distinct elements by a key selector, using a `HashSet`.
-    /// **Prefer this** over [`distinct_by`](Self::distinct_by) when the key
+    /// Requires `Eq + Hash` keys; for `PartialEq`-only keys use
+    /// [`distinct_by_partial_eq`](Self::distinct_by_partial_eq). When the key
     /// type implements `Eq + Hash`.
     fn distinct_by<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Self::Item>
     where
@@ -509,7 +512,6 @@ pub trait LinqExt: Iterator + Sized {
     /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for element types that
     /// are only `PartialEq` — `f64`, say — use
     /// [`except_partial_eq`](Self::except_partial_eq), which is O(n·m).
-    /// **Prefer this** over `except` when items implement `Eq + Hash`.
     fn except<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
@@ -523,7 +525,6 @@ pub trait LinqExt: Iterator + Sized {
     ///
     /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for `PartialEq`-only
     /// element types use [`intersect_partial_eq`](Self::intersect_partial_eq).
-    /// **Prefer this** over `intersect` when items implement `Eq + Hash`.
     fn intersect<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
@@ -537,7 +538,6 @@ pub trait LinqExt: Iterator + Sized {
     ///
     /// Hash-indexed, O(n + m). Requires `Eq + Hash`; for `PartialEq`-only
     /// element types use [`union_partial_eq`](Self::union_partial_eq).
-    /// **Prefer this** over `union_` when items implement `Eq + Hash`.
     fn union_<I2>(self, other: I2) -> impl Iterator<Item = Self::Item>
     where
         I2: IntoIterator<Item = Self::Item>,
@@ -1337,10 +1337,9 @@ pub trait LinqExt: Iterator + Sized {
     /// Hash-indexed, O(n). Requires `Eq + Hash + Clone` keys; for
     /// `PartialEq`-only keys use
     /// [`group_by_key_partial_eq`](Self::group_by_key_partial_eq), which is O(n·k).
-    /// **Prefer this** when keys implement `Eq + Hash + Clone`.
     ///
-    /// Groups are yielded in **insertion order of their first occurrence**
-    /// (same as `group_by_key`), not in hash order.
+    /// Groups are yielded in **insertion order of their first occurrence**,
+    /// not in hash order.
     fn group_by_key<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Grouping<K, Self::Item>>
     where
         K: Eq + std::hash::Hash + Clone,

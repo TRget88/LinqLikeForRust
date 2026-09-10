@@ -62,6 +62,15 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Format check
         run: cargo fmt --check
+      # D-016. The README's coverage figures and C#-mapping tables are
+      # generated from src/ plus .github/data/, and this fails if the committed
+      # README has drifted -- or if a method was renamed without updating the
+      # map. Three hand-written counts in this project have been wrong, one of
+      # them inside the fix for the previous one.
+      - name: Derived docs are current
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./.github/scripts/gen-docs.py --check
       - name: Docs (broken intra-doc links are errors)
         run: cargo doc --no-deps
         env:
