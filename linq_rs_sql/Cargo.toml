@@ -15,15 +15,10 @@ repository = "https://github.com/TRget88/LinqLikeForRust"
 # is your driver's job, so it needs no driver and no runtime.
 [dependencies]
 
-# linq_rs is a DEV-dependency only, so the seam's tests can prove that
-# `.to_memory()` hands back something the full LinqExt surface works on.
-# Dev-dependencies never enter a consumer's dependency graph -- measured
-# earlier in this project -- so D-020's "neither crate depends on the other"
-# still holds for anyone who actually uses either crate.
+# Deliberately none, including dev-dependencies. The cross-crate seam tests
+# live in the workspace's `seam-tests` crate (`publish = false`), because a
+# dev-dependency here would (a) make this manifest not actually
+# dependency-free and (b) force `linq_rs 0.2.0` to be published before this
+# crate could be published at all -- cargo strips a dev-dep's `path` but keeps
+# its `version`, turning it into a hard registry requirement. See D-024.
 [dev-dependencies]
-# The `version` is not redundant with the `path`: a path-only dev-dependency is
-# STRIPPED from the published manifest, which would leave `tests/seam.rs`
-# referencing a crate the tarball cannot resolve -- and D-013 keeps `tests/` in
-# the tarball precisely so the test count is checkable from the artifact.
-# It also fixes the publish order: `linq_rs 0.2.0` must be live first.
-linq_rs = { path = "..", version = "0.2" }

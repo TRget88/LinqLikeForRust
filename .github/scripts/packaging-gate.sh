@@ -96,9 +96,23 @@ if [ -f "$sib" ]; then
   # prove `.to_memory()` hands back something LinqExt works on; dev-deps never
   # enter a consumer's graph, so D-020's "neither depends on the other" holds
   # for anyone actually using either crate.
-  sd="$(cargo metadata --no-deps --format-version 1 \
-    | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='linq_rs_sql'][0]; print(','.join(d['name'] for d in p['dependencies'] if d['kind'] is None))")"
-  if [ -z "$sd" ]; then echo "linq_rs_sql runtime dependencies: none"; else err "linq_rs_sql gained a runtime dependency: ${sd}"; fi
+  # D-024: zero dependencies of EVERY kind, dev included. A dev-dependency does
+  # not reach consumers, but `cargo package` strips its `path` and keeps its
+  # `version`, which makes it a hard registry requirement at publish time and
+  # forces a publish order. It also makes the "no dependencies" claim false as
+  # written. Both published crates are checked; `seam-tests` is publish = false
+  # and is exempt by construction.
+  for pkg in linq_rs linq_rs_sql; do
+    sd="$(cargo metadata --no-deps --format-version 1 \
+      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${pkg}'][0]; print(','.join(sorted(d['name']+'('+(d['kind'] or 'normal')+')' for d in p['dependencies'])))")"
+    if [ -z "$sd" ]; then echo "${pkg} dependencies (all kinds): none"; else err "${pkg} gained a dependency: ${sd}"; fi
+  done
+  # And nothing that is publish = false may ever be published.
+  np="$(cargo metadata --no-deps --format-version 1 \
+    | python3 -c "import json,sys; print(','.join(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('publish') != []))")"
+  [ "$np" = "linq_rs,linq_rs_sql" ] || [ "$np" = "linq_rs_sql,linq_rs" ] \
+    || err "publishable packages changed: expected exactly linq_rs + linq_rs_sql, got: ${np}"
+  echo "publishable packages: linq_rs, linq_rs_sql (seam-tests is publish = false)"
 else
   err "linq_rs_sql/Cargo.toml is missing — D-020 split the SQL builder into it"
 fi

@@ -36,19 +36,44 @@ rustup run "$MSRV_TC" rustc --version \
 # Package the way a publisher does -- with stable, not with the MSRV. Packaging
 # on the MSRV would generate a lockfile the MSRV can obviously read, which is
 # exactly the tautology that let the defect through.
+# `cargo package --workspace` packages `publish = false` members too, even
+# though `cargo publish --workspace` correctly skips them. Ask cargo which
+# packages actually ship rather than assuming, or this gate reports on an
+# artifact no consumer will ever see.
+PUBLISHABLE="$(cargo metadata --no-deps --format-version 1 \
+  | python3 -c "import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('publish') != []))")"
+[ -n "$PUBLISHABLE" ] || { echo "FAIL: no publishable packages found"; exit 1; }
+echo "publishable packages: ${PUBLISHABLE}"
+
 echo
 echo "=== packaging with stable (as a real publish does) ==="
 rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
-rustup run stable cargo package --workspace --allow-dirty 2>&1 | grep -E "Packaged|error"
+pkg_args=(); for p in $PUBLISHABLE; do pkg_args+=(-p "$p"); done
+rustup run stable cargo package "${pkg_args[@]}" --allow-dirty 2>&1 | grep -E "Packaged|error"
+
+# Honour CARGO_TARGET_DIR -- globbing a hard-coded `target/` silently reads
+# whatever stale .crate files happen to be there when it is set, which is a
+# gate that reports on the wrong artifact.
+TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
+PKG_DIR="${TARGET_DIR}/package"
+shopt -s nullglob
+crates=("${PKG_DIR}"/*.crate)
+shopt -u nullglob
+[ "${#crates[@]}" -gt 0 ] || { echo "FAIL: no .crate files in ${PKG_DIR}"; exit 1; }
+echo "reading tarballs from ${PKG_DIR}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-for c in target/package/*.crate; do tar -xzf "$c" -C "$WORK"; done
+for c in "${crates[@]}"; do tar -xzf "$c" -C "$WORK"; done
 
 fail=0
 echo
 for d in "$WORK"/*/; do
   pkg="$(basename "$d")"
+  # Skip anything left over in target/package/ that is not a publishable crate
+  # -- stale artifacts there would otherwise be silently graded as if they ship.
+  name="$(awk -F'"' '/^name *=/ {print $2; exit}' "${d}Cargo.toml")"
+  case " ${PUBLISHABLE} " in *" ${name} "*) ;; *) echo "skipping ${pkg} (not publishable)"; continue ;; esac
   lock="${d}Cargo.lock"
   [ -f "$lock" ] || { echo "FAIL: ${pkg} ships no Cargo.lock"; fail=1; continue; }
   ver="$(awk -F'= *' '/^version *=/ {gsub(/[^0-9]/,"",$2); print $2; exit}' "$lock")"
@@ -59,14 +84,9 @@ for d in "$WORK"/*/; do
     continue
   fi
 
-  # linq_rs_sql dev-depends on `linq_rs = "0.2"`, which is not on crates.io
-  # until linq_rs publishes. Point it at the sibling TARBALL -- not at the
-  # working tree, so this still tests the packaged artifact.
-  if grep -q '^name = "linq_rs_sql"' "${d}Cargo.toml"; then
-    sibling="$(ls -d "$WORK"/linq_rs-*/ 2>/dev/null | head -1)"
-    [ -n "$sibling" ] || { echo "FAIL: no linq_rs tarball to patch against"; fail=1; continue; }
-    printf '\n[patch.crates-io]\nlinq_rs = { path = "%s" }\n' "${sibling%/}" >> "${d}Cargo.toml"
-  fi
+  # Both published crates have zero dependencies of any kind (D-024), so every
+  # tarball builds fully offline. If this ever needs a `[patch.crates-io]` to
+  # get through, a dependency crept back in.
 
   if (cd "$d" && rustup run "$MSRV_TC" cargo build --lib --offline 2>&1 | tail -3); then
     echo "  builds on ${MSRV_TC}"

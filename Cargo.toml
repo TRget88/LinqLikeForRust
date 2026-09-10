@@ -2,7 +2,7 @@
 # dependency. Neither crate depends on the other -- see DECISIONS.md D-205 and
 # the split recorded in D-020.
 [workspace]
-members = ["linq_rs_sql"]
+members = ["linq_rs_sql", "seam-tests"]
 
 [package]
 name = "linq_rs"

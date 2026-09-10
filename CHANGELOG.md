@@ -84,6 +84,35 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Changed — zero dependencies now means zero, dev included (D-024)
+
+`linq_rs` never had a dependency of any kind. `linq_rs_sql` had one:
+`linq_rs = { path = "..", version = "0.2" }` under `[dev-dependencies]`, added
+so `tests/seam.rs` could resolve `linq_rs::LinqExt` from the published tarball.
+
+It is gone. Both published crates now declare **no dependencies of any kind**.
+
+- The dev-dependency existed for exactly one import in exactly two files
+  (`tests/seam.rs`, `examples/seam.rs`). Both moved verbatim into a new
+  workspace member, `seam-tests`, which is `publish = false` and therefore free
+  to depend on both crates by path.
+- **It was coupling the two crates' release schedules.** `cargo package` strips
+  a dev-dependency's `path` and keeps its `version`, turning it into a hard
+  registry requirement — so `cargo publish -p linq_rs_sql` failed outright
+  until `linq_rs 0.2.0` was live. Verified gone: that command now succeeds with
+  `linq_rs 0.2.0` not on crates.io. The two crates can be published in any
+  order, together or years apart.
+- It also removed the `[patch.crates-io]` special case `msrv-tarball.sh` needed
+  to build the sibling's tarball offline. Every tarball now builds `--offline`
+  with no help.
+- Test count unchanged: 182 / 53 / 235.
+
+The packaging gate previously checked `kind is None` — runtime dependencies
+only — which is precisely why a dev-dependency slipped past it. It now asserts
+zero dependencies across **all** kinds for both published crates, and that the
+publishable set is exactly `linq_rs` + `linq_rs_sql`. Both verified to fail when
+the dev-dep is restored and when `publish = false` is removed.
+
 ### Fixed — the tarball could not build on its own declared MSRV (D-023)
 
 `linq_rs 0.2.0` was one command from publishing an artifact that does not

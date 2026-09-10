@@ -451,8 +451,11 @@ seam, not the seam.
      `tests/` at all (the executed-test count checkable from the artifact, not
      just claimed in a README).
 - **Ruling:** the sibling carries its own byte-identical licence texts; its
-  README uses no parent-relative links; its dev-dependency is
-  `{ path = "..", version = "0.2" }`.
+  README uses no parent-relative links.
+- **The dev-dependency clause is superseded by `D-024`.** This decision made it
+  `{ path = "..", version = "0.2" }` so the shipped tests could resolve. `D-024`
+  removes the dev-dependency entirely instead, which solves the same problem
+  without coupling the two crates' publish order.
 - **Consequence, accepted:** the version pin imposes a publish **order** —
   `linq_rs 0.2.0` must be live on crates.io before `linq_rs_sql` can be packaged
   or published at all. That order is the natural one anyway. Verified by probe
@@ -473,6 +476,41 @@ seam, not the seam.
   and (for **both** READMEs) that every relative link resolves to something in
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
+
+## D-024 — zero dependencies means zero, dev-dependencies included
+- **Status:** SETTLED (2026-09-10) — implemented.
+- **Ruling:** `linq_rs` and `linq_rs_sql` each declare **no dependencies of any
+  kind**. Cross-crate tests live in `seam-tests`, a workspace member with
+  `publish = false` that is free to depend on both by path because nothing ever
+  uploads it.
+- **What it replaces.** `D-022` gave `linq_rs_sql` the dev-dependency
+  `linq_rs = { path = "..", version = "0.2" }` so `tests/seam.rs` could resolve
+  from the published tarball. That reasoning was sound and the conclusion was
+  still wrong, for two reasons the owner named:
+  1. **The crate advertises "no dependencies" and had one.** A dev-dependency
+     never enters a consumer's graph, so the claim was defensible — but it was
+     defensible rather than simply true, and the manifest is what people read.
+  2. **It forced a publish order.** `cargo package` strips a dev-dep's `path`
+     and keeps its `version`, turning it into a hard registry requirement, so
+     `cargo publish -p linq_rs_sql` failed outright until `linq_rs 0.2.0` was
+     live. Two independent crates were coupled by a line that served two test
+     files.
+- **What it cost:** nothing measurable. The dev-dependency existed for exactly
+  one import, `use linq_rs::LinqExt;`, in exactly two files
+  (`tests/seam.rs`, `examples/seam.rs`). Both moved verbatim. Test count is
+  unchanged at 182 / 53 / 235, and the seam is still exercised on every CI run.
+- **Verified:** `cargo publish --dry-run -p linq_rs_sql` now succeeds with
+  `linq_rs 0.2.0` **not** on crates.io — the coupling is gone, not hidden. It
+  also removed the `[patch.crates-io]` special case `msrv-tarball.sh` needed to
+  build the sibling's tarball offline.
+- **Forbids:** any dependency, of any kind, in either published crate; making
+  `seam-tests` publishable.
+- **Enforced by:** `packaging-gate.sh` — asserts each published crate has zero
+  dependencies across **all** kinds (not just `kind is None`, which is what let
+  the dev-dep through), and that the set of publishable packages is exactly
+  `linq_rs` + `linq_rs_sql`. Both verified to fail when the dev-dep is restored
+  and when `publish = false` is removed. `msrv-tarball.sh` additionally builds
+  every tarball `--offline`, which cannot pass if a dependency returns.
 
 ## D-023 — the tarball is the artifact; gate that, not the repo
 - **Status:** SETTLED (2026-09-10) — fixed and gated.

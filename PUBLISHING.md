@@ -53,39 +53,37 @@ exists.
 crate manually, first"`. Move to it afterwards if you want to stop holding a
 long-lived token.
 
-## Order is not optional, and cargo enforces it
+## Order no longer matters
 
-`linq_rs_sql` dev-depends on `linq_rs = { path = "..", version = "0.2" }`
-(`D-022`). `cargo package` strips the `path` and keeps the `version`, turning it
-into a hard registry requirement. So **`cargo publish -p linq_rs_sql` fails
-until `linq_rs 0.2.0` is live**:
+Both crates have **zero dependencies of any kind** (`D-024`), so neither blocks
+the other. Publish them in any order, together or months apart. Verified:
+`cargo publish --dry-run -p linq_rs_sql` succeeds with `linq_rs 0.2.0` not yet
+on crates.io.
+
+This was not always true. Until 2026-09-10 the sibling dev-depended on
+`linq_rs = { version = "0.2" }`, and because `cargo package` strips a dev-dep's
+`path` but keeps its `version`, `linq_rs_sql` could not be packaged at all until
+`linq_rs 0.2.0` was live. If that error ever returns —
 
 ```
-error: failed to prepare local package for uploading
-Caused by: failed to select a version for the requirement `linq_rs = "^0.2"`
-  candidate versions found which didn't match: 0.1.0
+failed to select a version for the requirement `linq_rs = "^0.2"`
 ```
 
-That is expected, not a defect.
-
-**`--workspace` is the exception.** `cargo publish --dry-run --workspace`
-succeeds today, because cargo builds a temporary local overlay registry so
-members resolve against their siblings. It is the only meaningful pre-flight
-before anything is published.
+— a dependency has crept back in; `packaging-gate.sh` should have caught it.
 
 ## Steps
 
 Run everything from the repo root.
 
-### 1. Push the branch — do this first, today
+### 1. Push the branch — DONE 2026-09-10
 
 ```bash
 git push -u origin feature/v0.2.0-remediation
 ```
 
-31 commits exist on no remote ref, and they contain the entire `linq_rs_sql`
-crate. Neither remote branch contains a single `linq_rs_sql` path. Nothing
-remote could rebuild this.
+`origin/feature/v0.2.0-remediation` now exists and CI passed on it (all four
+jobs; the `1.0 release gate` job correctly skips on a non-`v1.*` ref). Before
+this the work existed only on one disk.
 
 ### 2. Land it on `main`
 
@@ -131,9 +129,10 @@ shell history. It is stored **unencrypted** at `~/.cargo/credentials.toml`.
 cargo publish --dry-run --workspace
 ```
 
-Expect `Packaged 27 files` for `linq_rs` and `Packaged 21 files` for
-`linq_rs_sql`, each followed by `warning: aborting upload due to dry run`. If
-only `linq_rs` is mentioned, you dropped `--workspace`.
+Expect both crates packaged, each followed by `warning: aborting upload due to
+dry run`. `seam-tests` is `publish = false` and is silently skipped — if it
+ever appears here, something removed that line. If only `linq_rs` is mentioned,
+you dropped `--workspace`.
 
 ### 6. Publish `linq_rs 0.2.0` — IRREVERSIBLE
 
@@ -146,27 +145,19 @@ the default members and silently publishes `linq_rs` alone — verified: the
 dry-run prints `Packaging linq_rs v0.2.0` with no mention of the sibling, and
 exits 0.
 
-### 7. Confirm it reached the index
-
-```bash
-curl -sS https://index.crates.io/li/nq/linq_rs | tail -1
-```
-
-The last line should be a JSON record containing `"vers":"0.2.0"`. Do not start
-step 8 before this returns.
-
-### 8. Publish `linq_rs_sql 0.1.0` — IRREVERSIBLE, and this claims the name
+### 7. Publish `linq_rs_sql 0.1.0` — IRREVERSIBLE, and this claims the name
 
 ```bash
 cargo publish -p linq_rs_sql
 ```
 
-`cargo publish --workspace` would do steps 6 and 8 in one correctly-ordered
-invocation, but multi-package publishing is explicitly **non-atomic**: per the
-Cargo 1.90 changelog, a server-side error leaves the workspace partially
-published. Sequential gives a clean failure boundary.
+Order is free (see above), so this can equally go first if all you want is to
+claim the name. `cargo publish --workspace` would do both in one invocation,
+but multi-package publishing is explicitly **non-atomic**: per the Cargo 1.90
+changelog, a server-side error leaves the workspace partially published.
+Sequential gives a clean failure boundary.
 
-### 9. Yank `0.1.0`
+### 8. Yank `0.1.0`
 
 ```bash
 cargo yank --version 0.1.0 linq_rs
@@ -177,12 +168,12 @@ Only now — yanking earlier leaves the crate with no usable version in between.
 that turned every unqualified `.skip(n)` in an importing module into a compile
 error (`D-009`, `AUDIT.md` A-3).
 
-### 10. Flip the README note
+### 9. Flip the README note
 
 `README.md` says `0.1.0` "is being yanked … update this note to 'yanked' once
 that has run, **not before**." Now, and only now.
 
-### 11. Tag per crate
+### 10. Tag per crate
 
 ```bash
 git tag -a linq_rs-v0.2.0 -m "linq_rs 0.2.0" && git tag -a linq_rs_sql-v0.1.0 -m "linq_rs_sql 0.1.0"
@@ -196,7 +187,7 @@ member is `0.1.0` — so an unprefixed tag is ambiguous from the first release.
 This is what tokio (`tokio-1.53.1`, `tokio-util-0.7.19`) and axum
 (`axum-v0.8.9`) do.
 
-### 12. Verify ownership landed
+### 11. Verify ownership landed
 
 ```bash
 curl -sS -A "your-email@example.com" https://crates.io/api/v1/crates/linq_rs_sql/owners

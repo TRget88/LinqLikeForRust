@@ -9,6 +9,11 @@ version = "0.2.0"
 [[package]]
 name = "linq_rs_sql"
 version = "0.1.0"
+
+[[package]]
+name = "seam-tests"
+version = "0.0.0"
 dependencies = [
  "linq_rs",
+ "linq_rs_sql",
 ]
