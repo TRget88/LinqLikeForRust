@@ -51,7 +51,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Build
-        run: cargo build --all-targets
+        run: cargo build --workspace --all-targets
       # Runs --all-targets AND --doc, sums the executed test count, and fails if
       # it is zero or below the committed floor. Exit status alone is not the
       # gate -- see the script header.
@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: ./.github/scripts/test-count-floor.sh
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Format check
         run: cargo fmt --check
       # D-016. The README's coverage figures and C#-mapping tables are
@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: ./.github/scripts/gen-docs.py --check
       - name: Docs (broken intra-doc links are errors)
-        run: cargo doc --no-deps
+        run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
       # D-009 / D-012. A ruling in DECISIONS.md that is checked by nothing is a
@@ -150,7 +150,7 @@ jobs:
             *) echo "FAIL: expected rustc 1.65.x, got: $v"; exit 1 ;;
           esac
       - name: Build on MSRV
-        run: cargo build --all-targets
+        run: cargo build --workspace --all-targets
       # Same gate as the stable job, not a bare `cargo test`. `--all-targets`
       # alone excludes doctests, so the MSRV claim would cover no documented
       # example -- and an ungated `cargo test` is the exact no-op this workflow

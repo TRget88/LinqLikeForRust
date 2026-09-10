@@ -1,3 +1,9 @@
+# The root package is also the workspace root; `linq_rs_sql` is a sibling, not a
+# dependency. Neither crate depends on the other -- see DECISIONS.md D-205 and
+# the split recorded in D-020.
+[workspace]
+members = ["linq_rs_sql"]
+
 [package]
 name = "linq_rs"
 version = "0.2.0"

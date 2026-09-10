@@ -84,6 +84,42 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Added — `linq_rs_sql`, a sibling crate (D-020)
+
+The typed SQL query builder now ships, as its own crate in the same workspace.
+**Neither crate depends on the other**, and both remain dependency-free.
+
+```rust
+use linq_rs_sql::*;
+linq_rs_sql::table! { employees (id) { id -> Integer, salary -> Integer } }
+
+let q = employees::table().filter(employees::salary.gt(100_000)).to_sql();
+// q.sql    == "SELECT * FROM employees WHERE (salary > ?)"
+// q.params == [Integer(100000)]
+```
+
+Columns and their types are declared once and checked by the compiler
+thereafter; values are always bound, never interpolated; identifiers can only
+come from the `table!` declaration.
+
+**Why a sibling and not a module.** `LinqExt::where_` and `sql::filter` mean the
+same thing, and one crate with two names for one concept is `AUDIT.md`'s top
+finding (A-1), forbidden by `D-205`. **Why not left on a branch:** the value is
+real, and keeping working code unreleased to protect a thesis that is not built
+yet is a bad trade. Two crates with one vocabulary each beats one crate with two.
+
+It does **not** execute anything — `to_sql()` returns a string and its
+parameters for whatever driver you already use. It is intended to become the
+rendering backend for the two-interpreter seam (`D-002`), not a competitor to it.
+
+Both gates were extended rather than left pointing at one crate:
+`test-count-floor.sh` now counts `--workspace` (a bare `cargo test` at the root
+would have silently skipped the sibling's 32 tests — the same "exit 0 having run
+nothing" failure it exists to prevent, one directory over), and
+`packaging-gate.sh` asserts the sibling's licence, `repository` and empty
+dependency list. Running strict rustdoc over the SQL code for the first time
+also turned up two latent dangling doc links, now fixed.
+
 ### Fixed — the documentation prose had drifted (D-016)
 
 The *generated* blocks were gated from the start. The paragraphs around them

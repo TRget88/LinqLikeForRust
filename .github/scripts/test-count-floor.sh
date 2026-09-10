@@ -21,6 +21,10 @@
 #   - We do NOT fail on an individual "running 0 tests" line. The lib target
 #     legitimately has no unit tests (every test is an integration test or a
 #     doctest), so that line is expected there.
+#   - `--workspace`, not just the root package. The repository grew a sibling
+#     crate (`linq_rs_sql`), and a bare `cargo test` at the root would silently
+#     ignore its 32 tests -- which is the same "exit 0 having run nothing"
+#     failure this gate exists to prevent, one directory over.
 #   - We enforce a floor PER BUCKET, not one sum. `--all-targets` EXCLUDES
 #     doctests and `--doc` is the only way to run them, so a single total would
 #     let one bucket collapse while the other grew -- and the historical bug was
@@ -33,9 +37,9 @@ set -euo pipefail
 
 # Per-bucket floors. Keep them in this file only -- never restate a count in a
 # .md, or it becomes a second copy of the truth (D-016).
-FLOOR_ALL_TARGETS=141
-FLOOR_DOCTESTS=44
-FLOOR_TOTAL=185
+FLOOR_ALL_TARGETS=169
+FLOOR_DOCTESTS=48
+FLOOR_TOTAL=217
 
 total=0
 fail=0
@@ -64,8 +68,8 @@ run_and_count() {
   total=$((total + n))
 }
 
-run_and_count "all-targets" cargo test --all-targets
-run_and_count "doctests"    cargo test --doc
+run_and_count "all-targets" cargo test --workspace --all-targets
+run_and_count "doctests"    cargo test --workspace --doc
 
 echo "======================================================"
 

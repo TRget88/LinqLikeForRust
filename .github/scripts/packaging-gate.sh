@@ -11,6 +11,8 @@
 
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
 fail=0
 err() { echo "FAIL: $*"; fail=1; }
 
@@ -76,6 +78,26 @@ DECISIONS.md
 LICENSE-MIT
 LICENSE-APACHE
 REQUIRED
+
+echo
+echo "=== sibling crate manifest (D-020) ==="
+sib="$ROOT/linq_rs_sql/Cargo.toml"
+if [ -f "$sib" ]; then
+  sib_meta() {
+    (cd "$ROOT/linq_rs_sql" && cargo metadata --no-deps --format-version 1 \
+      | python3 -c "import json,sys; print(json.load(sys.stdin)['packages'][0].get('$1') or '')")
+  }
+  sl="$(sib_meta license)"; sr="$(sib_meta repository)"
+  echo "linq_rs_sql license = '${sl}', repository = '${sr}'"
+  [ "$sl" = "MIT OR Apache-2.0" ] || err "linq_rs_sql license must match the workspace ('MIT OR Apache-2.0'), got '${sl}'"
+  [ -n "$sr" ] || err "linq_rs_sql has no repository field"
+  # It must stay dependency-free for the same reason its sibling does.
+  sd="$(cd "$ROOT/linq_rs_sql" && cargo metadata --no-deps --format-version 1 \
+    | python3 -c "import json,sys; print(','.join(d['name'] for d in json.load(sys.stdin)['packages'][0]['dependencies']))")"
+  if [ -z "$sd" ]; then echo "linq_rs_sql dependencies: none"; else err "linq_rs_sql gained dependencies: ${sd}"; fi
+else
+  err "linq_rs_sql/Cargo.toml is missing — D-020 split the SQL builder into it"
+fi
 
 echo
 echo "=== source invariants (D-001, D-003, D-004) ==="

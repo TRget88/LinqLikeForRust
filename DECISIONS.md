@@ -376,6 +376,32 @@ seam, not the seam.
   that no longer exists — the second check was added because the cut left 32
   such rows behind.
 
+## D-020 — The SQL builder ships as a sibling crate
+- **Status:** SETTLED (2026-09-10) — done.
+- **Ruling:** the typed SQL query builder lives in **`linq_rs_sql`**, a separate
+  crate in the same workspace. Neither crate depends on the other.
+- **Why not inside `linq_rs`:** `D-205` forbids two vocabularies for one
+  concept in a single crate, and that is exactly what it would have been —
+  `LinqExt::where_` and `sql::filter` mean the same thing with no value passing
+  between them. That was `AUDIT.md`'s top finding (**A-1**).
+- **Why not left on a branch:** because the value is real and holding it cost
+  users something. It is a compile-time-checked column model with bound
+  parameters throughout — a genuine improvement over SQL in string literals, and
+  the readability argument that motivates EF in the first place. Keeping working
+  code unreleased to protect a thesis that is not built yet is a bad trade. Two
+  crates with one vocabulary each is a better thing to hand someone than one
+  crate with two.
+- **Not a competitor to `D-002`.** `linq_rs_sql` is intended to become the
+  *rendering backend* for the two-interpreter seam, not an alternative to it.
+  When `W-20` lands, a `Query<T>` renders through this crate.
+- **Forbids:** either crate depending on the other, and either gaining a
+  dependency. Both are dependency-free and stay that way.
+- **Enforced by:** **IMPLEMENTED** — `packaging-gate.sh` asserts the sibling's
+  licence matches, its `repository` is set, and its dependency list is empty;
+  `test-count-floor.sh` now counts `--workspace`, so the sibling's 32 tests are
+  gated rather than silently skipped; CI builds, clippies and documents the
+  whole workspace.
+
 ## D-014 — This file is the single source of truth
 - **Status:** SETTLED (2026-09-09)
 - **Ruling:** Scope, naming, semantics and dependency decisions live here and

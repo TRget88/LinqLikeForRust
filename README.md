@@ -270,6 +270,23 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 
 ---
 
+## Querying a database
+
+**This crate does not touch a database.** It has no driver, no connection, and
+no dependencies; it runs over in-memory iterators.
+
+Its sibling [`linq_rs_sql`](linq_rs_sql/) builds SQL — compile-time-checked
+columns, bound parameters, no interpolation — and hands you a string plus its
+parameters for whatever driver you already use. The two vocabularies are
+deliberately separate: this crate says `where_`, that one says `filter`, and no
+value passes between them today.
+
+Joining them is the stated next step: one query value with two interpreters, so
+the same expression can run over a `Vec` in a unit test and render to SQL in
+production. No Rust library offers that today. It is tracked as `D-002` in
+`DECISIONS.md`, and the operator surface here was cut to fit it (`D-019`) — an
+operator earns its place only if it could become a SQL clause.
+
 ## Overlap with `std::iter`
 
 <!-- BEGIN GENERATED: std-overlap -->

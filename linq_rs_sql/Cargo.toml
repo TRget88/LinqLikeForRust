@@ -1,0 +1,18 @@
+[package]
+name = "linq_rs_sql"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.65"
+description = "A typed SQL query builder — compile-time checked columns, bound parameters, no driver and no dependencies"
+license = "MIT OR Apache-2.0"
+keywords = ["sql", "query", "builder", "typed"]
+categories = ["database"]
+readme = "README.md"
+documentation = "https://docs.rs/linq_rs_sql"
+repository = "https://github.com/TRget88/LinqLikeForRust"
+
+# Deliberately none, like its sibling. This crate builds SQL text; executing it
+# is your driver's job, so it needs no driver and no runtime.
+[dependencies]
+
+[dev-dependencies]
