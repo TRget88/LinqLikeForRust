@@ -90,8 +90,8 @@ prepend_item	linqext	Prepend		once().chain()
 is_empty_	linqext			next()	No C# operator; it is the expression !Any(). Body: self.next().is_none()
 index_	linqext	Index		enumerate	.NET 9+; body: self.enumerate()
 sequence_equal	linqext	SequenceEqual		eq	Iterator::eq is exactly this
-then_by	thenby	ThenBy			On OrderedQueryable via the ThenBy trait; pushes a comparator (ordered.rs:68)
-then_by_descending	thenby	ThenByDescending	then_by		
+OrderedQueryable::then_by	type_method	ThenBy			On OrderedQueryable via the ThenBy trait; pushes a comparator (ordered.rs:68)
+OrderedQueryable::then_by_descending	type_method	ThenByDescending	OrderedQueryable::then_by		
 range	free_fn	Range		(start..).take(n)	Body: (start..).take(count); i32-only (sources.rs:16)
 repeat	free_fn	Repeat		std::iter::repeat().take()	Body: std::iter::repeat(value).take(count)
 empty	free_fn	Empty		std::iter::empty	Body: std::iter::empty()
@@ -106,3 +106,8 @@ Lookup::get	type_method				Corresponds to the ILookup this[key] indexer; O(1), r
 Lookup::contains_key	type_method				Corresponds to ILookup.Contains(key)
 Lookup::groups	type_method				First-appearance order
 Lookup::into_groups	type_method			into_iter	
+OrderedQueryable::then_by_with	type_method				Comparator form of then_by, for PartialOrd-only keys (W-13)
+Grouping::into_parts	type_method				Takes key and elements out at once; the fields are private (W-15)
+order_by_with	linqext	OrderBy	order_by	sort_by	Comparator form; C# OrderBy accepts double, order_by binds K: Ord (W-13)
+min_by_	linqext	Min	min_	min_by	Comparator form for PartialOrd-only keys (W-13)
+max_by_	linqext	Max	max_	max_by	Comparator form; ties keep the LAST maximum, unlike C# MaxBy (W-13)

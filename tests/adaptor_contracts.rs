@@ -128,3 +128,140 @@ fn rpitit_returns_cannot_be_fused() {
     let n = vec![1, 1, 2].into_iter().distinct().count();
     assert_eq!(n, 2);
 }
+
+// ── Bound relaxations (E-8, E-9) ─────────────────────────────────────────────
+
+#[test]
+fn concat_works_mid_chain_and_across_container_types() {
+    // E-8. The old bound was `I2: IntoIterator<IntoIter = Self>`, which forced
+    // the argument's iterator type to be *identical* to the receiver's. Any
+    // closure-carrying adaptor upstream made that impossible, because no two
+    // closures share a type -- so `concat_` could not be used mid-chain at all,
+    // which is the whole point of a fluent API.
+    let v: Vec<i32> = vec![1, 2, 3]
+        .into_iter()
+        .where_(|x| *x > 1)
+        .concat_(vec![9, 10])
+        .collect();
+    assert_eq!(v, [2, 3, 9, 10]);
+
+    // Across container types: array + Vec used to fail with E0271.
+    let mixed: Vec<i32> = [1, 2].into_iter().concat_(vec![3, 4]).collect();
+    assert_eq!(mixed, [1, 2, 3, 4]);
+
+    // And chained after another adaptor on both sides.
+    let both: Vec<i32> = (1..=3)
+        .select(|x| x * 10)
+        .concat_((7..=8).where_(|x| *x == 8))
+        .collect();
+    assert_eq!(both, [10, 20, 30, 8]);
+}
+
+#[test]
+fn select_many_accepts_any_into_iterator() {
+    // E-9. `select_many` bound `J: Iterator` while `zip_` bound
+    // `J: IntoIterator` -- an internal inconsistency that forced a stray
+    // `.into_iter()` inside the closure for the direct C# translation.
+    #[derive(Clone)]
+    struct Person {
+        orders: Vec<&'static str>,
+    }
+    let people = vec![
+        Person {
+            orders: vec!["a", "b"],
+        },
+        Person { orders: vec!["c"] },
+    ];
+    // No `.into_iter()` inside the closure.
+    let all: Vec<&str> = people.into_iter().select_many(|p| p.orders).collect();
+    assert_eq!(all, ["a", "b", "c"]);
+
+    // Arrays and ranges work too.
+    let nested: Vec<i32> = vec![1, 2]
+        .into_iter()
+        .select_many(|x| [x, x * 10])
+        .collect();
+    assert_eq!(nested, [1, 10, 2, 20]);
+}
+
+// ── Ordering and grouping API shape (W-13, W-14, W-15) ───────────────────────
+
+#[test]
+fn float_keys_can_be_sorted() {
+    // W-13. `order_by` binds `K: Ord`, so an f64 key does not compile, and the
+    // crate ships no IComparer equivalent -- there was no way to sort by a
+    // float at all. C# `OrderBy` accepts `double`.
+    #[derive(Debug, PartialEq)]
+    struct Item {
+        name: &'static str,
+        price: f64,
+    }
+    let items = vec![
+        Item {
+            name: "b",
+            price: 2.5,
+        },
+        Item {
+            name: "a",
+            price: 1.0,
+        },
+        Item {
+            name: "c",
+            price: 2.5,
+        },
+    ];
+    let names: Vec<&str> = items
+        .into_iter()
+        .order_by_with(|x, y| x.price.total_cmp(&y.price))
+        .then_by_with(|x, y| x.name.cmp(y.name))
+        .select(|i| i.name)
+        .to_vec();
+    assert_eq!(names, ["a", "b", "c"]);
+
+    let prices = vec![3.5f64, 1.25, 2.0];
+    assert_eq!(
+        prices.clone().into_iter().min_by_(f64::total_cmp),
+        Some(1.25)
+    );
+    assert_eq!(prices.into_iter().max_by_(f64::total_cmp), Some(3.5));
+}
+
+#[test]
+fn ordered_queryable_is_an_iterator() {
+    // W-14. It used to implement only IntoIterator, so every sorting chain
+    // needed a manual `.into_iter()` hop and `then_by` needed a second import.
+    let v = vec![("b", 2), ("a", 2), ("c", 1)];
+
+    // LinqExt applies directly -- no `.into_iter()`, no `ThenBy` import.
+    let names: Vec<&str> = v
+        .clone()
+        .into_iter()
+        .order_by(|t| t.1)
+        .then_by(|t| t.0)
+        .select(|t| t.0)
+        .to_vec();
+    assert_eq!(names, ["c", "a", "b"]);
+
+    // And the std Iterator surface, including the traits W-8 added.
+    let mut it = v.into_iter().order_by(|t| t.1).then_by(|t| t.0);
+    assert_eq!(it.len(), 3); // ExactSizeIterator
+    assert_eq!(it.next_back(), Some(("b", 2))); // DoubleEndedIterator
+    assert_eq!(it.next(), Some(("c", 1)));
+}
+
+#[test]
+fn grouping_cannot_be_split_from_outside() {
+    // W-15. `key` and `elements` were `pub` *alongside* accessors, so a caller
+    // could empty a group or forge two groups sharing a key. They are private
+    // now; `into_parts` is the way to take both out.
+    let groups: Vec<_> = vec!["apple", "ant", "bee"]
+        .into_iter()
+        .group_by_key(|w| w.chars().next().unwrap())
+        .to_vec();
+
+    assert_eq!(*groups[0].key(), 'a');
+    assert_eq!(groups[0].elements(), ["apple", "ant"]);
+
+    let (k, v) = groups.into_iter().next().unwrap().into_parts();
+    assert_eq!((k, v), ('a', vec!["apple", "ant"]));
+}

@@ -116,8 +116,8 @@ fn foreign_by_value_group_by_is_not_ambiguous() {
         .group_by_key(|w| w.chars().next().unwrap())
         .collect();
     assert_eq!(groups.len(), 2);
-    assert_eq!(groups[0].key, 'a');
-    assert_eq!(groups[0].elements, ["apple", "ant"]);
+    assert_eq!(*groups[0].key(), 'a');
+    assert_eq!(groups[0].elements(), ["apple", "ant"]);
 }
 
 #[test]

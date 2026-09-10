@@ -90,3 +90,6 @@ to_hashmap	terminal	1000	-	no	drains
 to_hashset	terminal	1000	-	no	drains
 to_lookup	terminal	1000	-	no	drains
 sequence_equal	terminal	1000	1000	no	pulls both sides in lockstep and stops at the first mismatch; equal 1000-element sequences drain both
+order_by_with	eager_at_call	1000	-	no	collects at call, sorts on first next()
+min_by_	terminal	1000	-	no	drains
+max_by_	terminal	1000	-	no	drains

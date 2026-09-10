@@ -128,6 +128,8 @@ For `except_by` / `intersect_by`, the second argument is the iterable of
 | `order_by(key_fn)`                | `OrderBy(key_fn)`               |
 | `order_by_descending(key_fn)`     | `OrderByDescending(key_fn)`     |
 | `.then_by(key_fn)`                | `.ThenBy(key_fn)`               |
+| `order_by_with(cmp)`              | `OrderBy(key_fn, comparer)` — for `PartialOrd`-only keys such as `f64` |
+| `.then_by_with(cmp)`              | `.ThenBy(key_fn, comparer)`     |
 | `.then_by_descending(key_fn)`     | `.ThenByDescending(key_fn)`     |
 | `reverse()`                       | `Reverse()`                     |
 
@@ -150,6 +152,8 @@ collects the receiver when it is called (measured; see *Evaluation timing*).
 | `min_()`                                   | `Min()`                             |
 | `max_()`                                   | `Max()`                             |
 | `min_by_key_(key_fn)`                      | `MinBy(keySelector)`                |
+| `min_by_(cmp)`                             | `Min(comparer)` — comparator form, for `PartialOrd`-only keys |
+| `max_by_(cmp)`                             | `Max(comparer)` — comparator form; ties keep the **last** maximum |
 | `max_by_key_(key_fn)`                      | `MaxBy(keySelector)`                |
 | `average(selector)`                        | `Average(selector)`                 |
 
@@ -205,7 +209,7 @@ Strict (panicking) variants on the left; `_or_default` variants return `Option<T
 | `aggregate_by(key_fn, seed_fn, accum)`            | `AggregateBy(keySelector, seedFn, func)` (.NET 9+) |
 
 `group_by_key` returns an iterator of `Grouping<K, T>` — each item has a
-`.key` and `.elements`. The overloads transform the elements or fold each
+`.key()` and `.elements()`. The overloads transform the elements or fold each
 group into a single value.
 
 | `group_by_key_partial_eq`, `count_by_partial_eq`, `aggregate_by_partial_eq` | `PartialEq` escape hatches — same semantics, O(n²), for types that cannot implement `Hash`. See [Performance](#performance--the-default-is-hash-backed). |
@@ -244,7 +248,7 @@ group into a single value.
 ## Realistic Example
 
 ```rust
-use linq_rs::{LinqExt, ThenBy};
+use linq_rs::LinqExt;
 
 #[derive(Clone)]
 struct Employee { name: &'static str, dept: &'static str, salary: u32 }
@@ -262,8 +266,7 @@ let result: Vec<_> = employees
     .where_(|e| e.salary > 90_000)
     .order_by(|e| e.dept)
     .then_by_descending(|e| e.salary)
-    .into_iter()
-    .select(|e| (e.dept, e.name, e.salary))
+        .select(|e| (e.dept, e.name, e.salary))
     .to_vec();
 
 assert_eq!(result, [
@@ -310,7 +313,7 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 ## Overlap with `std::iter`
 
 <!-- BEGIN GENERATED: std-overlap -->
-**52 of this crate's 91 `LinqExt` methods (57%) are a rename or a short composition of something `std::iter::Iterator` already gives you.** If you are not porting C# code, reach for std first.
+**55 of this crate's 94 `LinqExt` methods (59%) are a rename or a short composition of something `std::iter::Iterator` already gives you.** If you are not porting C# code, reach for std first.
 
 | linq_rs | use this instead |
 |---|---|
@@ -339,10 +342,13 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 | `last_or_default` | `last` |
 | `last_where` | `filter().last()` |
 | `max_` | `max` |
+| `max_by_` | `max_by` |
 | `max_by_key_` | `max_by_key` |
 | `min_` | `min` |
+| `min_by_` | `min_by` |
 | `min_by_key_` | `min_by_key` |
 | `of_type` | `filter_map()` |
+| `order_by_with` | `sort_by` |
 | `prepend_item` | `once().chain()` |
 | `reduce_` | `reduce` |
 | `reverse` | `rev` |
@@ -568,8 +574,7 @@ use linq_rs::LinqExt;
 let sorted: Vec<_> = vec!["apple", "Banana", "cherry"]
     .into_iter()
     .order()
-    .into_iter()
-    .collect();
+        .collect();
 
 // Byte order: every uppercase letter precedes every lowercase one.
 assert_eq!(sorted, ["Banana", "apple", "cherry"]);
@@ -634,7 +639,7 @@ assert_eq!(counts, [('a', 2), ('b', 1)]);
 let keys: Vec<_> = vec!["ant", "bee", "ape"]
     .into_iter()
     .group_by_key(|w| w.chars().next().unwrap())
-    .map(|g| g.key)
+    .map(|g| g.into_parts().0)
     .collect();
 assert_eq!(keys, ['a', 'b']);
 ```
@@ -713,15 +718,15 @@ Measured, not asserted: a counting source records how many elements each operato
 
 `append_item`, `cast`, `chunk`, `concat_`, `default_if_empty`, `distinct`, `distinct_by`, `distinct_by_partial_eq`, `distinct_partial_eq`, `flatten_`, `index_`, `of_type`, `prepend_item`, `select`, `select_indexed`, `select_many`, `select_many_indexed`, `skip_`, `skip_last`, `skip_while_`, `skip_while_indexed`, `take_`, `take_while_`, `take_while_indexed`, `union_`, `where_`, `where_indexed`, `zip3`, `zip_`.
 
-**Eager at call (20)** — drain the source when *called*, before any iteration. C# defers these to the first `MoveNext`, so a query that is built and then discarded costs nothing there and costs full price here:
+**Eager at call (21)** — drain the source when *called*, before any iteration. C# defers these to the first `MoveNext`, so a query that is built and then discarded costs nothing there and costs full price here:
 
-`aggregate_by`, `aggregate_by_partial_eq`, `count_by`, `count_by_partial_eq`, `group_by_key`, `group_by_key_partial_eq`, `group_by_with_element`, `group_by_with_result`, `group_join`, `group_join_partial_eq`, `inner_join`, `inner_join_partial_eq`, `order`, `order_by`, `order_by_descending`, `order_descending`, `reverse`, `take_last`, `union_by`, `union_partial_eq`.
+`aggregate_by`, `aggregate_by_partial_eq`, `count_by`, `count_by_partial_eq`, `group_by_key`, `group_by_key_partial_eq`, `group_by_with_element`, `group_by_with_result`, `group_join`, `group_join_partial_eq`, `inner_join`, `inner_join_partial_eq`, `order`, `order_by`, `order_by_descending`, `order_by_with`, `order_descending`, `reverse`, `take_last`, `union_by`, `union_partial_eq`.
 
 **Half-eager (6)** — the receiver streams, but the *argument* is drained at call time even if the result is never iterated:
 
 `except`, `except_by`, `except_partial_eq`, `intersect`, `intersect_by`, `intersect_partial_eq`.
 
-**Terminal (36)** — consume and return a value, immediate by definition. Many still short-circuit: `first` pulls one element, `any_` stops at the first match, `try_single` pulls at most two.
+**Terminal (38)** — consume and return a value, immediate by definition. Many still short-circuit: `first` pulls one element, `any_` stops at the first match, `try_single` pulls at most two.
 
 > Generated by `.github/scripts/gen-docs.py`. Do not edit by hand.
 <!-- END GENERATED: laziness -->

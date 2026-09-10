@@ -11,7 +11,7 @@
 //! - Side-effecting `FnMut` closures (verifies state survives the adapter)
 //! - Float / NaN behaviour for `PartialEq`-only paths
 
-use linq_rs::{LinqExt, ThenBy};
+use linq_rs::LinqExt;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PANIC PATHS
@@ -346,7 +346,6 @@ fn three_level_then_by() {
         .order_by(|t| t.0)
         .then_by(|t| t.1)
         .then_by(|t| t.2)
-        .into_iter()
         .collect();
     assert_eq!(
         v,
@@ -368,7 +367,6 @@ fn long_pipeline_skip_take_distinct_order() {
         .take_(8) // [3, 8, 3, 1, 8, 5, 9, 1]
         .distinct() // [3, 8, 1, 5, 9]
         .order_by(|x| *x) // [1, 3, 5, 8, 9]
-        .into_iter()
         .collect();
     assert_eq!(v, [1, 3, 5, 8, 9]);
 }
@@ -380,7 +378,7 @@ fn group_by_then_select_then_aggregate() {
     let total_chars: usize = words
         .into_iter()
         .group_by_key(|w| w.chars().next().unwrap())
-        .select(|g| g.elements.iter().map(|w| w.len()).sum::<usize>())
+        .select(|g| g.elements().iter().map(|w| w.len()).sum::<usize>())
         .sum_();
     // apple(5)+ant(3) + banana(6)+bear(4) + cherry(6) = 24
     assert_eq!(total_chars, 24);
@@ -486,21 +484,13 @@ fn to_hashmap_last_write_wins_on_duplicate_keys() {
 
 #[test]
 fn order_by_on_empty_yields_empty() {
-    let v: Vec<i32> = Vec::<i32>::new()
-        .into_iter()
-        .order_by(|x| *x)
-        .into_iter()
-        .collect();
+    let v: Vec<i32> = Vec::<i32>::new().into_iter().order_by(|x| *x).collect();
     assert!(v.is_empty());
 }
 
 #[test]
 fn order_by_already_sorted_input_is_stable() {
-    let v: Vec<_> = vec![1, 2, 3, 4, 5]
-        .into_iter()
-        .order_by(|x| *x)
-        .into_iter()
-        .collect();
+    let v: Vec<_> = vec![1, 2, 3, 4, 5].into_iter().order_by(|x| *x).collect();
     assert_eq!(v, [1, 2, 3, 4, 5]);
 }
 

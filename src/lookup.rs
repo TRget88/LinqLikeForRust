@@ -59,12 +59,12 @@ impl<K: Eq + Hash + Clone, V> Lookup<K, V> {
     /// public, `Lookup::default()` produced a value that could never be filled.
     pub fn insert(&mut self, key: K, value: V) {
         match self.index.get(&key) {
-            Some(&pos) => self.groups[pos].elements.push(value),
+            Some(&pos) => self.groups[pos].push(value),
             None => {
                 let pos = self.groups.len();
                 self.index.insert(key.clone(), pos);
                 let mut g = Grouping::new(key);
-                g.elements.push(value);
+                g.push(value);
                 self.groups.push(g);
             }
         }
@@ -84,7 +84,7 @@ impl<K: Eq + Hash + Clone, V> Lookup<K, V> {
     #[must_use]
     pub fn get(&self, key: &K) -> &[V] {
         match self.index.get(key) {
-            Some(&pos) => self.groups[pos].elements.as_slice(),
+            Some(&pos) => self.groups[pos].elements(),
             None => &[],
         }
     }

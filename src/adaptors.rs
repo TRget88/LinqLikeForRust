@@ -59,18 +59,18 @@ pub struct SelectMany<I, F, J>
 where
     I: Iterator,
     F: FnMut(I::Item) -> J,
-    J: Iterator,
+    J: IntoIterator,
 {
     pub(crate) outer: I,
     pub(crate) f: F,
-    pub(crate) current: Option<J>,
+    pub(crate) current: Option<J::IntoIter>,
 }
 
 impl<I, F, J> Iterator for SelectMany<I, F, J>
 where
     I: Iterator,
     F: FnMut(I::Item) -> J,
-    J: Iterator,
+    J: IntoIterator,
 {
     type Item = J::Item;
 
@@ -82,7 +82,7 @@ where
                 }
             }
             let outer_item = self.outer.next()?;
-            self.current = Some((self.f)(outer_item));
+            self.current = Some((self.f)(outer_item).into_iter());
         }
     }
 }
@@ -273,13 +273,13 @@ where
 
 /// Iterator adaptor for [`concat`](crate::LinqExt::concat_).
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct Concat<I> {
+pub struct Concat<I, J> {
     pub(crate) first: I,
-    pub(crate) second: I,
+    pub(crate) second: J,
     pub(crate) on_second: bool,
 }
 
-impl<I: Iterator> Iterator for Concat<I> {
+impl<I: Iterator, J: Iterator<Item = I::Item>> Iterator for Concat<I, J> {
     type Item = I::Item;
     fn next(&mut self) -> Option<Self::Item> {
         if !self.on_second {
@@ -306,7 +306,10 @@ impl<I: Iterator> Iterator for Concat<I> {
     }
 }
 
-impl<I: ExactSizeIterator> ExactSizeIterator for Concat<I> {}
+impl<I: ExactSizeIterator, J: ExactSizeIterator<Item = I::Item>> ExactSizeIterator
+    for Concat<I, J>
+{
+}
 
 // ── Zip ──────────────────────────────────────────────────────────────────────
 
@@ -556,7 +559,7 @@ impl<I: FusedIterator, P: FnMut(&I::Item) -> bool> FusedIterator for SkipWhile<I
 impl<I: FusedIterator, P: FnMut(&I::Item) -> bool> FusedIterator for TakeWhile<I, P> {}
 impl<I: FusedIterator> FusedIterator for Skip<I> {}
 impl<I: FusedIterator> FusedIterator for Take<I> {}
-impl<I: FusedIterator> FusedIterator for Concat<I> {}
+impl<I: FusedIterator, J: FusedIterator<Item = I::Item>> FusedIterator for Concat<I, J> {}
 impl<I: FusedIterator> FusedIterator for DefaultIfEmpty<I> {}
 impl<I: FusedIterator> FusedIterator for SkipLast<I> {}
 impl<I, J, R, F> FusedIterator for Zip<I, J, F>

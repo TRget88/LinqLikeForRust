@@ -26,6 +26,6 @@ pub use adaptors::*;
 pub use error::SingleError;
 pub use grouping::Grouping;
 pub use lookup::Lookup;
-pub use ordered::{OrderedQueryable, ThenBy};
+pub use ordered::OrderedQueryable;
 pub use queryable::LinqExt;
 pub use sources::{empty, range, repeat};

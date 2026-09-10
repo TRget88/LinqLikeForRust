@@ -2,7 +2,7 @@
 //!
 //! Run with: `cargo test`
 
-use linq_rs::{LinqExt, ThenBy};
+use linq_rs::LinqExt;
 
 // ── where_ / select ──────────────────────────────────────────────────────────
 
@@ -119,7 +119,6 @@ fn test_order_by() {
     let result: Vec<_> = vec![3, 1, 4, 1, 5, 9, 2]
         .into_iter()
         .order_by(|x| *x)
-        .into_iter()
         .collect();
     assert_eq!(result, [1, 1, 2, 3, 4, 5, 9]);
 }
@@ -129,7 +128,6 @@ fn test_order_by_descending() {
     let result: Vec<_> = vec![3, 1, 4, 1, 5]
         .into_iter()
         .order_by_descending(|x| *x)
-        .into_iter()
         .collect();
     assert_eq!(result, [5, 4, 3, 1, 1]);
 }
@@ -141,7 +139,6 @@ fn test_then_by() {
         .into_iter()
         .order_by(|(_, age)| *age)
         .then_by(|(name, _)| *name)
-        .into_iter()
         .collect();
     assert_eq!(result, [("Charlie", 1), ("Alice", 2), ("Bob", 2)]);
 }
@@ -335,14 +332,14 @@ fn test_group_by() {
         .into_iter()
         .group_by_key(|w| w.chars().next().unwrap())
         .collect();
-    groups.sort_by_key(|g| g.key);
+    groups.sort_by_key(|g| *g.key());
 
-    assert_eq!(groups[0].key, 'a');
-    assert_eq!(groups[0].elements, ["apple", "ant"]);
-    assert_eq!(groups[1].key, 'b');
-    assert_eq!(groups[1].elements, ["banana", "bear"]);
-    assert_eq!(groups[2].key, 'c');
-    assert_eq!(groups[2].elements, ["cherry"]);
+    assert_eq!(*groups[0].key(), 'a');
+    assert_eq!(groups[0].elements(), ["apple", "ant"]);
+    assert_eq!(*groups[1].key(), 'b');
+    assert_eq!(groups[1].elements(), ["banana", "bear"]);
+    assert_eq!(*groups[2].key(), 'c');
+    assert_eq!(groups[2].elements(), ["cherry"]);
 }
 
 // ── to_lookup ─────────────────────────────────────────────────────────────────
@@ -489,21 +486,13 @@ fn test_skip_last_equal_to_source() {
 
 #[test]
 fn test_order() {
-    let v: Vec<_> = vec![3, 1, 4, 1, 5, 9, 2]
-        .into_iter()
-        .order()
-        .into_iter()
-        .collect();
+    let v: Vec<_> = vec![3, 1, 4, 1, 5, 9, 2].into_iter().order().collect();
     assert_eq!(v, [1, 1, 2, 3, 4, 5, 9]);
 }
 
 #[test]
 fn test_order_descending() {
-    let v: Vec<_> = vec![3, 1, 4, 1, 5]
-        .into_iter()
-        .order_descending()
-        .into_iter()
-        .collect();
+    let v: Vec<_> = vec![3, 1, 4, 1, 5].into_iter().order_descending().collect();
     assert_eq!(v, [5, 4, 3, 1, 1]);
 }
 
@@ -515,14 +504,13 @@ fn test_order_then_by() {
         .into_iter()
         .order() // lexicographic on (i32, &str): (1,"a"), (1,"b"), (2,"z")
         .then_by(|(_, name)| *name) // stable resort by name only
-        .into_iter()
         .collect();
     assert_eq!(v, [(1, "a"), (1, "b"), (2, "z")]);
 }
 
 #[test]
 fn test_order_empty() {
-    let v: Vec<i32> = Vec::<i32>::new().into_iter().order().into_iter().collect();
+    let v: Vec<i32> = Vec::<i32>::new().into_iter().order().collect();
     assert!(v.is_empty());
 }
 
@@ -876,11 +864,11 @@ fn test_group_by_with_element() {
         .into_iter()
         .group_by_with_element(|w| w.chars().next().unwrap(), |w| w.len())
         .collect();
-    groups.sort_by_key(|g| g.key);
-    assert_eq!(groups[0].key, 'a');
-    assert_eq!(groups[0].elements, [5, 3]);
-    assert_eq!(groups[1].key, 'b');
-    assert_eq!(groups[1].elements, [6, 4]);
+    groups.sort_by_key(|g| *g.key());
+    assert_eq!(*groups[0].key(), 'a');
+    assert_eq!(groups[0].elements(), [5, 3]);
+    assert_eq!(*groups[1].key(), 'b');
+    assert_eq!(groups[1].elements(), [6, 4]);
 }
 
 #[test]
@@ -1030,14 +1018,14 @@ fn test_group_by_key_preserves_insertion_order() {
         .collect();
     // First-occurrence order: 'c', 'a', 'b'.
     assert_eq!(groups.len(), 3);
-    assert_eq!(groups[0].key, 'c');
-    assert_eq!(groups[0].elements, ["cherry"]);
-    assert_eq!(groups[1].key, 'a');
-    assert_eq!(groups[1].elements, ["apple", "ant"]);
-    assert_eq!(groups[2].key, 'b');
+    assert_eq!(*groups[0].key(), 'c');
+    assert_eq!(groups[0].elements(), ["cherry"]);
+    assert_eq!(*groups[1].key(), 'a');
+    assert_eq!(groups[1].elements(), ["apple", "ant"]);
+    assert_eq!(*groups[2].key(), 'b');
     // Escape hatch: count_by_partial_eq works on types that are only
     // PartialEq (no Hash + Eq), at O(n^2). See DECISIONS.md D-101.
-    assert_eq!(groups[2].elements, ["banana", "bear"]);
+    assert_eq!(groups[2].elements(), ["banana", "bear"]);
 }
 
 // Escape hatch: count_by_partial_eq works on types that are only
@@ -1219,7 +1207,6 @@ fn test_realistic_pipeline() {
         .select(|e| (e.dept, e.name, e.salary))
         .order_by(|(dept, _, _)| *dept)
         .then_by_descending(|(_, _, sal)| *sal)
-        .into_iter()
         .collect();
 
     assert_eq!(result.len(), 3);

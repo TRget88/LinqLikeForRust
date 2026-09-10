@@ -9,10 +9,8 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub struct Grouping<K, V> {
-    /// The shared key for this group.
-    pub key: K,
-    /// All elements that belong to this group.
-    pub elements: Vec<V>,
+    key: K,
+    elements: Vec<V>,
 }
 
 impl<K, V> Grouping<K, V> {
@@ -33,7 +31,23 @@ impl<K, V> Grouping<K, V> {
         &self.elements
     }
 
-    /// Consume the group and return an iterator over its elements.
+    /// Consumes the group and returns its key and elements.
+    ///
+    /// The only way to take both out at once; the fields are private so that
+    /// the one-group-per-key invariant cannot be broken from outside. (They
+    /// used to be `pub` *alongside* these accessors, so a caller could split a
+    /// group in two or empty it.)
+    #[must_use]
+    pub fn into_parts(self) -> (K, Vec<V>) {
+        (self.key, self.elements)
+    }
+
+    /// Appends an element. In-crate only: the grouping operators build these.
+    pub(crate) fn push(&mut self, value: V) {
+        self.elements.push(value);
+    }
+
+    /// Consumes the group and returns an iterator over its elements.
     pub fn into_elements(self) -> impl Iterator<Item = V> {
         self.elements.into_iter()
     }

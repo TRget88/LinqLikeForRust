@@ -74,12 +74,6 @@ def derive_surface():
     body = qsrc[qsrc.index(marker):]
     end = body.index("\n}\n")          # first closing brace at column 0
     linqext = re.findall(r"^    fn ([a-z_0-9]+)[<(]", body[:end], re.M)
-    # ThenBy: take the trait declaration only, not its impl. The declarations
-    # are the ones followed by a `where` clause rather than a body.
-    ordered = open(os.path.join(ROOT, "src/ordered.rs"), encoding="utf-8").read()
-    trait_body = ordered[ordered.index("pub trait ThenBy"):]
-    trait_body = trait_body[:trait_body.index("\n}")]
-    thenby = re.findall(r"^    fn ([a-z_0-9]+)[<(]", trait_body, re.M)
     free = scan("src/sources.rs", r"^pub fn ([a-z_0-9]+)[<(]")
     # Qualified, because `get` on Lookup and `key` on Grouping are different
     # items that would otherwise collide in one namespace.
@@ -87,8 +81,12 @@ def derive_surface():
                 scan("src/grouping.rs", r"^    pub fn ([a-z_0-9]+)[<(]")]
     lookup = [f"Lookup::{m}" for m in
               scan("src/lookup.rs", r"^    pub fn ([a-z_0-9]+)[<(]")]
-    return {"linqext": linqext, "thenby": thenby, "free_fn": free,
-            "type_method": grouping + lookup}
+    # `then_by` and friends became inherent methods on OrderedQueryable in
+    # W-14, so they are type methods now, not a separate trait.
+    ordered = [f"OrderedQueryable::{m}" for m in
+               scan("src/ordered.rs", r"^    pub fn ([a-z_0-9]+)[<(]")]
+    return {"linqext": linqext, "free_fn": free,
+            "type_method": grouping + lookup + ordered}
 
 
 def cross_check(surface, mapping, csharp):

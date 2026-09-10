@@ -51,7 +51,7 @@ cat > "$WORK/src/main.rs" <<'EOF'
 //! Both traits in scope at once. This file exists to COMPILE; if it does, the
 //! two name sets coexist. Every call below is one that has broken before.
 use itertools::Itertools;
-use linq_rs::{LinqExt, ThenBy};
+use linq_rs::LinqExt;
 
 fn main() {
     // Itertools::join takes &mut self. linq_rs::join took self by value and beat
@@ -88,8 +88,9 @@ fn main() {
     assert_eq!(rows, ["ax"]);
     let groups = vec!["ant", "bee"].into_iter().group_by_key(|w| w.chars().next().unwrap());
     assert_eq!(groups.count(), 2);
-    let sorted = vec![(2, "b"), (1, "a")].into_iter().order_by(|t| t.0).then_by(|t| t.1);
-    assert_eq!(sorted.into_iter().next().unwrap().1, "a");
+    // OrderedQueryable is itself an Iterator since W-14, so no .into_iter() hop.
+    let mut sorted = vec![(2, "b"), (1, "a")].into_iter().order_by(|t| t.0).then_by(|t| t.1);
+    assert_eq!(sorted.next().unwrap().1, "a");
 
     println!("itertools interop OK");
 }
@@ -119,7 +120,7 @@ fi
 # Do not blame a collision for what may be an infrastructure failure -- a
 # network hiccup and a genuine name clash are different problems and deserve
 # different messages.
-if printf '%s\n' "$out" | grep -qE 'error\[E0034\]|multiple applicable items|error\[E0599\]|error\[E0277\]|error\[E0061\]'; then
+if printf '%s\n' "$out" | grep -qE 'error\[E0034\]|multiple applicable items|error\[E0599\]|error\[E0277\]|error\[E0061\]|error\[E0432\]'; then
   echo "FAIL: a method name collides again."
   echo "      linq_rs and itertools $ITERTOOLS_REQ can no longer be imported into"
   echo "      one scope. See DECISIONS.md D-005 and AUDIT.md findings E-1/E-2."

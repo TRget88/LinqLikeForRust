@@ -84,6 +84,34 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Changed — API shape (W-13, E-8, E-9, W-14, W-15). All breaking.
+
+- **`f64` keys can be sorted (W-13).** `order_by` binds `K: Ord`, and the crate
+  ships no `IComparer` equivalent, so there was no way to sort by a float at
+  all — C# `OrderBy` accepts `double`. New: `order_by_with(cmp)`,
+  `then_by_with(cmp)`, `min_by_(cmp)`, `max_by_(cmp)`.
+- **`concat_` works mid-chain (E-8).** Its bound was
+  `I2: IntoIterator<IntoIter = Self>`, forcing the argument's iterator type to
+  be *identical* to the receiver's — so any closure-carrying adaptor upstream
+  made it impossible, since no two closures share a type. `Concat` now carries
+  two type parameters and the bound is just `IntoIterator<Item = Self::Item>`.
+- **`select_many` accepts any `IntoIterator` (E-9).** It bound `J: Iterator`
+  while `zip_` bound `IntoIterator` — an inconsistency inside one trait that
+  forced a stray `.into_iter()` in the closure. `select_many(|p| p.orders)` now
+  works on a `Vec` field.
+- **`OrderedQueryable` is an `Iterator` (W-14).** It implemented only
+  `IntoIterator`, so every sorting chain needed a manual `.into_iter()` hop and
+  `then_by` needed a second import. It now implements `Iterator`,
+  `ExactSizeIterator`, `DoubleEndedIterator` and `FusedIterator`, sorting lazily
+  on first `next()`. `then_by`/`then_by_descending`/`then_by_with` are inherent
+  methods and **the `ThenBy` trait is deleted**. Existing `.into_iter()` calls
+  keep compiling (std's blanket impl) but are now redundant, and clippy says so.
+- **`Grouping`'s fields are private (W-15).** `key` and `elements` were `pub`
+  *alongside* `key()`/`elements()` accessors, so the one-group-per-key invariant
+  was unenforceable — a caller could empty a group or forge two sharing a key.
+  Use `key()`, `elements()`, `into_elements()`, or the new `into_parts()` to
+  take both out at once.
+
 ### Changed — no more C#-equivalence claims (W-7)
 
 The crate asserted equivalence with `System.Linq.Enumerable` 74 times in doc

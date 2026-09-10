@@ -118,7 +118,7 @@ pub trait LinqExt: Iterator + Sized {
     fn select_many<J, F>(self, f: F) -> SelectMany<Self, F, J>
     where
         F: FnMut(Self::Item) -> J,
-        J: Iterator,
+        J: IntoIterator,
     {
         SelectMany {
             outer: self,
@@ -408,9 +408,9 @@ pub trait LinqExt: Iterator + Sized {
     }
 
     /// Concatenates two sequences. C# analogue: `Concat`.
-    fn concat_<I2>(self, other: I2) -> Concat<Self>
+    fn concat_<I2>(self, other: I2) -> Concat<Self, I2::IntoIter>
     where
-        I2: IntoIterator<Item = Self::Item, IntoIter = Self>,
+        I2: IntoIterator<Item = Self::Item>,
     {
         Concat {
             first: self,
@@ -612,11 +612,10 @@ pub trait LinqExt: Iterator + Sized {
     /// a single lexicographic sort.
     ///
     /// ```rust
-    /// use linq_rs::{LinqExt, ThenBy};
+    /// use linq_rs::LinqExt;
     /// let sorted: Vec<_> = vec!["banana","apple","cherry"]
     ///     .into_iter()
     ///     .order_by(|s| *s)
-    ///     .into_iter()
     ///     .collect();
     /// assert_eq!(sorted, ["apple", "banana", "cherry"]);
     /// ```
@@ -628,6 +627,31 @@ pub trait LinqExt: Iterator + Sized {
     {
         let data: Vec<_> = self.collect();
         OrderedQueryable::new(data, Box::new(move |a, b| key_fn(a).cmp(&key_fn(b))))
+    }
+
+    /// Sorts with an explicit comparator, for keys that are `PartialOrd` but
+    /// not `Ord`.
+    ///
+    /// `order_by` binds `K: Ord`, which rules out floats — and this crate ships
+    /// no `IComparer` equivalent, so before this there was no way to sort by an
+    /// `f64` at all. C# has no such restriction (`OrderBy` accepts `double`),
+    /// which made it a real gap for a port.
+    ///
+    /// ```rust
+    /// use linq_rs::LinqExt;
+    /// let by_price: Vec<_> = vec![("b", 2.5f64), ("a", 1.0)]
+    ///     .into_iter()
+    ///     .order_by_with(|x, y| x.1.total_cmp(&y.1))
+    ///     .to_vec();
+    /// assert_eq!(by_price, [("a", 1.0), ("b", 2.5)]);
+    /// ```
+    fn order_by_with<F>(self, cmp: F) -> OrderedQueryable<Self::Item>
+    where
+        F: Fn(&Self::Item, &Self::Item) -> std::cmp::Ordering + 'static,
+        Self::Item: 'static,
+    {
+        let data: Vec<_> = self.collect();
+        OrderedQueryable::new(data, Box::new(cmp))
     }
 
     /// Sorts in descending order. C# analogue: `OrderByDescending`.
@@ -649,7 +673,6 @@ pub trait LinqExt: Iterator + Sized {
     /// let sorted: Vec<_> = vec![3, 1, 4, 1, 5, 9, 2]
     ///     .into_iter()
     ///     .order()
-    ///     .into_iter()
     ///     .collect();
     /// assert_eq!(sorted, [1, 1, 2, 3, 4, 5, 9]);
     /// ```
@@ -798,6 +821,47 @@ pub trait LinqExt: Iterator + Sized {
         Self::Item: Ord,
     {
         self.max()
+    }
+
+    /// Returns the minimum element under an explicit comparator.
+    ///
+    /// The comparator counterpart to [`min_by_key_`](Self::min_by_key_), for
+    /// keys that are `PartialOrd` but not `Ord`. Delegates to
+    /// [`Iterator::min_by`]; on ties the **first** minimum wins.
+    ///
+    /// ```rust
+    /// use linq_rs::LinqExt;
+    /// let cheapest = vec![("b", 2.5f64), ("a", 1.0)]
+    ///     .into_iter()
+    ///     .min_by_(|x, y| x.1.total_cmp(&y.1));
+    /// assert_eq!(cheapest, Some(("a", 1.0)));
+    /// ```
+    #[must_use]
+    fn min_by_<F>(self, cmp: F) -> Option<Self::Item>
+    where
+        F: FnMut(&Self::Item, &Self::Item) -> std::cmp::Ordering,
+    {
+        self.min_by(cmp)
+    }
+
+    /// Returns the maximum element under an explicit comparator.
+    ///
+    /// Delegates to [`Iterator::max_by`]; on ties the **last** maximum wins,
+    /// which differs from C# `MaxBy`. See *Differences from C# LINQ*.
+    ///
+    /// ```rust
+    /// use linq_rs::LinqExt;
+    /// let dearest = vec![("b", 2.5f64), ("a", 1.0)]
+    ///     .into_iter()
+    ///     .max_by_(|x, y| x.1.total_cmp(&y.1));
+    /// assert_eq!(dearest, Some(("b", 2.5)));
+    /// ```
+    #[must_use]
+    fn max_by_<F>(self, cmp: F) -> Option<Self::Item>
+    where
+        F: FnMut(&Self::Item, &Self::Item) -> std::cmp::Ordering,
+    {
+        self.max_by(cmp)
     }
 
     /// Returns the **element** whose projected key is smallest.
@@ -1282,9 +1346,9 @@ pub trait LinqExt: Iterator + Sized {
     /// let mut groups: Vec<_> = words.into_iter()
     ///     .group_by_key_partial_eq(|w| w.chars().next().unwrap())
     ///     .collect();
-    /// groups.sort_by_key(|g| g.key);
-    /// assert_eq!(groups[0].key, 'a');
-    /// assert_eq!(groups[0].elements, ["apple", "ant"]);
+    /// groups.sort_by_key(|g| *g.key());
+    /// assert_eq!(*groups[0].key(), 'a');
+    /// assert_eq!(groups[0].elements(), ["apple", "ant"]);
     /// ```
     fn group_by_key_partial_eq<K, F>(
         self,
@@ -1297,11 +1361,11 @@ pub trait LinqExt: Iterator + Sized {
         let mut groups: Vec<Grouping<K, Self::Item>> = Vec::new();
         for item in self {
             let key = key_fn(&item);
-            if let Some(g) = groups.iter_mut().find(|g| g.key == key) {
-                g.elements.push(item);
+            if let Some(g) = groups.iter_mut().find(|g| *g.key() == key) {
+                g.push(item);
             } else {
                 let mut g = Grouping::new(key);
-                g.elements.push(item);
+                g.push(item);
                 groups.push(g);
             }
         }
@@ -1325,11 +1389,11 @@ pub trait LinqExt: Iterator + Sized {
         for item in self {
             let key = key_fn(&item);
             let element = element_fn(item);
-            if let Some(g) = groups.iter_mut().find(|g| g.key == key) {
-                g.elements.push(element);
+            if let Some(g) = groups.iter_mut().find(|g| *g.key() == key) {
+                g.push(element);
             } else {
                 let mut g = Grouping::new(key);
-                g.elements.push(element);
+                g.push(element);
                 groups.push(g);
             }
         }
@@ -1352,17 +1416,18 @@ pub trait LinqExt: Iterator + Sized {
         let mut groups: Vec<Grouping<K, Self::Item>> = Vec::new();
         for item in self {
             let key = key_fn(&item);
-            if let Some(g) = groups.iter_mut().find(|g| g.key == key) {
-                g.elements.push(item);
+            if let Some(g) = groups.iter_mut().find(|g| *g.key() == key) {
+                g.push(item);
             } else {
                 let mut g = Grouping::new(key);
-                g.elements.push(item);
+                g.push(item);
                 groups.push(g);
             }
         }
-        groups
-            .into_iter()
-            .map(move |g| result_fn(g.key, g.elements))
+        groups.into_iter().map(move |g| {
+            let (k, v) = g.into_parts();
+            result_fn(k, v)
+        })
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -1418,12 +1483,12 @@ pub trait LinqExt: Iterator + Sized {
         for item in self {
             let key = key_fn(&item);
             match index.get(&key) {
-                Some(&pos) => groups[pos].elements.push(item),
+                Some(&pos) => groups[pos].push(item),
                 None => {
                     let pos = groups.len();
                     index.insert(key.clone(), pos);
                     let mut g = Grouping::new(key);
-                    g.elements.push(item);
+                    g.push(item);
                     groups.push(g);
                 }
             }

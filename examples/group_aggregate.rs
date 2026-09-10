@@ -2,7 +2,7 @@
 //!
 //! Run with: `cargo run --example group_aggregate`
 
-use linq_rs::{LinqExt, ThenBy};
+use linq_rs::LinqExt;
 
 #[derive(Debug, Clone)]
 struct Employee {
@@ -71,7 +71,6 @@ fn main() {
         .into_iter()
         .order_by(|e| e.dept)
         .then_by_descending(|e| e.salary)
-        .into_iter()
         .collect();
     for e in sorted {
         println!("  {} ({}) — ${}", e.name, e.dept, e.salary);
