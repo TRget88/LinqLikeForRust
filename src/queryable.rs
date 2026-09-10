@@ -48,26 +48,6 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Filter with access to the item's 0-based index. C# analogue: the
-    /// C# `Where((item, index) => ...)` overload.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// // Keep items at even indices.
-    /// let v: Vec<_> = vec!["a", "b", "c", "d", "e"]
-    ///     .into_iter()
-    ///     .where_indexed(|_, i| i % 2 == 0)
-    ///     .collect();
-    /// assert_eq!(v, ["a", "c", "e"]);
-    /// ```
-    fn where_indexed<P>(self, mut predicate: P) -> impl Iterator<Item = Self::Item>
-    where
-        P: FnMut(&Self::Item, usize) -> bool,
-    {
-        self.enumerate()
-            .filter_map(move |(i, x)| if predicate(&x, i) { Some(x) } else { None })
-    }
-
     // ═══════════════════════════════════════════════════════════════════════
     // PROJECTION
     // ═══════════════════════════════════════════════════════════════════════
@@ -84,24 +64,6 @@ pub trait LinqExt: Iterator + Sized {
         F: FnMut(Self::Item) -> B,
     {
         Select { inner: self, f }
-    }
-
-    /// Project with access to the item's 0-based index. C# analogue: the
-    /// C# `Select((item, index) => ...)` overload.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let v: Vec<_> = vec!["a", "b", "c"]
-    ///     .into_iter()
-    ///     .select_indexed(|s, i| format!("{i}:{s}"))
-    ///     .collect();
-    /// assert_eq!(v, ["0:a", "1:b", "2:c"]);
-    /// ```
-    fn select_indexed<B, F>(self, mut f: F) -> impl Iterator<Item = B>
-    where
-        F: FnMut(Self::Item, usize) -> B,
-    {
-        self.enumerate().map(move |(i, x)| f(x, i))
     }
 
     /// Projects each element to an iterator and flattens the results.
@@ -127,73 +89,6 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// `select_many` with the item's 0-based index. C# analogue:
-    /// `SelectMany((item, index) => ...)`.
-    fn select_many_indexed<J, F>(self, mut f: F) -> impl Iterator<Item = J::Item>
-    where
-        F: FnMut(Self::Item, usize) -> J,
-        J: IntoIterator,
-    {
-        self.enumerate().flat_map(move |(i, x)| f(x, i))
-    }
-
-    /// Flattens one level of nesting. C# analogue: `SelectMany(x => x)`.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let flat: Vec<_> = vec![vec![1, 2], vec![3]].into_iter().flatten_().collect();
-    /// assert_eq!(flat, [1, 2, 3]);
-    /// ```
-    fn flatten_(self) -> Flatten<Self>
-    where
-        Self::Item: IntoIterator,
-    {
-        Flatten {
-            outer: self,
-            current: None,
-        }
-    }
-
-    /// Yields only the elements that can be converted into `U` via
-    /// [`TryInto`]; conversion failures are silently dropped.
-    ///
-    /// C# analogue: `OfType<U>()`. The natural Rust analogue of C#'s
-    /// runtime type test — but here it goes through the type system via
-    /// `TryInto`, so the compiler verifies that *some* conversion exists.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// // i64 -> i32: values that don't fit are dropped.
-    /// let v: Vec<i32> = vec![1i64, 2, i64::MAX, 3].into_iter().of_type::<i32>().collect();
-    /// assert_eq!(v, [1, 2, 3]);
-    /// ```
-    fn of_type<U>(self) -> impl Iterator<Item = U>
-    where
-        Self::Item: TryInto<U>,
-    {
-        self.filter_map(|x| x.try_into().ok())
-    }
-
-    /// Converts each element to `U` via [`TryInto`]. **Panics** on the first
-    /// failed conversion. Named after C# `Cast<U>()`, but **this converts values** via `TryInto` where C# tests runtime types — `cast::<i64>()` widens an `i32` here, while C# `Cast<long>()` on a boxed `int` throws. (C# throws
-    /// `InvalidCastException`). For the non-panicking version, see
-    /// [`of_type`](Self::of_type).
-    ///
-    /// Lazy — the panic happens at iteration time, not when `cast` is called.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let v: Vec<i64> = vec![1i32, 2, 3].into_iter().cast::<i64>().collect();
-    /// assert_eq!(v, [1i64, 2, 3]);
-    /// ```
-    fn cast<U>(self) -> impl Iterator<Item = U>
-    where
-        Self::Item: TryInto<U>,
-        <Self::Item as TryInto<U>>::Error: std::fmt::Debug,
-    {
-        self.map(|x| x.try_into().expect("cast failed"))
-    }
-
     // ═══════════════════════════════════════════════════════════════════════
     // PAGING / SLICING
     // ═══════════════════════════════════════════════════════════════════════
@@ -208,127 +103,12 @@ pub trait LinqExt: Iterator + Sized {
         }
     }
 
-    /// Skips elements while the predicate holds. C# analogue: `SkipWhile`.
-    fn skip_while_<P>(self, predicate: P) -> SkipWhile<Self, P>
-    where
-        P: FnMut(&Self::Item) -> bool,
-    {
-        SkipWhile {
-            inner: self,
-            predicate,
-            done_skipping: false,
-        }
-    }
-
-    /// `skip_while_` with the item's 0-based index. C# analogue:
-    /// `SkipWhile((item, index) => ...)`.
-    fn skip_while_indexed<P>(self, mut predicate: P) -> impl Iterator<Item = Self::Item>
-    where
-        P: FnMut(&Self::Item, usize) -> bool,
-    {
-        self.enumerate()
-            .skip_while(move |(i, x)| predicate(x, *i))
-            .map(|(_, x)| x)
-    }
-
     /// Takes at most `n` elements. C# analogue: `Take`.
     fn take_(self, n: usize) -> Take<Self> {
         Take {
             inner: self,
             remaining: n,
         }
-    }
-
-    /// Takes elements while the predicate holds. C# analogue: `TakeWhile`.
-    fn take_while_<P>(self, predicate: P) -> TakeWhile<Self, P>
-    where
-        P: FnMut(&Self::Item) -> bool,
-    {
-        TakeWhile {
-            inner: self,
-            predicate,
-            done: false,
-        }
-    }
-
-    /// `take_while_` with the item's 0-based index. C# analogue:
-    /// `TakeWhile((item, index) => ...)`.
-    fn take_while_indexed<P>(self, mut predicate: P) -> impl Iterator<Item = Self::Item>
-    where
-        P: FnMut(&Self::Item, usize) -> bool,
-    {
-        self.enumerate()
-            .take_while(move |(i, x)| predicate(x, *i))
-            .map(|(_, x)| x)
-    }
-
-    /// Splits the sequence into fixed-size chunks. The last chunk may be
-    /// shorter.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `size` is zero. (C# `Chunk` throws
-    /// `ArgumentOutOfRangeException` here; a panic is the Rust equivalent, and
-    /// matches `slice::chunks`.) A very large `size` does **not** allocate
-    /// eagerly — capacity is taken from what the source can supply.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let chunks: Vec<_> = (1..=7).chunk(3).collect();
-    /// assert_eq!(chunks, [vec![1,2,3], vec![4,5,6], vec![7]]);
-    /// ```
-    fn chunk(self, size: usize) -> Chunk<Self> {
-        assert!(size > 0, "chunk size must be > 0");
-        Chunk {
-            inner: self,
-            size,
-            done: false,
-        }
-    }
-
-    /// Yields all elements except the last `n`. C# analogue: `SkipLast`.
-    ///
-    /// Lazy — uses a ring buffer of size `n`. If the source has fewer than
-    /// `n` items, yields nothing.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let result: Vec<_> = (1..=5).skip_last(2).collect();
-    /// assert_eq!(result, [1, 2, 3]);
-    /// ```
-    fn skip_last(self, n: usize) -> SkipLast<Self> {
-        SkipLast {
-            inner: self,
-            buffer: std::collections::VecDeque::with_capacity(n),
-            n,
-        }
-    }
-
-    /// Yields only the last `n` elements. C# analogue: `TakeLast`.
-    ///
-    /// Eager — must consume the source to find the tail. If `n` is `0`,
-    /// the source is not iterated.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let result: Vec<_> = (1..=5).take_last(2).collect();
-    /// assert_eq!(result, [4, 5]);
-    /// ```
-    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
-    fn take_last(self, n: usize) -> std::vec::IntoIter<Self::Item> {
-        if n == 0 {
-            return Vec::new().into_iter();
-        }
-        let mut buf: std::collections::VecDeque<Self::Item> =
-            std::collections::VecDeque::with_capacity(n);
-        for item in self {
-            if buf.len() == n {
-                buf.pop_front();
-            }
-            buf.push_back(item);
-        }
-        let v: Vec<Self::Item> = buf.into_iter().collect();
-        v.into_iter()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -405,18 +185,6 @@ pub trait LinqExt: Iterator + Sized {
     {
         let mut seen: std::collections::HashSet<K> = std::collections::HashSet::new();
         self.filter(move |x| seen.insert(key_fn(x)))
-    }
-
-    /// Concatenates two sequences. C# analogue: `Concat`.
-    fn concat_<I2>(self, other: I2) -> Concat<Self, I2::IntoIter>
-    where
-        I2: IntoIterator<Item = Self::Item>,
-    {
-        Concat {
-            first: self,
-            second: other.into_iter(),
-            on_second: false,
-        }
     }
 
     /// **Escape hatch.** Compares with `PartialEq` and scans linearly, so it
@@ -642,7 +410,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let by_price: Vec<_> = vec![("b", 2.5f64), ("a", 1.0)]
     ///     .into_iter()
     ///     .order_by_with(|x, y| x.1.total_cmp(&y.1))
-    ///     .to_vec();
+    ///     .collect();
     /// assert_eq!(by_price, [("a", 1.0), ("b", 2.5)]);
     /// ```
     fn order_by_with<F>(self, cmp: F) -> OrderedQueryable<Self::Item>
@@ -694,74 +462,9 @@ pub trait LinqExt: Iterator + Sized {
         OrderedQueryable::new(data, Box::new(|a, b| b.cmp(a)))
     }
 
-    /// Reverses the sequence. C# analogue: `Reverse`.
-    fn reverse(self) -> Reverse<Self> {
-        let buffer: Vec<_> = self.collect();
-        Reverse {
-            buffer: buffer.into_iter().rev(),
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════════════
     // AGGREGATION
     // ═══════════════════════════════════════════════════════════════════════
-
-    /// Applies an accumulator function over the sequence with an explicit seed.
-    /// C# analogue: `Aggregate(seed, func)`. (The seedless `Aggregate(func)` overload is `reduce_`, not this.)
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let sum = (1..=5).aggregate(0, |acc, x| acc + x);
-    /// assert_eq!(sum, 15);
-    /// ```
-    #[must_use]
-    fn aggregate<Acc, F>(self, seed: Acc, f: F) -> Acc
-    where
-        F: FnMut(Acc, Self::Item) -> Acc,
-    {
-        self.fold(seed, f)
-    }
-
-    /// Applies an accumulator function over the sequence, using the first
-    /// element as the seed. Returns `None` if the sequence is empty.
-    ///
-    /// C# analogue: `Aggregate(func)`, the no-seed overload — but C# throws on an empty sequence and this returns `None`. Alias
-    /// for [`Iterator::reduce`].
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let sum = (1..=5).reduce_(|acc, x| acc + x);
-    /// assert_eq!(sum, Some(15));
-    /// ```
-    #[must_use]
-    fn reduce_<F>(self, f: F) -> Option<Self::Item>
-    where
-        F: FnMut(Self::Item, Self::Item) -> Self::Item,
-    {
-        self.reduce(f)
-    }
-
-    /// Applies an accumulator function with an explicit seed, then projects
-    /// the final accumulator through `result_selector`. C# analogue:
-    /// `Aggregate(seed, func, resultSelector)`.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let doubled_sum: i32 = (1..=5).aggregate_with_selector(
-    ///     0i32,
-    ///     |acc, x| acc + x,
-    ///     |sum| sum * 2,
-    /// );
-    /// assert_eq!(doubled_sum, 30);
-    /// ```
-    #[must_use]
-    fn aggregate_with_selector<Acc, R, F, S>(self, seed: Acc, f: F, result_selector: S) -> R
-    where
-        F: FnMut(Acc, Self::Item) -> Acc,
-        S: FnOnce(Acc) -> R,
-    {
-        result_selector(self.fold(seed, f))
-    }
 
     /// Sums elements that implement `std::iter::Sum`. C# analogue: `Sum`.
     #[must_use]
@@ -975,23 +678,6 @@ pub trait LinqExt: Iterator + Sized {
         self.where_(predicate).fold(None, |_, x| Some(x))
     }
 
-    /// Returns the element at `index`, or `None`. C# analogue: `ElementAtOrDefault`.
-    #[must_use]
-    fn element_at(self, index: usize) -> Option<Self::Item> {
-        Iterator::skip(self, index).next()
-    }
-
-    /// Returns the element at `index`. **Panics** if the index is out of
-    /// bounds. C# analogue: `ElementAt(index)`.
-    ///
-    /// For a non-panicking version, see [`element_at`](Self::element_at).
-    #[must_use]
-    fn element_at_strict(self, index: usize) -> Self::Item {
-        Iterator::skip(self, index)
-            .next()
-            .expect("index out of bounds")
-    }
-
     /// Returns the single element, reporting which way it failed.
     ///
     /// Consumes at most two elements, so it terminates on an infinite source.
@@ -1092,32 +778,6 @@ pub trait LinqExt: Iterator + Sized {
             Ok(value) => value,
             Err(SingleError::Empty) => default,
             Err(err @ SingleError::MoreThanOne) => panic!("{}", err.message()),
-        }
-    }
-
-    /// Returns the element at `index`, or `default` if out of bounds.
-    /// **No C# counterpart.** `ElementAtOrDefault` has only `(Index)` and `(Int32)` overloads; neither takes a fallback value.
-    #[must_use]
-    fn element_at_or(self, index: usize, default: Self::Item) -> Self::Item {
-        Iterator::skip(self, index).next().unwrap_or(default)
-    }
-
-    /// If the sequence is empty, yields `default` once; otherwise yields all
-    /// elements unchanged. C# analogue: `DefaultIfEmpty(value)`.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let v: Vec<i32> = Vec::<i32>::new().into_iter().default_if_empty(99).collect();
-    /// assert_eq!(v, [99]);
-    ///
-    /// let v: Vec<i32> = vec![1, 2].into_iter().default_if_empty(99).collect();
-    /// assert_eq!(v, [1, 2]);
-    /// ```
-    fn default_if_empty(self, default: Self::Item) -> DefaultIfEmpty<Self> {
-        DefaultIfEmpty {
-            inner: self,
-            default: Some(default),
-            yielded_anything: false,
         }
     }
 
@@ -1587,12 +1247,6 @@ pub trait LinqExt: Iterator + Sized {
     // CONVERSION
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// Collects into a `Vec`. C# analogue: `ToList`.
-    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
-    fn to_vec(self) -> Vec<Self::Item> {
-        self.collect()
-    }
-
     /// Collects into a `HashMap` by a key selector. C# analogue: `ToDictionary`.
     #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
     fn to_hashmap<K, F>(self, key_fn: F) -> std::collections::HashMap<K, Self::Item>
@@ -1607,15 +1261,6 @@ pub trait LinqExt: Iterator + Sized {
             map.insert(key, item);
         }
         map
-    }
-
-    /// Collects into a `HashSet`. C# analogue: `ToHashSet`.
-    #[must_use = "this consumes the iterator and allocates; if you only want the side effects, use `for_each_` instead"]
-    fn to_hashset(self) -> std::collections::HashSet<Self::Item>
-    where
-        Self::Item: std::hash::Hash + Eq,
-    {
-        self.collect()
     }
 
     /// Builds a [`Lookup`] (one-to-many dictionary). C# analogue: `ToLookup`.
@@ -1635,119 +1280,6 @@ pub trait LinqExt: Iterator + Sized {
     // ═══════════════════════════════════════════════════════════════════════
     // UTILITY
     // ═══════════════════════════════════════════════════════════════════════
-
-    /// Merges two sequences element-by-element using a result selector.
-    /// C# analogue: `Zip(second, resultSelector)`.
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let sums: Vec<_> = vec![1, 2, 3].into_iter()
-    ///     .zip_(vec![10, 20, 30], |a, b| a + b)
-    ///     .collect();
-    /// assert_eq!(sums, [11, 22, 33]);
-    /// ```
-    fn zip_<J, R, F>(self, other: J, result_selector: F) -> Zip<Self, J::IntoIter, F>
-    where
-        J: IntoIterator,
-        F: FnMut(Self::Item, J::Item) -> R,
-    {
-        Zip {
-            first: self,
-            second: other.into_iter(),
-            result_selector,
-        }
-    }
-
-    /// Merges three sequences element-by-element using a three-arg result
-    /// selector. Stops as soon as any of the three is exhausted.
-    /// C# analogue: `Zip(second, third, resultSelector)` (.NET 6+).
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let v: Vec<_> = vec![1, 2, 3].into_iter()
-    ///     .zip3(vec![10, 20, 30], vec![100, 200, 300], |a, b, c| a + b + c)
-    ///     .collect();
-    /// assert_eq!(v, [111, 222, 333]);
-    /// ```
-    fn zip3<J, K, R, F>(
-        self,
-        second: J,
-        third: K,
-        mut result_selector: F,
-    ) -> impl Iterator<Item = R>
-    where
-        J: IntoIterator,
-        K: IntoIterator,
-        F: FnMut(Self::Item, J::Item, K::Item) -> R,
-    {
-        let mut s = second.into_iter();
-        let mut t = third.into_iter();
-        self.map_while(move |a| {
-            let b = s.next()?;
-            let c = t.next()?;
-            Some(result_selector(a, b, c))
-        })
-    }
-
-    /// Applies an action to each element (for side effects). C# analogue: `ForEach` / `Do`.
-    fn for_each_<F>(self, f: F)
-    where
-        F: FnMut(Self::Item),
-    {
-        self.for_each(f)
-    }
-
-    /// Appends a single element to the end of the sequence. C# analogue: `Append`.
-    fn append_item(self, item: Self::Item) -> impl Iterator<Item = Self::Item> {
-        self.chain(std::iter::once(item))
-    }
-
-    /// Prepends a single element to the front of the sequence. C# analogue: `Prepend`.
-    fn prepend_item(self, item: Self::Item) -> impl Iterator<Item = Self::Item> {
-        std::iter::once(item).chain(self)
-    }
-
-    /// Returns `true` if the sequence contains no elements. C# analogue: `!Any()`.
-    ///
-    /// `is_empty_` consumes the iterator like other LINQ terminal ops; clippy's
-    /// `wrong_self_convention` lint expects `is_*` methods to take `&self`,
-    /// but here the consumption is intentional and consistent with `any_` /
-    /// `all_` / `count_where`.
-    #[allow(clippy::wrong_self_convention)]
-    #[must_use]
-    fn is_empty_(mut self) -> bool {
-        self.next().is_none()
-    }
-
-    /// Yields `(index, item)` pairs. C# analogue: .NET 9+ `Index()`; an
-    /// alias for [`Iterator::enumerate`].
-    ///
-    /// ```rust
-    /// use linq_rs::LinqExt;
-    /// let v: Vec<_> = vec!["a", "b", "c"].into_iter().index_().collect();
-    /// assert_eq!(v, [(0, "a"), (1, "b"), (2, "c")]);
-    /// ```
-    fn index_(self) -> std::iter::Enumerate<Self> {
-        self.enumerate()
-    }
-
-    /// Sequence equality — two sequences are equal if they yield the same
-    /// elements in the same order. C# analogue: `SequenceEqual`.
-    #[must_use]
-    fn sequence_equal<I2>(self, other: I2) -> bool
-    where
-        I2: IntoIterator<Item = Self::Item>,
-        Self::Item: PartialEq,
-    {
-        let mut other = other.into_iter();
-        for item in self {
-            match other.next() {
-                Some(o) if o == item => continue,
-                _ => return false,
-            }
-        }
-        other.next().is_none()
-    }
 }
 
 // Blanket implementation — every `Iterator` gets all LINQ methods.

@@ -79,8 +79,8 @@ fn main() {
     assert_eq!(vec![1, 2, 3].iter().counts().len(), 3);
 
     // And linq_rs's own operators, under their post-W-12 names, in the same scope.
-    assert_eq!((1..=5).skip_(3).to_vec(), vec![4, 5]);
-    assert_eq!(vec![1, 1, 2].into_iter().distinct().to_vec(), vec![1, 2]);
+    assert_eq!((1..=5).skip_(3).collect::<Vec<_>>(), vec![4, 5]);
+    assert_eq!(vec![1, 1, 2].into_iter().distinct().collect::<Vec<_>>(), vec![1, 2]);
     let rows: Vec<String> = vec![(1u32, "a")]
         .into_iter()
         .inner_join(vec![(1u32, "x")], |(k, _)| *k, |(k, _)| *k, |(_, l), (_, r)| format!("{l}{r}"))
@@ -120,10 +120,19 @@ fi
 # Do not blame a collision for what may be an infrastructure failure -- a
 # network hiccup and a genuine name clash are different problems and deserve
 # different messages.
-if printf '%s\n' "$out" | grep -qE 'error\[E0034\]|multiple applicable items|error\[E0599\]|error\[E0277\]|error\[E0061\]|error\[E0432\]'; then
+if printf '%s\n' "$out" | grep -qE 'error\[E0034\]|multiple applicable items'; then
   echo "FAIL: a method name collides again."
   echo "      linq_rs and itertools $ITERTOOLS_REQ can no longer be imported into"
   echo "      one scope. See DECISIONS.md D-005 and AUDIT.md findings E-1/E-2."
+elif printf '%s\n' "$out" | grep -qE 'error\[E0599\]|error\[E0432\]'; then
+  echo "FAIL: this probe references something linq_rs no longer exposes."
+  echo "      Usually means a method was renamed or cut (see D-019) and this"
+  echo "      script needs updating -- NOT necessarily a name collision. If the"
+  echo "      error names a method that still exists, it IS a collision."
+elif printf '%s\n' "$out" | grep -qE 'error\[E0277\]|error\[E0061\]|error\[E0308\]'; then
+  echo "FAIL: a call resolved to the wrong candidate."
+  echo "      This is the SILENT collision shape: no ambiguity error, just a"
+  echo "      confusing cascade. See AUDIT.md finding E-1."
 else
   echo "FAIL: the throwaway crate did not build, but not with a resolution error."
   echo "      This looks like an infrastructure problem (network, registry,"

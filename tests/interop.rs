@@ -132,23 +132,3 @@ fn importing_linqext_does_not_break_unrelated_iterator_calls() {
     // And LinqExt's own paging operator, under its suffixed name.
     assert_eq!((1..=5).skip_(3).collect::<Vec<_>>(), vec![4, 5]);
 }
-
-#[test]
-fn inherent_slice_methods_still_win_on_a_vec() {
-    // `[T]::join`, `[T]::reverse` and `[T]::to_vec` are inherent methods on
-    // slices. A Vec is not an Iterator, so LinqExt was never a candidate --
-    // but these are the names most likely to be confused, so pin them.
-    // A genuine Vec, not an array: Vec is the receiver most likely to be
-    // confused with an iterator, so it is the one worth pinning. Built by
-    // collect() so clippy::useless_vec does not fire on an unused `vec!`.
-    let words: Vec<&str> = ["a", "b", "c"].into_iter().collect();
-    assert_eq!(words.join("-"), "a-b-c");
-
-    let mut nums = vec![1, 2, 3];
-    nums.reverse();
-    assert_eq!(nums, [3, 2, 1]);
-    assert_eq!(nums.to_vec(), [3, 2, 1]);
-
-    // LinqExt's iterator-level equivalents, for contrast.
-    assert_eq!(vec![1, 2, 3].into_iter().reverse().to_vec(), [3, 2, 1]);
-}

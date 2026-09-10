@@ -1,27 +1,13 @@
 method	class	source_pulled_at_call	arg_pulled_at_call	short_circuits	note
 where_	lazy	0	-	yes	streams; take_(2) pulls 2
-where_indexed	lazy	0	-	yes	enumerate+filter_map; take_(2) pulls 2
 select	lazy	0	-	yes	streams; take_(2) pulls 2
-select_indexed	lazy	0	-	yes	enumerate+map; take_(2) pulls 2
 select_many	lazy	0	-	yes	streams outer and inner; take_(2) pulls 2
-select_many_indexed	lazy	0	-	yes	enumerate+flat_map; take_(2) pulls 2
-flatten_	lazy	0	-	yes	streams; take_(2) pulls 2
-of_type	lazy	0	-	yes	filter_map over TryInto; take_(2) pulls 2
-cast	lazy	0	-	yes	map+expect; the panic is at iteration time, not call time
 skip_	lazy	0	-	yes	take_(2) pulls 12 = n + 2; the skip happens on first next()
-skip_while_	lazy	0	-	yes	take_(2) pulls 12; predicate runs at iteration time
-skip_while_indexed	lazy	0	-	yes	take_(2) pulls 12
 take_	lazy	0	-	yes	take_(2) pulls 2
-take_while_	lazy	0	-	yes	take_(2) pulls 2
-take_while_indexed	lazy	0	-	yes	take_(2) pulls 2
-chunk	lazy	0	-	yes	take_(2) pulls 6 = 2 chunks x size 3; assert!(size>0) fires at call but pulls nothing
-skip_last	lazy	0	-	yes	ring buffer of n; take_(2) pulls 7 = n + 2; streams an endless source
-take_last	eager_at_call	1000	-	no	the only eager paging op; drains at call even though C# TakeLast is deferred
 distinct	lazy	0	-	yes	HASH-BACKED AND STILL STREAMING: HashSet built empty, filled during iteration; terminates on an endless source; matches C# Distinct (deferred streaming)
 distinct_by	lazy	0	-	yes	streaming; terminates on an endless source
 distinct_partial_eq	lazy	0	-	yes	O(n^2) escape hatch but equally streaming
 distinct_by_partial_eq	lazy	0	-	yes	streaming
-concat_	lazy	0	0	yes	both sides lazy; note the bound IntoIter = Self forces the argument to be the same iterator type
 union_	lazy	0	0	yes	FULLY LAZY: self.chain(other).filter(seen.insert(..)) at queryable.rs:555; streams an endless receiver; matches C# Union (deferred streaming)
 union_partial_eq	eager_at_call	1000	1000	no	buffers both sides into a Vec at call; hangs on an endless source; diverges from C# Union (deferred streaming)
 union_by	eager_at_call	1000	1000	no	buffers both sides into a Vec at call; diverges from C# Union/UnionBy
@@ -35,7 +21,6 @@ order_by	eager_at_call	1000	-	no	collects at call, sorts at into_iter(); C# Orde
 order_by_descending	eager_at_call	1000	-	no	collects at call, sorts at into_iter()
 order	eager_at_call	1000	-	no	collects at call, sorts at into_iter()
 order_descending	eager_at_call	1000	-	no	collects at call, sorts at into_iter()
-reverse	eager_at_call	1000	-	no	collects into a Vec at call; C# Reverse is deferred nonstreaming
 inner_join	eager_at_call	1000	1000	no	builds the inner hash index AND drains the outer, materialising every result row at call
 inner_join_partial_eq	eager_at_call	1000	1000	no	nested loop over both sides, fully materialised at call
 group_join	eager_at_call	1000	1000	no	drains inner and outer at call; the trailing .collect::<Vec<_>>() defeats the lazy .map()
@@ -48,15 +33,6 @@ count_by	eager_at_call	1000	-	no	materialised at call; yields in HashMap order
 count_by_partial_eq	eager_at_call	1000	-	no	materialised at call
 aggregate_by	eager_at_call	1000	-	no	materialised at call; yields in HashMap order
 aggregate_by_partial_eq	eager_at_call	1000	-	no	materialised at call
-default_if_empty	lazy	0	-	yes	argument is a single item, not a sequence
-append_item	lazy	0	-	yes	chain(once); take_(2) pulls 2
-prepend_item	lazy	0	-	yes	take_(2) pulls 1 - the prepended item is yielded first
-index_	lazy	0	-	yes	alias for enumerate
-zip_	lazy	0	0	yes	both sides lazy, pulled in lockstep
-zip3	lazy	0	0	yes	all three lazy; map_while stops at the first exhausted sequence
-aggregate	terminal	1000	-	no	fold over the whole source
-reduce_	terminal	1000	-	no	fold over the whole source
-aggregate_with_selector	terminal	1000	-	no	fold, then one projection
 sum_	terminal	1000	-	no	drains
 sum_by	terminal	1000	-	no	drains
 count_where	terminal	1000	-	no	drains
@@ -73,9 +49,6 @@ last_	terminal	1000	-	no	must reach the end
 last_or_default	terminal	1000	-	no	must reach the end
 last_where	terminal	1000	-	no	must reach the end
 last_or	terminal	1000	-	no	must reach the end
-element_at	terminal	6	-	yes	pulls index+1
-element_at_strict	terminal	6	-	yes	pulls index+1; panics if the source ends first
-element_at_or	terminal	6	-	yes	pulls index+1
 single	terminal	2	-	yes	pulls exactly 2 then panics on a longer source (measured under catch_unwind)
 try_single	terminal	2	-	yes	pulls exactly 2; returns SingleError rather than panicking
 single_or_default	terminal	2	-	yes	pulls exactly 2; returns None rather than panicking
@@ -83,13 +56,8 @@ single_or	terminal	2	-	yes	pulls exactly 2 then panics on a longer source (measu
 any_	terminal	6	-	yes	stops at the first match (6 for a match at index 5)
 all_	terminal	6	-	yes	stops at the first counterexample (6 for a failure at index 5)
 contains_	terminal	6	-	yes	stops at the first match
-is_empty_	terminal	1	-	yes	pulls exactly 1
-for_each_	terminal	1000	-	no	drains
-to_vec	terminal	1000	-	no	drains
 to_hashmap	terminal	1000	-	no	drains
-to_hashset	terminal	1000	-	no	drains
 to_lookup	terminal	1000	-	no	drains
-sequence_equal	terminal	1000	1000	no	pulls both sides in lockstep and stops at the first mismatch; equal 1000-element sequences drain both
 order_by_with	eager_at_call	1000	-	no	collects at call, sorts on first next()
 min_by_	terminal	1000	-	no	drains
 max_by_	terminal	1000	-	no	drains

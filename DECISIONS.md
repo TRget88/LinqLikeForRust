@@ -341,6 +341,38 @@ seam, not the seam.
   Verified against `main` @ `bd9fd4f`: `executed test count dropped from 236 to
   17`, exit 1.
 
+## D-019 — The v1.0 cut line: keep what can become a SQL clause
+- **Status:** SETTLED (2026-09-09) — applied.
+- **Ruling:** an operator earns its place in v1.0 if it could become a SQL
+  clause, or a translatable execution of one, under `D-002`'s two-interpreter
+  design. Everything else is cut. `LinqExt` went **94 → 62 methods**.
+- **Why this criterion rather than a size target:** it follows from the thesis
+  already chosen, so the surface has a reason to be the shape it is instead of
+  an arbitrary count. It is also *derivable*: the `translatable` column in
+  `.github/data/operator-map.tsv` records the classification per method, so the
+  cut is checkable rather than a one-time judgement that decays.
+- **The 32 cut:** the `*_indexed` family, `zip_`/`zip3`, `cast`/`of_type`,
+  `append_item`/`prepend_item`, `chunk`, `reverse`, `flatten_`, `concat_`,
+  `take_last`/`skip_last`, `skip_while_`/`take_while_`, `default_if_empty`,
+  `element_at*`, `sequence_equal`, `is_empty_`, `index_`, `aggregate`/`reduce_`/
+  `aggregate_with_selector`, `to_vec`/`to_hashset`. None of them names a SQL
+  concept; all are `std::iter` in a different spelling.
+- **Two judgement calls worth naming.** `to_lookup` and `to_hashmap` are kept
+  while `to_vec` and `to_hashset` are cut: the first two produce shapes
+  `collect()` cannot (a multimap; a keyed map with a selector), the last two
+  *are* `collect()`. And the whole element family (`first`, `single`, …) is kept
+  because `LIMIT 1` and `LIMIT 2` are real clauses, which is why the surviving
+  count is 62 rather than the ~40 first estimated.
+- **Forbids:** adding an operator whose `translatable` value would be `none`.
+  If you want one anyway, change this decision first.
+- **Enforced by:** **IMPLEMENTED** — `gen-docs.py` requires every `LinqExt`
+  method to carry a `translatable` value in `operator-map.tsv` and fails on a
+  method it does not know, so a new operator cannot be added without classifying
+  it. It also now checks the README in **both** directions: a public method
+  missing from the API Reference, *and* an API Reference row naming a method
+  that no longer exists — the second check was added because the cut left 32
+  such rows behind.
+
 ## D-014 — This file is the single source of truth
 - **Status:** SETTLED (2026-09-09)
 - **Ruling:** Scope, naming, semantics and dependency decisions live here and

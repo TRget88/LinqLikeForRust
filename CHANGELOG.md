@@ -84,6 +84,35 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Removed — the v1.0 cut line (D-019). Breaking.
+
+**`LinqExt` goes from 94 methods to 62.** An operator earns its place if it
+could become a SQL clause, or a translatable execution of one, under `D-002`'s
+two-interpreter design. Everything else is cut.
+
+The criterion matters more than the number: it follows from the thesis already
+chosen, so the surface has a reason to be this shape rather than an arbitrary
+size — and it is *derivable*, recorded per method in a `translatable` column, so
+the cut is a gate rather than a one-time judgement that decays.
+
+**Cut (32):** the `*_indexed` family, `zip_`/`zip3`, `cast`/`of_type`,
+`append_item`/`prepend_item`, `chunk`, `reverse`, `flatten_`, `concat_`,
+`take_last`/`skip_last`, `skip_while_`/`take_while_`, `default_if_empty`,
+`element_at`/`element_at_strict`/`element_at_or`, `sequence_equal`, `is_empty_`,
+`index_`, `aggregate`/`reduce_`/`aggregate_with_selector`, `to_vec`,
+`to_hashset`. Nine adaptor structs went with them. None names a SQL concept; all
+are `std::iter` in a different spelling — use `collect()`, `chain()`, `rev()`,
+`zip()`, `fold()`, `enumerate()`, `eq()`.
+
+**Two calls worth naming.** `to_lookup` and `to_hashmap` are kept while `to_vec`
+and `to_hashset` are cut: the first two produce shapes `collect()` cannot, the
+last two *are* `collect()`. And the element family (`first`, `single`, …) is
+kept because `LIMIT 1` and `LIMIT 2` are real clauses — which is why 62 survive
+rather than the ~40 first estimated.
+
+The generated overlap figure moved with it: **59% → 44%** of the surface is a
+std rename.
+
 ### Added — 1.0 release gate (W-19)
 
 `.github/scripts/release-gate.sh` parses `DECISIONS.md` and **fails a `v1.*` tag

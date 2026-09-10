@@ -17,27 +17,6 @@ use linq_rs::LinqExt;
 // PANIC PATHS
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[test]
-#[should_panic(expected = "chunk size must be > 0")]
-fn chunk_size_zero_panics() {
-    let _: Vec<_> = vec![1, 2, 3].into_iter().chunk(0).collect();
-}
-
-#[test]
-#[should_panic(expected = "cast failed")]
-fn cast_panic_is_lazy_at_iteration() {
-    // The cast call itself must not panic; only iteration past the bad item does.
-    let v = vec![1i64, 2, i64::MAX];
-    let it = v.into_iter().cast::<i32>(); // ← no panic here
-    let _: Vec<i32> = it.collect(); // ← panic here, when we hit MAX
-}
-
-#[test]
-fn cast_construction_does_not_panic_on_empty() {
-    let v: Vec<i32> = Vec::<i64>::new().into_iter().cast::<i32>().collect();
-    assert!(v.is_empty());
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // EMPTY INPUTS — every operator category
 // ─────────────────────────────────────────────────────────────────────────────
@@ -72,21 +51,6 @@ fn select_many_returning_empty_iters_yields_empty() {
         .select_many(|_| Vec::<i32>::new().into_iter())
         .collect();
     assert!(v.is_empty());
-}
-
-#[test]
-fn flatten_on_empty() {
-    let v: Vec<i32> = Vec::<Vec<i32>>::new().into_iter().flatten_().collect();
-    assert!(v.is_empty());
-}
-
-#[test]
-fn flatten_mixed_empty_and_nonempty() {
-    let v: Vec<i32> = vec![vec![], vec![1, 2], vec![], vec![3], vec![]]
-        .into_iter()
-        .flatten_()
-        .collect();
-    assert_eq!(v, [1, 2, 3]);
 }
 
 // ── Set ops on empty ─────────────────────────────────────────────────────────
@@ -124,15 +88,6 @@ fn union_two_empties() {
     assert!(v.is_empty());
 }
 
-#[test]
-fn concat_two_empties() {
-    let v: Vec<i32> = Vec::<i32>::new()
-        .into_iter()
-        .concat_(Vec::<i32>::new())
-        .collect();
-    assert!(v.is_empty());
-}
-
 // ── Quantifiers on empty ─────────────────────────────────────────────────────
 
 #[test]
@@ -154,14 +109,6 @@ fn contains_on_empty_is_false() {
 // ── Aggregation on empty ─────────────────────────────────────────────────────
 
 #[test]
-fn aggregate_on_empty_returns_seed_unchanged() {
-    let r = Vec::<i32>::new()
-        .into_iter()
-        .aggregate(99, |acc, x| acc + x);
-    assert_eq!(r, 99);
-}
-
-#[test]
 fn sum_on_empty_is_zero() {
     let s: i32 = Vec::<i32>::new().into_iter().sum_();
     assert_eq!(s, 0);
@@ -178,22 +125,7 @@ fn min_max_on_empty_are_none() {
     assert_eq!(Vec::<i32>::new().into_iter().max_(), None);
 }
 
-#[test]
-fn aggregate_with_selector_on_empty_runs_selector_on_seed() {
-    let r: i32 = Vec::<i32>::new().into_iter().aggregate_with_selector(
-        0i32,
-        |acc, x| acc + x,
-        |sum| sum * 2,
-    );
-    assert_eq!(r, 0); // selector(0) = 0
-}
-
 // ── Element ops on empty (non-strict) ────────────────────────────────────────
-
-#[test]
-fn element_at_out_of_bounds_returns_none() {
-    assert_eq!(vec![10, 20].into_iter().element_at(5), None);
-}
 
 #[test]
 fn first_or_default_on_empty_is_none() {
@@ -301,18 +233,6 @@ fn take_zero_yields_empty() {
 fn take_usize_max_yields_all() {
     let v: Vec<_> = vec![1, 2, 3].into_iter().take_(usize::MAX).collect();
     assert_eq!(v, [1, 2, 3]);
-}
-
-#[test]
-fn chunk_size_one() {
-    let v: Vec<_> = vec![1, 2, 3].into_iter().chunk(1).collect();
-    assert_eq!(v, [vec![1], vec![2], vec![3]]);
-}
-
-#[test]
-fn chunk_size_larger_than_source() {
-    let v: Vec<_> = vec![1, 2, 3].into_iter().chunk(100).collect();
-    assert_eq!(v, [vec![1, 2, 3]]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -495,57 +415,6 @@ fn order_by_already_sorted_input_is_stable() {
 }
 
 #[test]
-fn reverse_on_empty() {
-    let v: Vec<i32> = Vec::<i32>::new().into_iter().reverse().collect();
-    assert!(v.is_empty());
-}
-
-#[test]
-fn reverse_on_single_element() {
-    let v: Vec<_> = vec![42].into_iter().reverse().collect();
-    assert_eq!(v, [42]);
-}
-
-#[test]
-fn reduce_on_single_element_returns_that_element() {
-    let r = vec![42].into_iter().reduce_(|a, b| a + b);
-    assert_eq!(r, Some(42));
-}
-
-#[test]
-fn zip3_with_one_empty_yields_empty() {
-    let v: Vec<_> = vec![1, 2, 3]
-        .into_iter()
-        .zip3(Vec::<i32>::new(), vec![10, 20, 30], |a, b, c| (a, b, c))
-        .collect();
-    assert!(v.is_empty());
-}
-
-#[test]
-fn sequence_equal_two_empties_is_true() {
-    assert!(Vec::<i32>::new()
-        .into_iter()
-        .sequence_equal(Vec::<i32>::new()));
-}
-
-#[test]
-fn sequence_equal_self_longer_is_false() {
-    assert!(!vec![1, 2, 3].into_iter().sequence_equal(vec![1, 2]));
-}
-
-#[test]
-fn sequence_equal_other_longer_is_false() {
-    assert!(!vec![1, 2].into_iter().sequence_equal(vec![1, 2, 3]));
-}
-
-#[test]
-fn of_type_filters_all_out_when_nothing_fits() {
-    let big: Vec<i64> = vec![i64::MAX, i64::MAX - 1, i64::MAX - 2];
-    let v: Vec<i32> = big.into_iter().of_type::<i32>().collect();
-    assert!(v.is_empty());
-}
-
-#[test]
 fn range_negative_start() {
     let v: Vec<_> = linq_rs::range(-3, 5).collect();
     assert_eq!(v, [-3, -2, -1, 0, 1]);
@@ -555,22 +424,4 @@ fn range_negative_start() {
 fn range_zero_count_yields_empty() {
     let v: Vec<_> = linq_rs::range(100, 0).collect();
     assert!(v.is_empty());
-}
-
-#[test]
-fn default_if_empty_then_other_ops_compose() {
-    // Empty + default_if_empty + chained ops behaves as a single-element source.
-    let v: Vec<_> = Vec::<i32>::new()
-        .into_iter()
-        .default_if_empty(7)
-        .select(|x| x * 10)
-        .collect();
-    assert_eq!(v, [70]);
-}
-
-#[test]
-fn take_last_then_skip_last_compose() {
-    // [1..=10] take_last(5) -> [6,7,8,9,10], skip_last(2) -> [6,7,8]
-    let v: Vec<_> = (1..=10).take_last(5).skip_last(2).collect();
-    assert_eq!(v, [6, 7, 8]);
 }

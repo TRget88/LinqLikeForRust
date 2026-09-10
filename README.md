@@ -10,9 +10,9 @@ Rust (`D-005`).
 <!-- BEGIN GENERATED: coverage -->
 `System.Linq.Enumerable` in **.NET 10.0** exposes **74 operator names** across **228 overloads**, **38** of which take an `IEqualityComparer` or `IComparer`.
 
-This crate implements **65 of those 74 names** and **none of the 38 comparer overloads** — the latter deliberately (`D-202`): Rust expresses that with traits and newtypes, and the honest substitute is the `*_by` key-selector family.
+This crate implements **45 of those 74 names** and **none of the 38 comparer overloads** — the latter deliberately (`D-202`): Rust expresses that with traits and newtypes, and the honest substitute is the `*_by` key-selector family.
 
-**Not implemented (9):** `AsEnumerable`, `InfiniteSequence`, `LeftJoin`, `LongCount`, `RightJoin`, `Sequence`, `Shuffle`, `ToArray`, `TryGetNonEnumeratedCount`.
+**Not implemented (29):** `Aggregate`, `Append`, `AsEnumerable`, `Cast`, `Chunk`, `Concat`, `DefaultIfEmpty`, `ElementAt`, `ElementAtOrDefault`, `Index`, `InfiniteSequence`, `LeftJoin`, `LongCount`, `OfType`, `Prepend`, `Reverse`, `RightJoin`, `Sequence`, `SequenceEqual`, `Shuffle`, `SkipLast`, `SkipWhile`, `TakeLast`, `TakeWhile`, `ToArray`, `ToHashSet`, `ToList`, `TryGetNonEnumeratedCount`, `Zip`.
 
 Of the 74, **5** are static generator methods on `Enumerable` rather than extension methods, so they are free functions here, not `LinqExt` methods: `Empty`, `InfiniteSequence`, `Range`, `Repeat`, `Sequence`.
 
@@ -33,7 +33,7 @@ let result: Vec<_> = vec![1, 2, 3, 4, 5, 6]
     .into_iter()
     .where_(|x| x % 2 == 0)   // filter
     .select(|x| x * x)         // project
-    .to_vec();
+    .collect();
 
 assert_eq!(result, [4, 16, 36]);
 ```
@@ -68,37 +68,20 @@ knowingly still wrong.
 | Rust (linq_rs)              | C# LINQ equivalent                     |
 |-----------------------------|----------------------------------------|
 | `where_(predicate)`         | `Where(predicate)`                     |
-| `where_indexed(\|x, i\| ...)` | `Where((item, index) => ...)`        |
 
 ### Projection
 
 | Rust                                    | C#                                     |
 |-----------------------------------------|----------------------------------------|
 | `select(f)`                             | `Select(f)`                            |
-| `select_indexed(\|x, i\| ...)`            | `Select((item, index) => ...)`       |
 | `select_many(f)`                        | `SelectMany(f)`                        |
-| `select_many_indexed(\|x, i\| ...)`       | `SelectMany((item, index) => ...)`   |
-| `flatten_()`                            | `SelectMany(x => x)`                   |
-| `of_type::<U>()`                        | `OfType<U>()`                          |
-| `cast::<U>()`                           | `Cast<U>()` (panics)                   |
-
-`of_type` and `cast` both route through `TryInto<U>` — Rust's compile-time
-analogue to C#'s runtime type test. `of_type` drops elements that don't
-convert; `cast` panics on the first failure.
 
 ### Paging / Slicing
 
 | Rust                    | C#                     |
 |-------------------------|------------------------|
 | `skip_(n)`                       | `Skip(n)`                            |
-| `skip_while_(p)`                 | `SkipWhile(p)`                       |
-| `skip_while_indexed(\|x, i\| ...)` | `SkipWhile((item, index) => ...)`  |
-| `skip_last(n)`                   | `SkipLast(n)`                        |
 | `take_(n)`                       | `Take(n)`                            |
-| `take_while_(p)`                 | `TakeWhile(p)`                       |
-| `take_while_indexed(\|x, i\| ...)` | `TakeWhile((item, index) => ...)`  |
-| `take_last(n)`                   | `TakeLast(n)`                        |
-| `chunk(size)`                    | `Chunk(size)`                        |
 
 ### Set Operations
 
@@ -112,7 +95,6 @@ convert; `cast` panics on the first failure.
 | `intersect_by(other_keys, key_fn)`| `IntersectBy(other_keys, key_fn)`  |
 | `union_(other)`                   | `Union(other)`                     |
 | `union_by(other, key_fn)`         | `UnionBy(other, key_fn)`           |
-| `concat_(other)`                  | `Concat(other)`                    |
 
 For `except_by` / `intersect_by`, the second argument is the iterable of
 **keys** (matching C#). For `union_by` it is the iterable of **items**.
@@ -131,7 +113,6 @@ For `except_by` / `intersect_by`, the second argument is the iterable of
 | `order_by_with(cmp)`              | `OrderBy(key_fn, comparer)` — for `PartialOrd`-only keys such as `f64` |
 | `.then_by_with(cmp)`              | `.ThenBy(key_fn, comparer)`     |
 | `.then_by_descending(key_fn)`     | `.ThenByDescending(key_fn)`     |
-| `reverse()`                       | `Reverse()`                     |
 
 The **sort** is deferred to the first `into_iter()`: `order_by` and `then_by`
 accumulate comparators, so a chain composes into one lexicographic sort rather
@@ -143,9 +124,6 @@ collects the receiver when it is called (measured; see *Evaluation timing*).
 
 | Rust                                       | C#                                  |
 |--------------------------------------------|-------------------------------------|
-| `aggregate(seed, f)`                       | `Aggregate(seed, func)`             |
-| `reduce_(f)`                               | `Aggregate(func)` (no seed)         |
-| `aggregate_with_selector(seed, f, sel)`    | `Aggregate(seed, func, resultSel)`  |
 | `sum_()`                                   | `Sum()`                             |
 | `sum_by(selector)`                         | `Sum(selector)`                     |
 | `count_where(p)`                           | `Count(p)`                          |
@@ -175,10 +153,6 @@ Strict (panicking) variants on the left; `_or_default` variants return `Option<T
 | `try_single()`                  | `Single()`, but returns `Result<T, SingleError>` instead of throwing |
 | `single_or_default()`           | *not* `SingleOrDefault` — returns `Result<Option<T>, SingleError>` so empty and too-many are distinguishable |
 | `single_or(default)`            | `SingleOrDefault(defaultValue)`    |
-| `element_at_strict(index)`      | `ElementAt(index)`                 |
-| `element_at(index)`             | `ElementAtOrDefault(index)`        |
-| `element_at_or(index, default)` | `ElementAtOrDefault(idx, default)` |
-| `default_if_empty(value)`       | `DefaultIfEmpty(value)`            |
 
 ### Quantifiers
 
@@ -187,7 +161,6 @@ Strict (panicking) variants on the left; `_or_default` variants return `Option<T
 | `any_(p)`           | `Any(p)`        |
 | `all_(p)`           | `All(p)`        |
 | `contains_(value)`  | `Contains(val)` |
-| `is_empty_()`       | `!Any()`        |
 
 ### Joining
 
@@ -218,22 +191,13 @@ group into a single value.
 
 | Rust                           | C#                               |
 |--------------------------------|----------------------------------|
-| `to_vec()`                     | `ToList()`                       |
 | `to_hashmap(key_fn)`           | `ToDictionary(key_fn)`           |
-| `to_hashset()`                 | `ToHashSet()`                    |
 | `to_lookup(key_fn)`            | `ToLookup(key_fn)`               |
 
 ### Utility
 
 | Rust                                      | C#                                  |
 |-------------------------------------------|-------------------------------------|
-| `zip_(other, result_sel)`                 | `Zip(other, resultSelector)`        |
-| `zip3(second, third, result_sel)`         | `Zip(second, third, resultSel)`     |
-| `append_item(item)`                       | `Append(item)`                      |
-| `prepend_item(item)`                      | `Prepend(item)`                     |
-| `for_each_(action)`                       | `ForEach(action)`                   |
-| `sequence_equal(other)`                   | `SequenceEqual(other)`              |
-| `index_()`                                | `Index()` (.NET 9+)                 |
 
 ### Source Generators (free functions, not on `LinqExt`)
 
@@ -267,7 +231,7 @@ let result: Vec<_> = employees
     .order_by(|e| e.dept)
     .then_by_descending(|e| e.salary)
         .select(|e| (e.dept, e.name, e.salary))
-    .to_vec();
+    .collect();
 
 assert_eq!(result, [
     ("Eng", "Eve",   130_000),
@@ -313,30 +277,18 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 ## Overlap with `std::iter`
 
 <!-- BEGIN GENERATED: std-overlap -->
-**55 of this crate's 94 `LinqExt` methods (59%) are a rename or a short composition of something `std::iter::Iterator` already gives you.** If you are not porting C# code, reach for std first.
+**27 of this crate's 62 `LinqExt` methods (44%) are a rename or a short composition of something `std::iter::Iterator` already gives you.** If you are not porting C# code, reach for std first.
 
 | linq_rs | use this instead |
 |---|---|
-| `aggregate` | `fold` |
-| `aggregate_with_selector` | `fold` |
 | `all_` | `all` |
 | `any_` | `any` |
-| `append_item` | `chain(once())` |
-| `cast` | `map()` |
-| `concat_` | `chain` |
 | `contains_` | `any()` |
 | `count_where` | `filter().count()` |
-| `element_at` | `nth` |
-| `element_at_or` | `nth` |
-| `element_at_strict` | `nth` |
 | `first` | `next` |
 | `first_or` | `next` |
 | `first_or_default` | `next` |
 | `first_where` | `find` |
-| `flatten_` | `flatten` |
-| `for_each_` | `for_each` |
-| `index_` | `enumerate` |
-| `is_empty_` | `next()` |
 | `last_` | `last` |
 | `last_or` | `last` |
 | `last_or_default` | `last` |
@@ -347,33 +299,17 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 | `min_` | `min` |
 | `min_by_` | `min_by` |
 | `min_by_key_` | `min_by_key` |
-| `of_type` | `filter_map()` |
 | `order_by_with` | `sort_by` |
-| `prepend_item` | `once().chain()` |
-| `reduce_` | `reduce` |
-| `reverse` | `rev` |
 | `select` | `map` |
-| `select_indexed` | `enumerate().map()` |
 | `select_many` | `flat_map` |
-| `select_many_indexed` | `enumerate().flat_map()` |
-| `sequence_equal` | `eq` |
 | `skip_` | `skip` |
-| `skip_while_` | `skip_while` |
-| `skip_while_indexed` | `enumerate().skip_while().map()` |
 | `sum_` | `sum` |
 | `sum_by` | `map().sum()` |
 | `take_` | `take` |
-| `take_while_` | `take_while` |
-| `take_while_indexed` | `enumerate().take_while().map()` |
 | `to_hashmap` | `map().collect()` |
-| `to_hashset` | `collect` |
-| `to_vec` | `collect` |
 | `where_` | `filter` |
-| `where_indexed` | `enumerate().filter_map()` |
-| `zip3` | `zip().zip().map()` |
-| `zip_` | `zip().map()` |
 
-The remaining 39 have no direct std equivalent — that is the part of this crate with a reason to exist.
+The remaining 35 have no direct std equivalent — that is the part of this crate with a reason to exist.
 <!-- END GENERATED: std-overlap -->
 
 ## Performance — the default is hash-backed
@@ -430,7 +366,7 @@ it or sourced to the .NET API reference.
 
 ### Empty sequences return `None`; C# throws
 
-`Min`, `Max`, `MinBy`, `MaxBy`, `Average` and the seedless `Aggregate` all
+`Min`, `Max`, `MinBy`, `MaxBy` and `Average` all
 throw `InvalidOperationException` on an empty sequence when the element type is
 a non-nullable value type
 ([Min](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.min),
@@ -446,7 +382,6 @@ let empty: Vec<i32> = Vec::new();
 assert_eq!(empty.clone().into_iter().min_(), None);
 assert_eq!(empty.clone().into_iter().max_by_key_(|x| *x), None);
 assert_eq!(empty.clone().into_iter().average(|x| x as f64), None);
-assert_eq!(empty.clone().into_iter().reduce_(|a, b| a + b), None);
 
 // Sum is the exception: C# and Rust agree that an empty sum is zero.
 assert_eq!(empty.into_iter().sum_::<i32>(), 0);
@@ -585,32 +520,6 @@ Both are stable sorts, so ties keep source order in either language
 ([OrderBy](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.orderby):
 "This method performs a stable sort").
 
-### `of_type` and `cast` convert values; C# tests runtime types
-
-C# `OfType<TResult>` "returns only those elements in `source` that are non-null
-and compatible with type `TResult`"
-([OfType](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.oftype))
-— a runtime type test over a heterogeneous `IEnumerable`, with `Cast<TResult>`
-as the throwing version. Rust sequences are homogeneous and there is nothing to
-test, so both methods route through `TryInto` instead. That makes them *value
-conversions*, and the two operations select different elements.
-
-```rust
-use linq_rs::LinqExt;
-
-// Elements that do not fit the target type are dropped, not type-filtered.
-let v: Vec<i32> = vec![1i64, i64::MAX, 3].into_iter().of_type::<i32>().collect();
-assert_eq!(v, [1, 3]);
-
-// `cast` succeeds on a widening conversion. C# `Cast<long>()` over boxed ints
-// throws InvalidCastException, because unboxing does not widen.
-let v: Vec<i64> = vec![1i32, 2, 3].into_iter().cast::<i64>().collect();
-assert_eq!(v, [1i64, 2, 3]);
-```
-
-Treat these as `filter_map(TryInto::try_into)` and `map(TryInto::unwrap)` with
-LINQ-shaped names — not as a port of the C# operators.
-
 ### `count_by` and `aggregate_by` yield in hash order; C# preserves first appearance
 
 C# `CountBy` yields its key/count pairs in the order the keys first appear —
@@ -714,19 +623,19 @@ project-specific clarifications:
 <!-- BEGIN GENERATED: laziness -->
 Measured, not asserted: a counting source records how many elements each operator pulls when it is **called**, before anything is iterated. `tests/laziness.rs` re-runs these measurements, so this table cannot drift from the code.
 
-**Lazy (29)** — pull nothing at call time and stream during iteration:
+**Lazy (10)** — pull nothing at call time and stream during iteration:
 
-`append_item`, `cast`, `chunk`, `concat_`, `default_if_empty`, `distinct`, `distinct_by`, `distinct_by_partial_eq`, `distinct_partial_eq`, `flatten_`, `index_`, `of_type`, `prepend_item`, `select`, `select_indexed`, `select_many`, `select_many_indexed`, `skip_`, `skip_last`, `skip_while_`, `skip_while_indexed`, `take_`, `take_while_`, `take_while_indexed`, `union_`, `where_`, `where_indexed`, `zip3`, `zip_`.
+`distinct`, `distinct_by`, `distinct_by_partial_eq`, `distinct_partial_eq`, `select`, `select_many`, `skip_`, `take_`, `union_`, `where_`.
 
-**Eager at call (21)** — drain the source when *called*, before any iteration. C# defers these to the first `MoveNext`, so a query that is built and then discarded costs nothing there and costs full price here:
+**Eager at call (19)** — drain the source when *called*, before any iteration. C# defers these to the first `MoveNext`, so a query that is built and then discarded costs nothing there and costs full price here:
 
-`aggregate_by`, `aggregate_by_partial_eq`, `count_by`, `count_by_partial_eq`, `group_by_key`, `group_by_key_partial_eq`, `group_by_with_element`, `group_by_with_result`, `group_join`, `group_join_partial_eq`, `inner_join`, `inner_join_partial_eq`, `order`, `order_by`, `order_by_descending`, `order_by_with`, `order_descending`, `reverse`, `take_last`, `union_by`, `union_partial_eq`.
+`aggregate_by`, `aggregate_by_partial_eq`, `count_by`, `count_by_partial_eq`, `group_by_key`, `group_by_key_partial_eq`, `group_by_with_element`, `group_by_with_result`, `group_join`, `group_join_partial_eq`, `inner_join`, `inner_join_partial_eq`, `order`, `order_by`, `order_by_descending`, `order_by_with`, `order_descending`, `union_by`, `union_partial_eq`.
 
 **Half-eager (6)** — the receiver streams, but the *argument* is drained at call time even if the result is never iterated:
 
 `except`, `except_by`, `except_partial_eq`, `intersect`, `intersect_by`, `intersect_partial_eq`.
 
-**Terminal (38)** — consume and return a value, immediate by definition. Many still short-circuit: `first` pulls one element, `any_` stops at the first match, `try_single` pulls at most two.
+**Terminal (27)** — consume and return a value, immediate by definition. Many still short-circuit: `first` pulls one element, `any_` stops at the first match, `try_single` pulls at most two.
 
 > Generated by `.github/scripts/gen-docs.py`. Do not edit by hand.
 <!-- END GENERATED: laziness -->

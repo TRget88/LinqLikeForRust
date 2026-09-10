@@ -14,7 +14,7 @@ fn main() {
         .where_(|x| x % 2 == 0)
         .select(|x| x * x)
         .take_(3)
-        .to_vec();
+        .collect();
 
     println!("First three even squares: {result:?}");
     assert_eq!(result, [4, 16, 36]);

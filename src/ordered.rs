@@ -29,7 +29,7 @@
 //!     .order_by(|t| t.1)
 //!     .then_by(|t| t.0)
 //!     .select(|t| t.0)
-//!     .to_vec();
+//!     .collect();
 //! assert_eq!(names, ["c", "a", "b"]);
 //! ```
 
@@ -80,7 +80,7 @@ impl<T> OrderedQueryable<T> {
     ///     .into_iter()
     ///     .order_by(|t| t.1)
     ///     .then_by(|t| t.0)
-    ///     .to_vec();
+    ///     .collect();
     /// assert_eq!(v, [("c", 1), ("a", 2), ("b", 2)]);
     /// ```
     pub fn then_by<K, F>(self, key_fn: F) -> Self
@@ -111,7 +111,7 @@ impl<T> OrderedQueryable<T> {
     ///     .into_iter()
     ///     .order_by_with(|x, y| x.1.total_cmp(&y.1))
     ///     .then_by_with(|x, y| x.0.cmp(y.0))
-    ///     .to_vec();
+    ///     .collect();
     /// assert_eq!(v, [("b", 1.0), ("a", 2.5), ("c", 2.5)]);
     /// ```
     pub fn then_by_with<F>(self, cmp: F) -> Self

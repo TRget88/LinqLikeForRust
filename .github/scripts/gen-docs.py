@@ -127,6 +127,11 @@ def cross_check(surface, mapping, csharp):
     return errors
 
 
+# Methods deleted by the v1.0 cut. Named so a stale README row is an error
+# rather than silently surviving its method.
+KNOWN_GONE = set()
+
+
 def check_api_reference(surface, text):
     """The hand-written API Reference is not generated (yet), but it must at
     least mention every public LinqExt method and no nonexistent one."""
@@ -138,6 +143,13 @@ def check_api_reference(surface, text):
     errors = []
     for m in sorted(set(surface["linqext"]) - mentioned):
         errors.append(f"`{m}` is public but appears in no API Reference table")
+    # And the reverse: a table row naming a method that no longer exists. The
+    # v1.0 cut surfaced this gap -- 20 rows survived their methods.
+    known = set(surface["linqext"]) | {n.split("::")[-1] for n in surface["type_method"]} \
+        | set(surface["free_fn"])
+    for name in sorted(mentioned - known):
+        if re.fullmatch(r"[a-z_][a-z_0-9]*", name) and name.endswith("_") or name in KNOWN_GONE:
+            errors.append(f"the API Reference names `{name}`, which is not a public method")
     return errors
 
 

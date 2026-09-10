@@ -30,13 +30,6 @@ fn test_select_many() {
     assert_eq!(flat, [1, 2, 3, 4, 5, 6]);
 }
 
-#[test]
-fn test_flatten_() {
-    let data = vec![vec![1, 2], vec![3, 4], vec![5]];
-    let flat: Vec<_> = data.into_iter().flatten_().collect();
-    assert_eq!(flat, [1, 2, 3, 4, 5]);
-}
-
 // ── skip / take ──────────────────────────────────────────────────────────────
 
 #[test]
@@ -45,31 +38,7 @@ fn test_skip_take() {
     assert_eq!(result, [4, 5, 6, 7]);
 }
 
-#[test]
-fn test_skip_while() {
-    let result: Vec<_> = (1..=10).skip_while_(|x| *x < 5).collect();
-    assert_eq!(result, [5, 6, 7, 8, 9, 10]);
-}
-
-#[test]
-fn test_take_while() {
-    let result: Vec<_> = (1..=10).take_while_(|x| *x < 6).collect();
-    assert_eq!(result, [1, 2, 3, 4, 5]);
-}
-
 // ── chunk ────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_chunk_even() {
-    let chunks: Vec<_> = (1..=6).chunk(2).collect();
-    assert_eq!(chunks, [vec![1, 2], vec![3, 4], vec![5, 6]]);
-}
-
-#[test]
-fn test_chunk_uneven() {
-    let chunks: Vec<_> = (1..=7).chunk(3).collect();
-    assert_eq!(chunks, [vec![1, 2, 3], vec![4, 5, 6], vec![7]]);
-}
 
 // ── distinct ─────────────────────────────────────────────────────────────────
 
@@ -143,19 +112,7 @@ fn test_then_by() {
     assert_eq!(result, [("Charlie", 1), ("Alice", 2), ("Bob", 2)]);
 }
 
-#[test]
-fn test_reverse() {
-    let result: Vec<_> = (1..=5).reverse().collect();
-    assert_eq!(result, [5, 4, 3, 2, 1]);
-}
-
 // ── aggregation ──────────────────────────────────────────────────────────────
-
-#[test]
-fn test_aggregate() {
-    let product = (1..=5).aggregate(1, |acc, x| acc * x);
-    assert_eq!(product, 120);
-}
 
 #[test]
 fn test_sum() {
@@ -205,12 +162,6 @@ fn test_first_where() {
 #[test]
 fn test_last_or_default() {
     assert_eq!((1..=5).last_or_default(), Some(5));
-}
-
-#[test]
-fn test_element_at() {
-    let v = vec![10, 20, 30, 40];
-    assert_eq!(v.into_iter().element_at(2), Some(30));
 }
 
 #[test]
@@ -369,118 +320,11 @@ fn test_to_hashmap() {
     assert_eq!(map[&"two"], ("two", 2));
 }
 
-#[test]
-fn test_to_hashset() {
-    let set = vec![1, 2, 2, 3, 3, 3].into_iter().to_hashset();
-    assert_eq!(set.len(), 3);
-    assert!(set.contains(&1));
-    assert!(set.contains(&2));
-    assert!(set.contains(&3));
-}
-
 // ── utility ───────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_zip() {
-    let result: Vec<_> = vec![1, 2, 3]
-        .into_iter()
-        .zip_(vec![10, 20, 30], |a, b| a + b)
-        .collect();
-    assert_eq!(result, [11, 22, 33]);
-}
-
-#[test]
-fn test_append_prepend() {
-    let a: Vec<_> = vec![1, 2, 3].into_iter().append_item(99).collect();
-    assert_eq!(a, [1, 2, 3, 99]);
-
-    let p: Vec<_> = vec![1, 2, 3].into_iter().prepend_item(0).collect();
-    assert_eq!(p, [0, 1, 2, 3]);
-}
-
-#[test]
-fn test_is_empty() {
-    assert!(Vec::<i32>::new().into_iter().is_empty_());
-    assert!(!vec![1].into_iter().is_empty_());
-}
-
-#[test]
-fn test_sequence_equal() {
-    assert!(vec![1, 2, 3].into_iter().sequence_equal(vec![1, 2, 3]));
-    assert!(!vec![1, 2, 3].into_iter().sequence_equal(vec![1, 2]));
-    assert!(!vec![1, 2, 3].into_iter().sequence_equal(vec![1, 2, 4]));
-}
 
 // ── default_if_empty ─────────────────────────────────────────────────────────
 
-#[test]
-fn test_default_if_empty_with_items() {
-    let v: Vec<i32> = vec![1, 2, 3].into_iter().default_if_empty(99).collect();
-    assert_eq!(v, [1, 2, 3]);
-}
-
-#[test]
-fn test_default_if_empty_when_empty() {
-    let v: Vec<i32> = Vec::<i32>::new().into_iter().default_if_empty(99).collect();
-    assert_eq!(v, [99]);
-}
-
-#[test]
-fn test_default_if_empty_chained() {
-    // Predicate filters everything out, so the default kicks in.
-    let v: Vec<i32> = (1..=5).where_(|x| *x > 100).default_if_empty(-1).collect();
-    assert_eq!(v, [-1]);
-}
-
 // ── take_last / skip_last ────────────────────────────────────────────────────
-
-#[test]
-fn test_take_last() {
-    let v: Vec<_> = (1..=5).take_last(2).collect();
-    assert_eq!(v, [4, 5]);
-}
-
-#[test]
-fn test_take_last_more_than_source() {
-    let v: Vec<_> = (1..=3).take_last(10).collect();
-    assert_eq!(v, [1, 2, 3]);
-}
-
-#[test]
-fn test_take_last_zero() {
-    let v: Vec<i32> = (1..=5).take_last(0).collect();
-    assert!(v.is_empty());
-}
-
-#[test]
-fn test_take_last_empty_source() {
-    let v: Vec<i32> = Vec::<i32>::new().into_iter().take_last(3).collect();
-    assert!(v.is_empty());
-}
-
-#[test]
-fn test_skip_last() {
-    let v: Vec<_> = (1..=5).skip_last(2).collect();
-    assert_eq!(v, [1, 2, 3]);
-}
-
-#[test]
-fn test_skip_last_more_than_source() {
-    let v: Vec<i32> = (1..=3).skip_last(10).collect();
-    assert!(v.is_empty());
-}
-
-#[test]
-fn test_skip_last_zero() {
-    let v: Vec<_> = (1..=5).skip_last(0).collect();
-    assert_eq!(v, [1, 2, 3, 4, 5]);
-}
-
-#[test]
-fn test_skip_last_equal_to_source() {
-    let v: Vec<i32> = (1..=3).skip_last(3).collect();
-    assert!(v.is_empty());
-}
 
 // ── order / order_descending ─────────────────────────────────────────────────
 
@@ -555,60 +399,9 @@ fn test_single_multiple_panics() {
     let _ = vec![1, 2].into_iter().single();
 }
 
-#[test]
-fn test_element_at_strict() {
-    assert_eq!(vec![10, 20, 30].into_iter().element_at_strict(1), 20);
-}
-
-#[test]
-#[should_panic(expected = "index out of bounds")]
-fn test_element_at_strict_out_of_bounds_panics() {
-    let _ = vec![10, 20].into_iter().element_at_strict(5);
-}
-
 // ── reduce_ ──────────────────────────────────────────────────────────────────
 
-#[test]
-fn test_reduce() {
-    let sum = (1..=5).reduce_(|acc, x| acc + x);
-    assert_eq!(sum, Some(15));
-}
-
-#[test]
-fn test_reduce_empty() {
-    let r = std::iter::empty::<i32>().reduce_(|a, b| a + b);
-    assert_eq!(r, None);
-}
-
-#[test]
-fn test_reduce_single() {
-    let r = vec![42].into_iter().reduce_(|a, b| a + b);
-    assert_eq!(r, Some(42));
-}
-
 // ── aggregate_with_selector ──────────────────────────────────────────────────
-
-#[test]
-fn test_aggregate_with_selector() {
-    let result: i32 = (1..=5).aggregate_with_selector(0i32, |acc, x| acc + x, |sum| sum * 2);
-    assert_eq!(result, 30);
-}
-
-#[test]
-fn test_aggregate_with_selector_type_change() {
-    // Accumulator builds a String; selector converts to length.
-    let len: usize = vec!["foo", "bar", "baz"]
-        .into_iter()
-        .aggregate_with_selector(
-            String::new(),
-            |mut acc, s| {
-                acc.push_str(s);
-                acc
-            },
-            |s| s.len(),
-        );
-    assert_eq!(len, 9);
-}
 
 // ── sum_by ───────────────────────────────────────────────────────────────────
 
@@ -741,74 +534,7 @@ fn test_empty_source() {
 
 // ── of_type / cast ───────────────────────────────────────────────────────────
 
-#[test]
-fn test_of_type_drops_oversized() {
-    let v: Vec<i32> = vec![1i64, 2, i64::MAX, 3]
-        .into_iter()
-        .of_type::<i32>()
-        .collect();
-    assert_eq!(v, [1, 2, 3]);
-}
-
-#[test]
-fn test_of_type_all_match() {
-    let v: Vec<i32> = vec![1i64, 2, 3].into_iter().of_type::<i32>().collect();
-    assert_eq!(v, [1, 2, 3]);
-}
-
-#[test]
-fn test_cast_widening() {
-    let v: Vec<i64> = vec![1i32, 2, 3].into_iter().cast::<i64>().collect();
-    assert_eq!(v, [1i64, 2, 3]);
-}
-
-#[test]
-#[should_panic(expected = "cast failed")]
-fn test_cast_panics_on_overflow() {
-    let _: Vec<i32> = vec![i64::MAX].into_iter().cast::<i32>().collect();
-}
-
 // ── indexed variants (Phase 2.1) ─────────────────────────────────────────────
-
-#[test]
-fn test_where_indexed() {
-    let v: Vec<_> = vec!["a", "b", "c", "d", "e"]
-        .into_iter()
-        .where_indexed(|_, i| i % 2 == 0)
-        .collect();
-    assert_eq!(v, ["a", "c", "e"]);
-}
-
-#[test]
-fn test_select_indexed() {
-    let v: Vec<_> = vec!["x", "y", "z"]
-        .into_iter()
-        .select_indexed(|s, i| format!("{i}:{s}"))
-        .collect();
-    assert_eq!(v, ["0:x", "1:y", "2:z"]);
-}
-
-#[test]
-fn test_select_many_indexed() {
-    // Each item duplicated `index+1` times.
-    let v: Vec<_> = vec!["a", "b", "c"]
-        .into_iter()
-        .select_many_indexed(|s, i| std::iter::repeat(s).take(i + 1))
-        .collect();
-    assert_eq!(v, ["a", "b", "b", "c", "c", "c"]);
-}
-
-#[test]
-fn test_skip_while_indexed() {
-    let v: Vec<_> = (10..20).skip_while_indexed(|_, i| i < 3).collect();
-    assert_eq!(v, [13, 14, 15, 16, 17, 18, 19]);
-}
-
-#[test]
-fn test_take_while_indexed() {
-    let v: Vec<_> = (10..20).take_while_indexed(|_, i| i < 3).collect();
-    assert_eq!(v, [10, 11, 12]);
-}
 
 // ── *_or(default) variants (Phase 2.5) ───────────────────────────────────────
 
@@ -840,19 +566,7 @@ fn test_single_or_multiple_panics() {
     let _ = vec![1, 2].into_iter().single_or(99);
 }
 
-#[test]
-fn test_element_at_or() {
-    assert_eq!(vec![10, 20, 30].into_iter().element_at_or(1, 99), 20);
-    assert_eq!(vec![10, 20].into_iter().element_at_or(5, 99), 99);
-}
-
 // ── index_ (Phase 2.6) ───────────────────────────────────────────────────────
-
-#[test]
-fn test_index_() {
-    let v: Vec<_> = vec!["a", "b", "c"].into_iter().index_().collect();
-    assert_eq!(v, [(0, "a"), (1, "b"), (2, "c")]);
-}
 
 // ── group_by overloads (Phase 2.2) ───────────────────────────────────────────
 
@@ -887,24 +601,6 @@ fn test_group_by_with_result() {
 }
 
 // ── zip3 (Phase 2.3) ─────────────────────────────────────────────────────────
-
-#[test]
-fn test_zip3_basic() {
-    let v: Vec<_> = vec![1, 2, 3]
-        .into_iter()
-        .zip3(vec![10, 20, 30], vec![100, 200, 300], |a, b, c| a + b + c)
-        .collect();
-    assert_eq!(v, [111, 222, 333]);
-}
-
-#[test]
-fn test_zip3_shortest_wins() {
-    let v: Vec<_> = vec![1, 2, 3, 4]
-        .into_iter()
-        .zip3(vec![10, 20], vec![100, 200, 300], |a, b, c| (a, b, c))
-        .collect();
-    assert_eq!(v, [(1, 10, 100), (2, 20, 200)]);
-}
 
 // ── count_by / aggregate_by (Phase 2.7) ──────────────────────────────────────
 
@@ -1140,20 +836,6 @@ fn test_select_double_ended() {
     assert_eq!(it.next_back(), Some(50));
     assert_eq!(it.next(), Some(10));
     assert_eq!(it.next_back(), Some(40));
-}
-
-#[test]
-fn test_reverse_is_exact_size() {
-    let it = vec![1, 2, 3, 4, 5].into_iter().reverse();
-    assert_eq!(it.len(), 5);
-}
-
-#[test]
-fn test_zip_size_hint_takes_min() {
-    let short = vec![1, 2, 3];
-    let long = vec![1; 100];
-    let it = short.into_iter().zip_(long, |a, b| a + b);
-    assert_eq!(it.size_hint(), (3, Some(3)));
 }
 
 // ── realistic end-to-end pipeline ────────────────────────────────────────────
