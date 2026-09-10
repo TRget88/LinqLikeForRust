@@ -431,6 +431,40 @@ seam, not the seam.
   gated rather than silently skipped; CI builds, clippies and documents the
   whole workspace.
 
+## D-022 — the sibling crate is a separate legal and testable artifact
+- **Status:** SETTLED (2026-09-10) — fixed and gated.
+- **Found by inspecting the tarball rather than the repo.** `cargo package --list
+  -p linq_rs_sql` showed three defects that every check up to that point had
+  passed:
+  1. It declared `license = "MIT OR Apache-2.0"` and **shipped neither text.**
+     `packaging-gate.sh` did check the licence — it read the manifest *field*,
+     and a field is not a file. The root tarball's file check existed and was
+     simply never extended to the sibling when `D-020` split it out.
+  2. Its README carried three `../` links (`../LICENSE-MIT`, `../LICENSE-APACHE`,
+     `../README.md`). Those resolve in the git tree and 404 on crates.io and
+     docs.rs, where the tarball has no parent.
+  3. Its dev-dependency on `linq_rs` was path-only, and cargo **strips**
+     path-only dev-deps from the published manifest — so `tests/seam.rs` would
+     not compile from the tarball, defeating `D-013`'s reason for shipping
+     `tests/` at all (the executed-test count checkable from the artifact, not
+     just claimed in a README).
+- **Ruling:** the sibling carries its own byte-identical licence texts; its
+  README uses no parent-relative links; its dev-dependency is
+  `{ path = "..", version = "0.2" }`.
+- **Consequence, accepted:** the version pin imposes a publish **order** —
+  `linq_rs 0.2.0` must be live on crates.io before `linq_rs_sql` can be packaged
+  or published at all. That order is the natural one anyway. Verified by probe
+  that a versioned dev-dep does survive into the published manifest as
+  `[dev-dependencies.linq_rs] version = "0.2"`; `--list` still works offline, so
+  the gate below runs before either crate is published.
+- **This does not weaken `D-020`.** Dev-dependencies never enter a consumer's
+  graph; the gate asserts zero *runtime* dependencies, unchanged.
+- **Enforced by:** `packaging-gate.sh` §"sibling crate tarball" — asserts the
+  sibling's tarball ships `LICENSE-MIT`, `LICENSE-APACHE`, `README.md` and
+  `tests/`, that both licence texts are byte-identical to the workspace copies,
+  and that no `](../` appears in its README. All three verified to fail when the
+  defect is reintroduced, not just to pass today.
+
 ## D-021 — `pred!`: closure-shaped syntax, and why it is not `D-201`
 - **Status:** SETTLED (2026-09-10) — implemented.
 - **Ruling:** a `macro_rules!` front end, `pred!`, accepts closure-shaped source

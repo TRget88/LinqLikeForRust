@@ -104,6 +104,41 @@ else
 fi
 
 echo
+echo "=== sibling crate tarball (D-012, D-020) ==="
+# The root tarball is checked above. The sibling ships SEPARATELY and is a
+# separate legal artifact: it declares `MIT OR Apache-2.0`, so it must carry
+# both texts itself. It shipped neither until 2026-09-10 -- the licence check
+# above reads the manifest FIELD, and a field is not a file.
+sib_listing="$(cd "$ROOT" && cargo package --list --allow-dirty -p linq_rs_sql 2>/dev/null)"
+[ -n "$sib_listing" ] || err "cargo package --list -p linq_rs_sql produced nothing"
+while read -r want; do
+  [ -z "$want" ] && continue
+  if printf '%s\n' "$sib_listing" | grep -q "^${want}"; then
+    echo "linq_rs_sql ships: ${want}"
+  else
+    err "linq_rs_sql's tarball is missing '${want}'"
+  fi
+done <<'SIBREQUIRED'
+LICENSE-MIT
+LICENSE-APACHE
+README.md
+tests/
+SIBREQUIRED
+for f in LICENSE-MIT LICENSE-APACHE; do
+  if ! cmp -s "$ROOT/$f" "$ROOT/linq_rs_sql/$f"; then
+    err "linq_rs_sql/${f} differs from the workspace ${f}"
+  fi
+done
+echo "licence texts are byte-identical to the workspace copies"
+# A `../path` link resolves in the git tree and 404s on crates.io and docs.rs,
+# because the sibling's tarball has no parent. Caught after both were live in
+# the README for the whole life of the crate.
+if grep -n '](\.\./' "$ROOT/linq_rs_sql/README.md"; then
+  err "linq_rs_sql/README.md has a '../' link, which breaks outside the git tree"
+fi
+echo "no parent-relative links in linq_rs_sql/README.md"
+
+echo
 echo "=== source invariants (D-001, D-003, D-004) ==="
 # D-001: v1.0 is LINQ-to-objects only, and the crate advertises zero
 # dependencies. Assert it rather than trusting it.

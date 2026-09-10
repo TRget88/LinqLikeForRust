@@ -84,7 +84,7 @@ Not yet: `JOIN`, subqueries, `GROUP BY` / `HAVING`, `INSERT` / `UPDATE` /
 
 They are siblings in one repository and **neither depends on the other**.
 
-[`linq_rs`](../README.md) is a LINQ-shaped query surface over in-memory
+[`linq_rs`](https://github.com/TRget88/LinqLikeForRust#readme) is a LINQ-shaped query surface over in-memory
 iterators. This crate builds SQL. The two vocabularies are deliberately separate
 — this one says `filter`, that one says `where_` — because a single crate with
 two names for one concept is a worse thing to hand a user than two crates with
@@ -104,5 +104,5 @@ as `?` with the payload in `params`.
 
 ## License
 
-Dual-licensed under [Apache-2.0](../LICENSE-APACHE) or [MIT](../LICENSE-MIT), at
+Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at
 your option.

@@ -84,6 +84,29 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Fixed — `linq_rs_sql` would have shipped broken (D-022)
+
+Found by reading `cargo package --list` rather than the repo. Three defects,
+none of which any existing check caught:
+
+- **It declared `MIT OR Apache-2.0` and shipped neither licence text.** The
+  packaging gate did check the licence — it read the manifest *field*. A field
+  is not a file. Both texts now ship, byte-identical to the workspace copies.
+- **Three `../` links in its README** (`../LICENSE-MIT`, `../LICENSE-APACHE`,
+  `../README.md`) — fine in the git tree, 404 on crates.io and docs.rs, where
+  the tarball has no parent.
+- **Its `linq_rs` dev-dependency was path-only, and cargo strips those from the
+  published manifest**, so `tests/seam.rs` would not compile from the tarball —
+  defeating the reason `tests/` is shipped at all (D-013: the executed-test
+  count checkable from the artifact, not merely claimed). Now
+  `{ path = "..", version = "0.2" }`.
+
+  This imposes a publish **order**: `linq_rs 0.2.0` must be live before
+  `linq_rs_sql` can be packaged or published. That is the natural order anyway.
+
+The packaging gate now asserts all of it against the sibling's actual tarball,
+and each check was verified to fail when the defect is reintroduced.
+
 ### Added — `pred!`, closure-shaped filters (D-021)
 
 - `linq_rs_sql` gained `pred!`, a front end over the predicate builder:

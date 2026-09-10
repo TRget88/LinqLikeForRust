@@ -21,4 +21,9 @@ repository = "https://github.com/TRget88/LinqLikeForRust"
 # earlier in this project -- so D-020's "neither crate depends on the other"
 # still holds for anyone who actually uses either crate.
 [dev-dependencies]
-linq_rs = { path = ".." }
+# The `version` is not redundant with the `path`: a path-only dev-dependency is
+# STRIPPED from the published manifest, which would leave `tests/seam.rs`
+# referencing a crate the tarball cannot resolve -- and D-013 keeps `tests/` in
+# the tarball precisely so the test count is checkable from the artifact.
+# It also fixes the publish order: `linq_rs 0.2.0` must be live first.
+linq_rs = { path = "..", version = "0.2" }
