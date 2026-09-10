@@ -26,7 +26,6 @@ pub mod lookup;
 pub mod ordered;
 pub mod queryable;
 pub mod sources;
-pub mod sql;
 
 pub use adaptors::*;
 pub use grouping::Grouping;
