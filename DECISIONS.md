@@ -558,11 +558,20 @@ paragraph, which is exactly the state this file says not to rest in — so treat
   1.75 with zero headroom.
 
 ## D-107 — Seal the public traits
-- **Status:** OPEN. **Recommended: seal both.**
+- **Status:** OPEN, and **half resolved by `W-14`.** That deleted the `ThenBy`
+  trait — `then_by`, `then_by_descending` and `then_by_with` are inherent
+  methods on `OrderedQueryable` now — so the unsealed-public-trait hazard is
+  gone. What remains is whether to seal `LinqExt`. **Recommended: seal it.**
 - **Enforced by:** nothing yet — see the shared gate for this section (`W-19`).
-- **Why it matters:** `LinqExt` is de facto sealed by its blanket impl, but
-  `ThenBy` is a public unsealed trait with exactly one impl, so any added method is
-  potentially breaking for a downstream implementor. Free now, impossible later.
+- **Why it matters:** `LinqExt` is de facto sealed by its blanket impl, so the
+  practical risk is low — but declaring it is free now and impossible later. The
+  `ThenBy` half was the sharp one: a public unsealed trait with exactly one
+  impl, where any added method is potentially breaking for a downstream
+  implementor.
+- **Related, and done:** `OrderedQueryable` implements `Iterator`,
+  `ExactSizeIterator`, `DoubleEndedIterator` and `FusedIterator` as of `W-14`.
+  Adding those later would have been non-breaking; removing them would not,
+  which is why they had to land before 1.0.
 
 ## D-108 — `to_` vs `into_`, and `#[must_use]`
 - **Status:** OPEN — but **half done**. The `#[must_use]` half shipped in `W-17`
