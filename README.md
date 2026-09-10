@@ -181,20 +181,20 @@ Strict (panicking) variants on the left; `_or_default` variants return `Option<T
 
 | Rust                                           | C#                                      |
 |------------------------------------------------|-----------------------------------------|
-| `join(inner, outerKey, innerKey, resultSel)`   | `Join(inner, ok, ik, rs)`               |
+| `inner_join(inner, outerKey, innerKey, resultSel)` | `Join(inner, ok, ik, rs)`           |
 | `group_join(inner, outerKey, innerKey, rs)`    | `GroupJoin(inner, ok, ik, rs)`          |
 
 ### Grouping
 
 | Rust                                              | C#                                          |
 |---------------------------------------------------|---------------------------------------------|
-| `group_by(key_fn)`                                | `GroupBy(keySelector)`                      |
+| `group_by_key(key_fn)`                            | `GroupBy(keySelector)`                      |
 | `group_by_with_element(key_fn, element_fn)`       | `GroupBy(keySelector, elementSelector)`     |
 | `group_by_with_result(key_fn, result_fn)`         | `GroupBy(keySelector, resultSelector)`      |
 | `count_by(key_fn)`                                | `CountBy(keySelector)` (.NET 9+)            |
 | `aggregate_by(key_fn, seed_fn, accum)`            | `AggregateBy(keySelector, seedFn, func)` (.NET 9+) |
 
-`group_by` returns an iterator of [`Grouping<K, T>`] — each item has a
+`group_by_key` returns an iterator of `Grouping<K, T>` — each item has a
 `.key` and `.elements`. The overloads transform the elements or fold each
 group into a single value.
 
@@ -305,15 +305,15 @@ the hashed version** unless your item or key type can't implement `Hash`
 | `except`                | `except_hashed`            |
 | `intersect`             | `intersect_hashed`         |
 | `union_`                | `union_hashed`             |
-| `group_by`              | `group_by_hashed`          |
+| `group_by_key`          | `group_by_key_hashed`      |
 | `count_by`              | `count_by_hashed`          |
 | `aggregate_by`          | `aggregate_by_hashed`      |
-| `join`                  | `join_hashed`              |
+| `inner_join`            | `inner_join_hashed`        |
 | `group_join`            | `group_join_hashed`        |
 
 The hashed grouping/aggregation variants yield results in **hash order**,
-not insertion order — except `group_by_hashed`, which preserves insertion
-order of first-occurrence (same as `group_by`).
+not insertion order — except `group_by_key_hashed`, which preserves insertion
+order of first-occurrence (same as `group_by_key`).
 
 ## Versioning
 
@@ -340,7 +340,7 @@ project-specific clarifications:
 ## Design Notes
 
 - **Lazy by default** — filtering, projection, and slicing adaptors are lazy iterators; no allocation happens until you `collect()` or iterate.
-- **Eager where necessary** — `order_by`/`then_by` (buffered at call time, sorted once at `into_iter`), `reverse`, `group_by`, `union_`, `join` and `group_join` buffer the sequence. `distinct`/`distinct_by` do **not** — they stream, keeping a seen-set, and terminate on an infinite source. `except`/`intersect` stream the receiver but drain their argument at call time.
+- **Eager where necessary** — `order_by`/`then_by` (buffered at call time, sorted once at `into_iter`), `reverse`, `group_by_key`, `union_`, `inner_join` and `group_join` buffer the sequence. `distinct`/`distinct_by` do **not** — they stream, keeping a seen-set, and terminate on an infinite source. `except`/`intersect` stream the receiver but drain their argument at call time.
 - **This is not C#'s deferral.** C# `OrderBy`/`GroupBy`/`Union`/`Join`/`Reverse` do nothing at call time and process the source on the first `MoveNext`; the operators above do the work at **call** time, so a query that is built and then discarded still pays full cost. (This list is hand-maintained and therefore suspect; `D-016` / `W-7` will derive it from a measurement.)
 - **Zero dependencies** — only `std`.
 - **Naming** — methods that shadow Rust keywords or `std` trait methods are suffixed with `_` (`where_`, `take_`, `any_`, etc.).

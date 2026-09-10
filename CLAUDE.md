@@ -107,7 +107,7 @@ Mirror C# LINQ behaviour:
   `take_while_`, `chunk`, `distinct`, `distinct_by`, `concat_`, `zip_`.
 - **Eager** (collect into `Vec` first, then re-yield):
   `order_by`, `order_by_descending`, `reverse`, `union_`, `except`, `intersect`,
-  `group_by`, `group_join`, `join`, `to_lookup`.
+  `group_by_key`, `group_join`, `inner_join`, `to_lookup`.
 - **Terminal** (consume the iterator, return a non-iterator value):
   `aggregate`, `sum_`, `count_where`, `min_*`, `max_*`, `average`,
   `first_*`, `last_*`, `element_at`, `single_or_default`, `any_`, `all_`,
@@ -131,7 +131,7 @@ A new lazy operator requires three pieces:
 
 Eager operators usually skip the adaptor struct and just return
 `impl Iterator<Item = T>` after collecting internally — see `union_`, `except`,
-`intersect`, `join` in `queryable.rs`.
+`intersect`, `inner_join` in `queryable.rs`.
 
 ## Doc comments
 

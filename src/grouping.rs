@@ -1,10 +1,10 @@
-//! [`Grouping`] — the result of a `group_by` operation.
+//! [`Grouping`] — the result of a `group_by_key` operation.
 //!
 //! Mirrors `IGrouping<TKey, TElement>` from C# LINQ.
 
 /// A group of elements that share a common key.
 ///
-/// Produced by [`LinqExt::group_by`](crate::queryable::LinqExt::group_by).
+/// Produced by [`LinqExt::group_by_key`](crate::queryable::LinqExt::group_by_key).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub struct Grouping<K, V> {

@@ -25,8 +25,8 @@ These are already implemented. They form the baseline to build on.
 - [x] **Aggregation:** `aggregate(seed, f)`, `sum_`, `count_where`, `min_`, `max_`, `min_by_key_`, `max_by_key_`, `average`
 - [x] **Elements:** `first_or_default`, `first_where`, `last_or_default`, `last_where`, `element_at`, `single_or_default`
 - [x] **Quantifiers:** `any_`, `all_`, `contains_`, `is_empty_`
-- [x] **Joining:** `join`, `group_join`
-- [x] **Grouping:** `group_by` (key-only)
+- [x] **Joining:** `inner_join`, `group_join` *(renamed from `join` in W-12 — see `D-005`)*
+- [x] **Grouping:** `group_by_key` (key-only) *(renamed from `group_by` in W-12 — see `D-005`)*
 - [x] **Conversion:** `to_vec`, `to_hashmap`, `to_hashset`, `to_lookup`
 - [x] **Utility:** `zip_`, `append_item`, `prepend_item`, `for_each_`, `sequence_equal`
 
@@ -146,7 +146,7 @@ operators were O(n²) where O(n) is achievable.
 
 - [x] **`distinct` / `distinct_by` fast path** — added `distinct_hashed` / `distinct_by_hashed` (HashSet-backed, O(n)). Existing `PartialEq`-only versions retained for types that can't `Hash` (e.g. floats).
 - [x] **`except` / `intersect` / `union_` fast path** — added `*_hashed` variants.
-- [x] **`group_by` / `group_join` / `join` fast paths** — added `*_hashed` variants. `group_by_hashed` preserves first-occurrence insertion order via an auxiliary `HashMap<K, usize>` index; the count/aggregate hashed variants yield in hash order (documented).
+- [x] **`group_by_key` / `group_join` / `inner_join` fast paths** — added `*_hashed` variants. `group_by_key_hashed` preserves first-occurrence insertion order via an auxiliary `HashMap<K, usize>` index; the count/aggregate hashed variants yield in hash order (documented).
 - [x] **`size_hint` propagation** — added to `Skip`, `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`. `Select` already had it. The unpredictable ones (`Where`, `SkipWhile`, `TakeWhile`, `Distinct*`, `Flatten`, `SelectMany`) intentionally omitted — they can't give better than the default `(0, None)` without lying.
 - [x] **`DoubleEndedIterator` / `ExactSizeIterator` impls** — `Select` (both), `Skip` (ESI), `Take` (ESI), `Reverse` (both), `Concat` (ESI), `Zip` (ESI). DEI on `Skip` and `Take` deferred — they require non-trivial buffering against the ESI len and are niche use cases.
 - [~] **Benchmarks** — **deferred.** The built-in `test::Bencher` harness requires nightly Rust; the project is stable-only. Bringing in `criterion` would violate the zero-dep policy. Revisit when the project moves to a workspace where a `bench/` member with a one-off `criterion` dev-dep wouldn't pollute the main crate.

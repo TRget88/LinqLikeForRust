@@ -213,7 +213,7 @@ fn join_with_empty_outer_yields_empty() {
     let inner = vec![(1u32, "x")];
     let v: Vec<_> = outer
         .into_iter()
-        .join(inner, |(k, _)| *k, |(k, _)| *k, |a, b| (a, b))
+        .inner_join(inner, |(k, _)| *k, |(k, _)| *k, |a, b| (a, b))
         .collect();
     assert!(v.is_empty());
 }
@@ -224,7 +224,7 @@ fn join_with_empty_inner_yields_empty() {
     let inner: Vec<(u32, &str)> = vec![];
     let v: Vec<_> = outer
         .into_iter()
-        .join(inner, |(k, _)| *k, |(k, _)| *k, |a, b| (a, b))
+        .inner_join(inner, |(k, _)| *k, |(k, _)| *k, |a, b| (a, b))
         .collect();
     assert!(v.is_empty());
 }
@@ -235,7 +235,7 @@ fn join_with_no_key_matches_yields_empty() {
     let inner = vec![(99u32, "x"), (100, "y")];
     let v: Vec<_> = outer
         .into_iter()
-        .join(inner, |(k, _)| *k, |(k, _)| *k, |a, b| (a, b))
+        .inner_join(inner, |(k, _)| *k, |(k, _)| *k, |a, b| (a, b))
         .collect();
     assert!(v.is_empty());
 }
@@ -256,7 +256,7 @@ fn group_join_with_empty_inner_still_yields_every_outer() {
 
 #[test]
 fn group_by_on_empty_is_empty() {
-    let v: Vec<_> = Vec::<i32>::new().into_iter().group_by(|x| *x).collect();
+    let v: Vec<_> = Vec::<i32>::new().into_iter().group_by_key(|x| *x).collect();
     assert!(v.is_empty());
 }
 
@@ -270,10 +270,10 @@ fn aggregate_by_on_empty_is_empty() {
 }
 
 #[test]
-fn group_by_hashed_on_empty_is_empty() {
+fn group_by_key_hashed_on_empty_is_empty() {
     let v: Vec<_> = Vec::<i32>::new()
         .into_iter()
-        .group_by_hashed(|x| *x)
+        .group_by_key_hashed(|x| *x)
         .collect();
     assert!(v.is_empty());
 }
@@ -382,7 +382,7 @@ fn group_by_then_select_then_aggregate() {
     // Group by first letter, count letters in each group, sum.
     let total_chars: usize = words
         .into_iter()
-        .group_by(|w| w.chars().next().unwrap())
+        .group_by_key(|w| w.chars().next().unwrap())
         .select(|g| g.elements.iter().map(|w| w.len()).sum::<usize>())
         .sum_();
     // apple(5)+ant(3) + banana(6)+bear(4) + cherry(6) = 24

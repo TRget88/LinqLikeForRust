@@ -163,17 +163,23 @@ seam, not the seam.
   (`concat_`, `union_`, `contains_`, `is_empty_`) collide with nothing at all.
 - **Forbids:** New pure-alias methods. Trailing underscores on names that do not
   collide.
-- **Enforced by:** *(NOT YET IMPLEMENTED — blocked on `W-12`.)* The intended gate
-  is a test that imports `LinqExt`, `Iterator` **and** `itertools::Itertools` in
-  one scope and calls `.skip_(1)`, `.join(", ")` and `.group_by(..)`, and must
-  compile. **As of today that test cannot compile**, and the reason matters: the
-  carve-out below keeps `LinqExt::join` and `LinqExt::group_by`, which are
-  precisely the two names that collide with `Itertools` — `join` silently
-  (by-value `self` wins receiver adjustment, no diagnostic) and `group_by` as a
-  hard `E0034`. So this decision is currently enforced by nothing. The gate
-  becomes writable only after `W-12` renames them to `inner_join` and
-  `group_by_key`; until then, treat `D-005` as prose. itertools also has to
-  become a dev-dependency for the test to exist at all.
+- **Enforced by:** **PARTIALLY IMPLEMENTED** as of `W-12` —
+  `tests/interop.rs`, 4 tests that pass *by compiling*. `W-12` renamed
+  `join` → `inner_join` and `group_by` → `group_by_key`, which removed both
+  collisions, and the test file now pins them shut: a competing extension trait
+  with itertools 0.15's exact receiver shapes (`fn join(&mut self, sep)` and
+  `fn group_by(self, key)`) coexists with `LinqExt` in one scope; `.skip(n)` on
+  unrelated iterators still resolves to std; and the inherent `[T]::join` /
+  `reverse` / `to_vec` still win on a `Vec`.
+  **What is still missing:** the file *mimics* the shape of a competing trait
+  rather than depending on the real `itertools`, because `CLAUDE.md`'s hard
+  constraints forbid adding a dependency — even a dev-dependency — without the
+  owner's explicit approval. The resolution rules exercised are the real ones, so
+  this catches the bug class; but a test against the real crate would be strictly
+  better and is the only thing that would catch a change in itertools itself.
+  Adding `itertools` under `[dev-dependencies]` would leave the zero-dependency
+  promise to *consumers* intact, since dev-dependencies never enter a downstream
+  dependency graph. **OPEN question for the owner.**
 - **Accepted carve-out (2026-09-09), following the X-1 ruling:** `where_`,
   `select`, `order_by`/`then_by`, `join`, `group_join` and `group_by` are
   **kept**, because under `D-002`'s two-interpreter design they are clause

@@ -1001,7 +1001,7 @@ pub trait LinqExt: Iterator + Sized {
     /// let orders = vec![(1u32, "Order A"), (1, "Order B"), (2, "Order C")];
     ///
     /// let mut results: Vec<_> = people.into_iter()
-    ///     .join(
+    ///     .inner_join(
     ///         orders,
     ///         |(id, _)| *id,
     ///         |(id, _)| *id,
@@ -1011,7 +1011,7 @@ pub trait LinqExt: Iterator + Sized {
     /// results.sort();
     /// assert_eq!(results, ["Alice: Order A", "Alice: Order B", "Bob: Order C"]);
     /// ```
-    fn join<Inner, OuterKey, InnerKey, R, OuterKeyFn, InnerKeyFn, ResultFn>(
+    fn inner_join<Inner, OuterKey, InnerKey, R, OuterKeyFn, InnerKeyFn, ResultFn>(
         self,
         inner: Inner,
         outer_key_fn: OuterKeyFn,
@@ -1042,11 +1042,11 @@ pub trait LinqExt: Iterator + Sized {
         results.into_iter()
     }
 
-    /// Hash-backed [`join`](Self::join) — O(n + m) instead of O(n*m).
+    /// Hash-backed [`inner_join`](Self::inner_join) — O(n + m) instead of O(n*m).
     /// **Prefer this** when both sides project to a `Key: Eq + Hash` (must
     /// be the same type for both, unlike the un-hashed version which
     /// supports asymmetric `PartialEq<...>` keys).
-    fn join_hashed<Inner, Key, R, OuterKeyFn, InnerKeyFn, ResultFn>(
+    fn inner_join_hashed<Inner, Key, R, OuterKeyFn, InnerKeyFn, ResultFn>(
         self,
         inner: Inner,
         outer_key_fn: OuterKeyFn,
@@ -1155,13 +1155,13 @@ pub trait LinqExt: Iterator + Sized {
     ///
     /// let words = vec!["apple", "ant", "banana", "bear", "cherry"];
     /// let mut groups: Vec<_> = words.into_iter()
-    ///     .group_by(|w| w.chars().next().unwrap())
+    ///     .group_by_key(|w| w.chars().next().unwrap())
     ///     .collect();
     /// groups.sort_by_key(|g| g.key);
     /// assert_eq!(groups[0].key, 'a');
     /// assert_eq!(groups[0].elements, ["apple", "ant"]);
     /// ```
-    fn group_by<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Grouping<K, Self::Item>>
+    fn group_by_key<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Grouping<K, Self::Item>>
     where
         K: PartialEq,
         F: FnMut(&Self::Item) -> K,
@@ -1266,12 +1266,15 @@ pub trait LinqExt: Iterator + Sized {
         counts.into_iter()
     }
 
-    /// Hash-backed [`group_by`](Self::group_by) — O(n) instead of O(n²).
+    /// Hash-backed [`group_by_key`](Self::group_by_key) — O(n) instead of O(n²).
     /// **Prefer this** when keys implement `Eq + Hash + Clone`.
     ///
     /// Groups are yielded in **insertion order of their first occurrence**
-    /// (same as `group_by`), not in hash order.
-    fn group_by_hashed<K, F>(self, mut key_fn: F) -> impl Iterator<Item = Grouping<K, Self::Item>>
+    /// (same as `group_by_key`), not in hash order.
+    fn group_by_key_hashed<K, F>(
+        self,
+        mut key_fn: F,
+    ) -> impl Iterator<Item = Grouping<K, Self::Item>>
     where
         K: Eq + std::hash::Hash + Clone,
         F: FnMut(&Self::Item) -> K,

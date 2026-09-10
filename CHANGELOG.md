@@ -77,13 +77,36 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   to avoid a breaking change (`D-206`). `W-10` makes the hash-backed algorithm
   the default instead of a twin.
 - **The quadratic defaults are unchanged.** `distinct`, `except`, `intersect`,
-  `union_`, `group_by`, `to_lookup`, `join` and `group_join` are all O(n²) in the
+  `union_`, `group_by_key`, `to_lookup`, `inner_join` and `group_join` are all O(n²) in the
   default form, and `Lookup::get`/`contains_key` are linear scans. Measured
   crossover into visible slowness is around n≈17,000–30,000. `AUDIT.md` §4.3.
 - **`D-005`'s own enforcement gate cannot be written yet.** It requires a test
   importing `LinqExt` and `itertools::Itertools` together, which cannot compile
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
+
+### Changed — breaking renames (W-12)
+
+Two method names collided with the most-depended-on iterator crate in Rust, and
+one of the two collisions was **silent**.
+
+- **`join` → `inner_join`** (and `join_hashed` → `inner_join_hashed`). Every
+  `LinqExt` method takes `self` by value, so it won the by-value step of method
+  resolution against `Itertools::join`, which takes `&mut self` — with **no
+  ambiguity diagnostic**. A working `.join(", ")` in any crate that imported both
+  turned into three unrelated errors that never mentioned `LinqExt`. The name was
+  also confusable with the inherent `[T]::join`, which concatenates strings.
+- **`group_by` → `group_by_key`** (and `group_by_hashed` →
+  `group_by_key_hashed`). `Itertools::group_by` still exists in 0.15 as a
+  deprecated alias, and both took `self` by value, so this one was a loud
+  `E0034` with no fix short of a fully-qualified call.
+- `group_by_with_element` and `group_by_with_result` keep their names — they
+  collide with nothing. That leaves the family spelled inconsistently
+  (`group_by_key` beside `group_by_with_element`); the v1.0 cut line deletes the
+  overloads, so they were not renamed just to be deleted.
+- Added `tests/interop.rs`: 4 tests that **pass by compiling**, holding all three
+  collisions shut — the two renamed above plus the earlier `skip` → `skip_`.
+  This is `D-005`'s enforcement gate, which until now was a gate on paper.
 
 ### Packaging and licence (W-17)
 
@@ -144,7 +167,7 @@ Discarding a query used to be silent. It no longer is, in 52 places.
 - `count_by(key_fn)` and `aggregate_by(key_fn, seed_fn, accum)` — .NET 9+ fused group+aggregate
 
 #### Phase 3 — performance
-- Hash-backed fast paths: `distinct_hashed`, `distinct_by_hashed`, `except_hashed`, `intersect_hashed`, `union_hashed`, `group_by_hashed`, `count_by_hashed`, `aggregate_by_hashed`, `join_hashed`, `group_join_hashed`. O(n) instead of O(n²); require `Eq + Hash`.
+- Hash-backed fast paths: `distinct_hashed`, `distinct_by_hashed`, `except_hashed`, `intersect_hashed`, `union_hashed`, `group_by_key_hashed`, `count_by_hashed`, `aggregate_by_hashed`, `inner_join_hashed`, `group_join_hashed`. O(n) instead of O(n²); require `Eq + Hash`.
 - `size_hint` propagation on `Skip`, `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`
 - `ExactSizeIterator` impls for `Select`, `Skip`, `Take`, `Reverse`, `Concat`, `Zip`
 - `DoubleEndedIterator` impls for `Select` and `Reverse`

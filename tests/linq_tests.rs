@@ -239,7 +239,7 @@ fn test_contains() {
     assert!(!vec![1, 2, 3].into_iter().contains_(&5));
 }
 
-// ── join ─────────────────────────────────────────────────────────────────────
+// ── inner_join ─────────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_inner_join() {
@@ -248,7 +248,7 @@ fn test_inner_join() {
 
     let mut results: Vec<String> = customers
         .into_iter()
-        .join(
+        .inner_join(
             orders,
             |(id, _)| *id,
             |(id, _)| *id,
@@ -289,14 +289,14 @@ fn test_group_join() {
     assert_eq!(result[1], ("Sales", vec!["Carol"]));
 }
 
-// ── group_by ──────────────────────────────────────────────────────────────────
+// ── group_by_key ──────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_group_by() {
     let words = vec!["apple", "ant", "banana", "bear", "cherry"];
     let mut groups: Vec<_> = words
         .into_iter()
-        .group_by(|w| w.chars().next().unwrap())
+        .group_by_key(|w| w.chars().next().unwrap())
         .collect();
     groups.sort_by_key(|g| g.key);
 
@@ -982,13 +982,13 @@ fn test_union_hashed() {
 // ── hash-backed grouping (Phase 3.2) ─────────────────────────────────────────
 
 #[test]
-fn test_group_by_hashed_preserves_insertion_order() {
-    // group_by_hashed must yield groups in their first-occurrence order,
+fn test_group_by_key_hashed_preserves_insertion_order() {
+    // group_by_key_hashed must yield groups in their first-occurrence order,
     // unlike count_by_hashed / aggregate_by_hashed which yield in hash order.
     let words = vec!["cherry", "apple", "ant", "banana", "bear"];
     let groups: Vec<_> = words
         .into_iter()
-        .group_by_hashed(|w| w.chars().next().unwrap())
+        .group_by_key_hashed(|w| w.chars().next().unwrap())
         .collect();
     // First-occurrence order: 'c', 'a', 'b'.
     assert_eq!(groups.len(), 3);
@@ -1025,12 +1025,12 @@ fn test_aggregate_by_hashed() {
 // ── hash-backed joins (Phase 3.3) ────────────────────────────────────────────
 
 #[test]
-fn test_join_hashed() {
+fn test_inner_join_hashed() {
     let customers = vec![(1u32, "Alice"), (2, "Bob"), (3, "Carol")];
     let orders = vec![(1u32, "Laptop"), (1, "Mouse"), (2, "Keyboard")];
     let mut results: Vec<String> = customers
         .into_iter()
-        .join_hashed(
+        .inner_join_hashed(
             orders,
             |(id, _)| *id,
             |(id, _)| *id,

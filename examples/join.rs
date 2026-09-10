@@ -49,7 +49,7 @@ fn main() {
     let rows: Vec<String> = customers
         .clone()
         .into_iter()
-        .join_hashed(
+        .inner_join_hashed(
             orders.clone(),
             |c| c.id,
             |o| o.customer_id,
