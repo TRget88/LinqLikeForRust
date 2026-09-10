@@ -25,15 +25,19 @@ you its sole owner**, permanently.
   extend to dependency resolution, though — consumers must write the underscore
   form or resolution fails.
 
-## Current state (verified 2026-09-10)
+## Current state (verified 2026-09-10, after release)
 
-| Crate         | On crates.io                                | To publish |
-|---------------|---------------------------------------------|------------|
-| `linq_rs`     | `0.1.0`, live, **not yanked**, 25 downloads | `0.2.0` |
-| `linq_rs_sql` | does not exist — name is free               | `0.1.0` |
+**Both crates are published.** Everything below is the record of how, and the
+procedure for the next release.
 
-Sole owner of `linq_rs`: `TRget88` (crates.io user id 401874), confirmed via
-`GET /api/v1/crates/linq_rs/owners`.
+| Crate         | On crates.io                                      |
+|---------------|---------------------------------------------------|
+| `linq_rs`     | `0.2.0` live; `0.1.0` **yanked** 2026-09-10       |
+| `linq_rs_sql` | `0.1.0` live — name claimed 2026-09-10T19:33:58Z  |
+
+Both are `MIT OR Apache-2.0`, declare `rust-version = "1.65"`, carry the
+`repository` link that `0.1.0` lacked, and built cleanly on docs.rs. Sole owner
+of both: `TRget88` (crates.io user id 401874).
 
 ## The token
 
@@ -85,7 +89,7 @@ git push -u origin feature/v0.2.0-remediation
 jobs; the `1.0 release gate` job correctly skips on a non-`v1.*` ref). Before
 this the work existed only on one disk.
 
-### 2. Land it on `main`
+### 2. Land it on `main` — DONE 2026-09-10
 
 ```bash
 git checkout main
@@ -114,7 +118,7 @@ Let CI go green on `main` before continuing.
 extracts every `.crate`, and builds it on 1.65. A green repo does not imply a
 green tarball — see `D-023`.
 
-### 4. Authenticate
+### 4. Authenticate — DONE 2026-09-10
 
 ```bash
 cargo login
@@ -134,7 +138,7 @@ dry run`. `seam-tests` is `publish = false` and is silently skipped — if it
 ever appears here, something removed that line. If only `linq_rs` is mentioned,
 you dropped `--workspace`.
 
-### 6. Publish `linq_rs 0.2.0` — IRREVERSIBLE
+### 6. Publish `linq_rs 0.2.0` — IRREVERSIBLE — DONE 2026-09-10
 
 ```bash
 cargo publish -p linq_rs
@@ -145,7 +149,7 @@ the default members and silently publishes `linq_rs` alone — verified: the
 dry-run prints `Packaging linq_rs v0.2.0` with no mention of the sibling, and
 exits 0.
 
-### 7. Publish `linq_rs_sql 0.1.0` — IRREVERSIBLE, and this claims the name
+### 7. Publish `linq_rs_sql 0.1.0` — IRREVERSIBLE — DONE 2026-09-10
 
 ```bash
 cargo publish -p linq_rs_sql
@@ -157,7 +161,7 @@ but multi-package publishing is explicitly **non-atomic**: per the Cargo 1.90
 changelog, a server-side error leaves the workspace partially published.
 Sequential gives a clean failure boundary.
 
-### 8. Yank `0.1.0`
+### 8. Yank `0.1.0` — DONE 2026-09-10
 
 ```bash
 cargo yank --version 0.1.0 linq_rs
@@ -168,7 +172,7 @@ Only now — yanking earlier leaves the crate with no usable version in between.
 that turned every unqualified `.skip(n)` in an importing module into a compile
 error (`D-009`, `AUDIT.md` A-3).
 
-### 9. Flip the README note
+### 9. Flip the README note — DONE 2026-09-10
 
 `README.md` says `0.1.0` "is being yanked … update this note to 'yanked' once
 that has run, **not before**." Now, and only now.

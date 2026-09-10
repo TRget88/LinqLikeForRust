@@ -45,11 +45,11 @@ Add to `Cargo.toml`:
 linq_rs = "0.2"
 ```
 
-> **Do not use 0.1.0.** It shipped a `then_by` that discarded the primary sort
-> key and a `skip` that turned every unqualified `.skip(n)` in an importing
-> module into a compile error. Both are fixed in 0.2.0. 0.1.0 is being yanked
-> from crates.io per `D-009`; update this note to "yanked" once that has run,
-> not before.
+> **0.1.0 is yanked** (2026-09-10). It shipped a `then_by` that discarded the
+> primary sort key and a `skip` that turned every unqualified `.skip(n)` in an
+> importing module into a compile error. Both are fixed in 0.2.0. Yanking stops
+> new resolution from selecting it; existing `Cargo.lock` files pinning 0.1.0
+> keep working, so update the pin.
 
 See [CHANGELOG.md](https://github.com/TRget88/LinqLikeForRust/blob/main/CHANGELOG.md)
 for the full 0.2.0 entry. It is a large one: 0.2.0 cuts the operator surface by a
