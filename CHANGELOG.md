@@ -84,6 +84,40 @@ defects in 0.1.0; **two of the three are fixed. This is the third.**
   while `LinqExt::join` and `LinqExt::group_by` exist under those names. Blocked
   on `W-12`.
 
+### Fixed — two adaptor defects only visible when driving by hand (W-8, W-9)
+
+Both survived because `collect()` masks them: it stops at the first `None`, and
+it never looks at a `Vec`'s capacity.
+
+- **`skip_` ate an element on a non-fused source.** It decremented inside a loop
+  guarded by `?`, so a source returning `None` mid-skip left the counter set and
+  the next call skipped again. Given `10, 20, None, 40, 50, 60` driven by hand,
+  `std` yields `40` and this yielded `50`. Now uses `mem::take` before skipping,
+  exactly as `std::iter::Skip` does. `Iterator` only promises `None` is final for
+  a `FusedIterator`, so a resuming source is legal, not exotic.
+- **`chunk` sized its allocation from its argument.** `chunk(2^28)` over three
+  `u64`s reserved 2 GiB; `chunk(2^40)` aborted the process with
+  `memory allocation of 8796093022208 bytes failed` — an abort `catch_unwind`
+  cannot catch. Capacity now comes from the source's `size_hint`, capped at 4096
+  when unknown. The `Vec` still grows as needed.
+- **`chunk(0)`'s panic is now documented** with a `# Panics` section. It stays a
+  panic: C# throws `ArgumentOutOfRangeException` here and `slice::chunks` panics,
+  so this is the idiomatic Rust answer rather than a `NonZeroUsize` signature
+  that would make every ordinary call site noisier.
+
+### Added — `FusedIterator` (W-8)
+
+No adaptor implemented it, so any downstream API with a `FusedIterator` bound
+rejected every linq_rs query. Fourteen adaptors now do — conditionally on their
+source, except `Reverse` (buffers into a `Vec` at construction) and `Chunk`
+(latches a `done` flag), which are unconditional.
+
+Not all of them are reachable: the hash-backed defaults return `impl Iterator`,
+and `FusedIterator` is not an auto trait, so it cannot leak through the opaque
+type. `distinct_partial_eq()` can be fused-bounded; `distinct()` cannot. That is
+`AUDIT.md` finding **B-1** in miniature, and closing `D-106` (return named types)
+is what fixes it.
+
 ### Added — the README is now executable and its tables are generated (W-6, W-18)
 
 `D-016` says any coverage count or C#-mapping table must be generated from the

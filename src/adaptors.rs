@@ -99,9 +99,15 @@ pub struct Skip<I> {
 impl<I: Iterator> Iterator for Skip<I> {
     type Item = I::Item;
     fn next(&mut self) -> Option<Self::Item> {
-        while self.remaining > 0 {
-            self.inner.next()?;
-            self.remaining -= 1;
+        // `mem::take` before skipping, exactly as `std::iter::Skip` does. The
+        // previous form decremented inside the loop and used `?`, so a source
+        // that returned `None` mid-skip left `remaining > 0` — and on the next
+        // call it would skip all over again. On a non-fused source that
+        // silently ate an element: given 10,20,None,40,50,60 driven by hand,
+        // std yielded 40 and this yielded 50. `collect()` masks it, because it
+        // stops at the first `None`.
+        if self.remaining > 0 {
+            self.inner.nth(std::mem::take(&mut self.remaining) - 1)?;
         }
         self.inner.next()
     }
@@ -380,7 +386,17 @@ impl<I: Iterator> Iterator for Chunk<I> {
         if self.done {
             return None;
         }
-        let mut batch = Vec::with_capacity(self.size);
+        // Capacity comes from what the source can actually supply, never from
+        // the caller's `size` alone: `chunk(2usize.pow(28))` over three `u64`s
+        // reserved 2 GiB, and `chunk(2usize.pow(40))` aborted the process with
+        // `memory allocation of 8796093022208 bytes failed` — an abort that
+        // `catch_unwind` cannot see. The Vec still grows as needed.
+        const MAX_SPECULATIVE: usize = 4096;
+        let cap = match self.inner.size_hint() {
+            (_, Some(upper)) => self.size.min(upper),
+            (_, None) => self.size.min(MAX_SPECULATIVE),
+        };
+        let mut batch = Vec::with_capacity(cap);
         for _ in 0..self.size {
             match self.inner.next() {
                 Some(v) => batch.push(v),
@@ -521,3 +537,57 @@ impl<I: Iterator> Iterator for SkipLast<I> {
         (map_low, map_high)
     }
 }
+
+// ── FusedIterator ────────────────────────────────────────────────────────────
+//
+// `Iterator` does not promise that `None` is final; only `FusedIterator` does.
+// Without these impls a downstream `.fuse()`-bounded API rejects every adaptor
+// in this crate, and — as the `Skip` bug showed — it is easy to write an
+// adaptor that quietly misbehaves on a source that resumes after `None`.
+//
+// Most are conditional on the inner iterator: they are fused exactly when their
+// source is. Two are unconditional and say so.
+
+use std::iter::FusedIterator;
+
+impl<I: FusedIterator, P: FnMut(&I::Item) -> bool> FusedIterator for Where<I, P> {}
+impl<I: FusedIterator, B, F: FnMut(I::Item) -> B> FusedIterator for Select<I, F> {}
+impl<I: FusedIterator, P: FnMut(&I::Item) -> bool> FusedIterator for SkipWhile<I, P> {}
+impl<I: FusedIterator, P: FnMut(&I::Item) -> bool> FusedIterator for TakeWhile<I, P> {}
+impl<I: FusedIterator> FusedIterator for Skip<I> {}
+impl<I: FusedIterator> FusedIterator for Take<I> {}
+impl<I: FusedIterator> FusedIterator for Concat<I> {}
+impl<I: FusedIterator> FusedIterator for DefaultIfEmpty<I> {}
+impl<I: FusedIterator> FusedIterator for SkipLast<I> {}
+impl<I, J, R, F> FusedIterator for Zip<I, J, F>
+where
+    I: FusedIterator,
+    J: FusedIterator,
+    F: FnMut(I::Item, J::Item) -> R,
+{
+}
+// These two back the `*_partial_eq` escape hatches, so their bounds are
+// `PartialEq`, matching their `Iterator` impls above.
+impl<I> FusedIterator for Distinct<I>
+where
+    I: FusedIterator,
+    I::Item: PartialEq + Clone,
+{
+}
+impl<I, F, K> FusedIterator for DistinctBy<I, F, K>
+where
+    I: FusedIterator,
+    F: FnMut(&I::Item) -> K,
+    K: PartialEq,
+{
+}
+
+// Unconditional: `Reverse` buffers its whole source into a `Vec` at
+// construction and yields from a `std::iter::Rev<vec::IntoIter>`, which is
+// itself fused, so the inner iterator's behaviour after `None` is irrelevant.
+impl<I: Iterator> FusedIterator for Reverse<I> {}
+
+// Unconditional: `Chunk` latches a `done` flag the first time the source
+// returns `None` and checks it before doing anything else, so it can never
+// yield again regardless of what the source does next.
+impl<I: Iterator> FusedIterator for Chunk<I> {}

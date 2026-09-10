@@ -250,7 +250,15 @@ pub trait LinqExt: Iterator + Sized {
             .map(|(_, x)| x)
     }
 
-    /// Splits the sequence into fixed-size chunks. Equivalent to `Chunk`.
+    /// Splits the sequence into fixed-size chunks. The last chunk may be
+    /// shorter.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `size` is zero. (C# `Chunk` throws
+    /// `ArgumentOutOfRangeException` here; a panic is the Rust equivalent, and
+    /// matches `slice::chunks`.) A very large `size` does **not** allocate
+    /// eagerly — capacity is taken from what the source can supply.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;
