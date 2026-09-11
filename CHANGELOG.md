@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — three silent wrong answers in the published crates (D-025)
+
+`linq_rs 0.2.1` and `linq_rs_sql 0.1.1`. All three shipped; all three produced a
+plausible wrong result with no warning.
+
+- **`entity!` made the two interpreters disagree.** It generated
+  `row.$field as i64` — a silent lossy cast — so a field whose Rust type did not
+  match its declared SQL type gave different answers in SQL and in memory for
+  the same data. An `f64` field declared `Integer` with value `2.9`: SQL returns
+  the row (`2.9 > 2`), the in-memory path drops it (`2.9 as i64 == 2`). It now
+  generates `From::from`, so the mismatch is a **compile error** at the
+  `entity!` call. `i32 -> i64` and `f32 -> f64` still compile.
+
+  *This can break a build that previously compiled — but only code that was
+  already producing wrong answers.*
+
+- **`.offset()` without `.limit()` emitted SQL that does not parse.**
+  `SELECT * FROM users OFFSET 20` is valid on PostgreSQL and a syntax error on
+  SQLite and MySQL, which parse `OFFSET` only as part of a `LIMIT` clause. A
+  passing test asserted the broken string as correct. Now emits
+  `LIMIT 9223372036854775807 OFFSET 20`, verified executing on real SQLite.
+  (`LIMIT -1` is the SQLite idiom but PostgreSQL rejects a negative limit.)
+
+- **`then_by` after iteration was wrong only in release builds.** The guard was
+  `debug_assert!`, which compiles to nothing in release: the comparator was
+  silently discarded and the caller got a plausible, wrongly-ordered answer,
+  while debug builds panicked. Now `assert!` — it panics in every profile,
+  because there is no correct answer to return.
+
+Also fixed: the `#[must_use]` message on `into_lookup` told users to use
+`for_each_`, which the v1.0 cut removed — rustc printed that to them.
+
+
+
 ### Yanked
 
 - **`0.1.0` is yanked.** It was published on 2026-03-28 and should not be used.

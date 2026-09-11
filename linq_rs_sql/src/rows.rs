@@ -724,6 +724,16 @@ impl<'a, Row> Iterator for SortedRows<'a, Row> {
 /// The SQL type is restated so the macro knows which normalisation to apply,
 /// and the compiler checks it against the `table!` declaration — writing
 /// `name: Integer = name` fails to build.
+/// A field whose Rust type cannot convert losslessly to the declared SQL type
+/// is a compile error, not a silent truncation:
+///
+/// ```compile_fail
+/// use linq_rs_sql::prelude::*;
+/// table! { m (id) { id -> Integer, n -> Integer } }
+/// pub struct M { pub id: i64, pub n: f64 }
+/// // error[E0277]: the trait bound `i64: From<f64>` is not satisfied
+/// entity! { M => m { id: Integer = id, n: Integer = n } }
+/// ```
 #[macro_export]
 macro_rules! entity {
     ($row:ty => $table:ident { $($col:ident : $ty:ident = $field:ident),* $(,)? }) => {
@@ -732,9 +742,15 @@ macro_rules! entity {
         }
         $( $crate::entity!(@col $row, $table::$col, $ty, $field); )*
     };
+    // `i64::from`, deliberately NOT `as`. `as` is a silent lossy cast, and the
+    // two interpreters then disagree on the same data: an `f64` field declared
+    // `Integer` with value 2.9 makes `n.gt(2)` true in SQL (2.9 > 2) and false
+    // in memory (`2.9 as i64` == 2). A row is dropped, with no warning. `From`
+    // is implemented only for widening conversions, so the mismatch is a
+    // compile error at the `entity!` call instead. See D-025.
     (@col $row:ty, $col:path, Integer, $field:ident) => {
         impl<'r> $crate::rows::Eval<'r, $row> for $col {
-            fn eval(&'r self, row: &'r $row) -> i64 { row.$field as i64 }
+            fn eval(&'r self, row: &'r $row) -> i64 { ::core::convert::From::from(row.$field) }
         }
     };
     (@col $row:ty, $col:path, Text, $field:ident) => {
@@ -747,9 +763,13 @@ macro_rules! entity {
             fn eval(&'r self, row: &'r $row) -> bool { row.$field }
         }
     };
+    // Same reasoning as `Integer` above: `f64::from` accepts `f32`/`i32`/`u32`
+    // and rejects `i64`/`u64`, whose upper range `f64` cannot represent
+    // exactly. `2^53 + 1` declared `Float` used to compare unequal to itself
+    // across the two interpreters.
     (@col $row:ty, $col:path, Float, $field:ident) => {
         impl<'r> $crate::rows::Eval<'r, $row> for $col {
-            fn eval(&'r self, row: &'r $row) -> f64 { row.$field as f64 }
+            fn eval(&'r self, row: &'r $row) -> f64 { ::core::convert::From::from(row.$field) }
         }
     };
 }

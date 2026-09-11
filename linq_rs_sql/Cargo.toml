@@ -1,6 +1,6 @@
 [package]
 name = "linq_rs_sql"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.65"
 description = "A typed SQL query builder — compile-time checked columns, bound parameters, no driver and no dependencies"

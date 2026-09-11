@@ -308,11 +308,20 @@ impl<T: Table, S: Selection<Table = T>> Query<T, S> {
             }
         }
 
-        if let Some(n) = self.limit {
-            write!(&mut sql, " LIMIT {n}").unwrap();
-        }
-        if let Some(n) = self.offset {
-            write!(&mut sql, " OFFSET {n}").unwrap();
+        // `OFFSET` without `LIMIT` is not portable, and this crate has no dialect
+        // layer to make it so. PostgreSQL accepts a bare `OFFSET`; SQLite and
+        // MySQL treat `OFFSET` as part of the `LIMIT` clause and reject it
+        // alone -- verified against real SQLite:
+        //   SELECT * FROM t OFFSET 2   ->   near "2": syntax error
+        // `LIMIT i64::MAX` is the portable spelling of "no limit": accepted by
+        // SQLite and PostgreSQL, and within MySQL's unsigned LIMIT range.
+        // `LIMIT -1` is the usual SQLite idiom but PostgreSQL rejects a
+        // negative limit, so it is not used here. See D-025.
+        match (self.limit, self.offset) {
+            (Some(l), Some(o)) => write!(&mut sql, " LIMIT {l} OFFSET {o}").unwrap(),
+            (Some(l), None) => write!(&mut sql, " LIMIT {l}").unwrap(),
+            (None, Some(o)) => write!(&mut sql, " LIMIT {} OFFSET {o}", i64::MAX).unwrap(),
+            (None, None) => {}
         }
 
         QueryOutput { sql, params }
