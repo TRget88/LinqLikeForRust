@@ -96,44 +96,53 @@ if [ -f "$sib" ]; then
   # prove `.to_memory()` hands back something LinqExt works on; dev-deps never
   # enter a consumer's graph, so D-020's "neither depends on the other" holds
   # for anyone actually using either crate.
-  # D-024: zero dependencies of EVERY kind, dev included -- for the two CORE
-  # crates. A dev-dependency does not reach consumers, but `cargo package` strips
-  # its `path` and keeps its `version`, which makes it a hard registry
-  # requirement at publish time and forces a publish order. It also makes the
-  # "no dependencies" claim false as written.
+  # D-032, the owner's rule, stated verbatim:
+  #   linq_rs     -- no dependencies.
+  #   linq_rs_sql -- only linq_rs.
+  #   nothing else is acceptable.
   #
-  # `linq_rs_sqlite` is deliberately exempt: it is the PROVIDER (D-031), and a
-  # provider that cannot depend on a driver is useless. Splitting it into its own
-  # crate is what lets the core two stay at zero -- that is the whole reason it
-  # is not a feature flag on `linq_rs_sql`. Its own bound is checked below.
-  # `seam-tests` is publish = false and is exempt by construction.
+  # So the whole dependency graph must contain no third-party crate at all, of
+  # any kind, including dev. This is stricter than D-024 (which only demanded the
+  # two core crates be clean) and it is what retired linq_rs_sqlite: one driver
+  # dependency pulled 24 crates into the graph via rusqlite -> libsqlite3-sys.
+  #
+  # Checked on the RESOLVED graph, not the manifests: a manifest lists direct
+  # dependencies, and a transitive one is still a dependency.
+  third="$(cargo metadata --format-version 1 2>/dev/null \
+    | python3 -c "
+import json,sys
+own={'linq_rs','linq_rs_sql','seam-tests'}
+names={p['name'] for p in json.load(sys.stdin)['packages']} - own
+print(','.join(sorted(names)))")"
+  if [ -n "$third" ]; then
+    err "third-party crates in the dependency graph: ${third}"
+  fi
+  echo "dependency graph contains no third-party crate"
+
+  # And per-package, so a violation names the package that introduced it.
+  # `linq_rs_sql` MAY depend on `linq_rs`; it is permitted, not required, and it
+  # currently has none, which is stricter and fine. Anything else fails.
   for pkg in linq_rs linq_rs_sql; do
-    sd="$(cargo metadata --no-deps --format-version 1 \
-      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${pkg}'][0]; print(','.join(sorted(d['name']+'('+(d['kind'] or 'normal')+')' for d in p['dependencies'])))")"
-    if [ -z "$sd" ]; then echo "${pkg} dependencies (all kinds): none"; else err "${pkg} gained a dependency: ${sd}"; fi
+    got="$(cargo metadata --no-deps --format-version 1 \
+      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${pkg}'][0]; print(','.join(sorted(set(d['name'] for d in p['dependencies']))))")"
+    # Plain string comparison, not grep: the ALLOWED value is the empty string,
+    # and `printf '%s' "" | grep -qE '^$'` fails because grep sees zero lines.
+    ok=no
+    case "${pkg}:${got}" in
+      linq_rs:)                ok=yes ;;
+      linq_rs_sql:|linq_rs_sql:linq_rs) ok=yes ;;
+    esac
+    if [ "$ok" != yes ]; then
+      err "${pkg} may depend only on $( [ "$pkg" = linq_rs_sql ] && echo 'linq_rs' || echo 'nothing' ); got '${got:-<none>}'"
+    fi
+    echo "${pkg} dependencies: ${got:-none}"
   done
-  # And nothing that is publish = false may ever be published.
+
   np="$(cargo metadata --no-deps --format-version 1 \
     | python3 -c "import json,sys; print(','.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('publish') != [])))")"
-  [ "$np" = "linq_rs,linq_rs_sql,linq_rs_sqlite" ] \
-    || err "publishable packages changed: expected linq_rs + linq_rs_sql + linq_rs_sqlite, got: ${np}"
+  [ "$np" = "linq_rs,linq_rs_sql" ] \
+    || err "publishable packages changed: expected linq_rs + linq_rs_sql, got: ${np}"
   echo "publishable packages: ${np} (seam-tests is publish = false)"
-
-  # The provider may depend on things, but the LAYERING must not invert. If
-  # either core crate ever depended on the provider, or the provider grew a
-  # second driver, the split that keeps the core at zero would be pointless.
-  prov="$(cargo metadata --no-deps --format-version 1 \
-    | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='linq_rs_sqlite'][0]; print(','.join(sorted(set(d['name'] for d in p['dependencies']))))")"
-  [ "$prov" = "linq_rs_sql,rusqlite" ] \
-    || err "linq_rs_sqlite's dependencies changed: expected linq_rs_sql + rusqlite, got: ${prov}"
-  echo "linq_rs_sqlite depends on: ${prov} (a provider may; the core two may not)"
-  for core in linq_rs linq_rs_sql; do
-    if cargo metadata --no-deps --format-version 1 \
-      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${core}'][0]; sys.exit(0 if any(d['name']=='linq_rs_sqlite' for d in p['dependencies']) else 1)"; then
-      err "${core} depends on linq_rs_sqlite -- the provider layering is inverted"
-    fi
-  done
-  echo "no core crate depends on the provider"
 else
   err "linq_rs_sql/Cargo.toml is missing — D-020 split the SQL builder into it"
 fi
@@ -187,24 +196,6 @@ check_relative_links() {
   echo "${pkg}/README.md: every relative link resolves inside the tarball"
 }
 check_relative_links "$ROOT/linq_rs_sql/README.md" linq_rs_sql "$sib_listing"
-prov_listing="$(cd "$ROOT" && cargo package --list --allow-dirty -p linq_rs_sqlite 2>/dev/null)"
-[ -n "$prov_listing" ] || err "cargo package --list -p linq_rs_sqlite produced nothing"
-while read -r want; do
-  [ -z "$want" ] && continue
-  printf '%s\n' "$prov_listing" | grep -q "^${want}" \
-    && echo "linq_rs_sqlite ships: ${want}" \
-    || err "linq_rs_sqlite's tarball is missing '${want}'"
-done <<'PROVREQUIRED'
-LICENSE-MIT
-LICENSE-APACHE
-README.md
-tests/
-PROVREQUIRED
-for f in LICENSE-MIT LICENSE-APACHE; do
-  cmp -s "$ROOT/$f" "$ROOT/linq_rs_sqlite/$f" \
-    || err "linq_rs_sqlite/${f} differs from the workspace ${f}"
-done
-check_relative_links "$ROOT/linq_rs_sqlite/README.md" linq_rs_sqlite "$prov_listing"
 check_relative_links "$ROOT/README.md" linq_rs "$listing"
 
 echo

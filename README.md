@@ -279,14 +279,12 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 **This crate does not touch a database.** It has no driver, no connection, and
 no dependencies; it runs over in-memory iterators.
 
-Two sibling crates cover that:
+One sibling crate covers that:
 
 - **[`linq_rs_sql`](https://github.com/TRget88/LinqLikeForRust/tree/main/linq_rs_sql)**
   builds SQL — compile-time-checked columns, bound parameters, no
   interpolation, nullable columns with SQL's three-valued logic. Also zero
   dependencies.
-- **`linq_rs_sqlite`** (in this repo; not yet published)
-  runs it against SQLite and gives back typed structs.
 
 `D-002` — one query value with **two interpreters** — is built. The same value
 renders to SQL for a database, or evaluates lazily over a `Vec` in a unit test:

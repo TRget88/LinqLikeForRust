@@ -477,8 +477,46 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-032 — the dependency rule, stated by the owner
+- **Status:** SETTLED (2026-09-11) — implemented; **supersedes `D-031`**.
+- **Ruling, verbatim from the owner:**
+  - `linq_rs` — **no dependencies.**
+  - `linq_rs_sql` — **only `linq_rs`.**
+  - **Nothing else is acceptable.**
+- **This retires `linq_rs_sqlite`.** `D-031` reasoned that a provider in its own
+  crate was acceptable because it kept the two core crates clean, and cited EF
+  Core's core-plus-provider split as precedent. That reasoning answered a question
+  the owner had not asked. The rule is not "the core crates stay clean" — it is
+  that **the project takes no third-party dependency at all**, and one driver
+  dependency pulled **24 crates** into the resolved graph:
+  `rusqlite → libsqlite3-sys → cc, pkg-config, vcpkg, syn, quote, proc-macro2, …`.
+- **Nothing structural was lost.** `ColumnSet`, `RowSource`, `FromRow`, `LoadOpt`
+  and `LoadField` all live in `linq_rs_sql` and have no dependencies (`D-029`).
+  The deleted crate was only the rusqlite glue, and that glue is what a user was
+  always going to write. It is preserved verbatim, with everything it was verified
+  to do, in `docs/DRIVER_ADAPTER.md` — about 36 lines.
+- **`linq_rs_sql` may depend on `linq_rs`; it does not.** The permission is
+  recorded because it changes what is possible: `seam-tests` exists (`D-024`) only
+  to hold cross-crate tests without that dependency, so it could now be collapsed.
+  Not done here — a permission is not an instruction.
+- **Enforced by:** `packaging-gate.sh`, on the **resolved** graph rather than the
+  manifests, because a manifest lists direct dependencies and a transitive one is
+  still a dependency. It asserts the graph contains no crate outside
+  `{linq_rs, linq_rs_sql, seam-tests}`, and per-package that `linq_rs` has none and
+  `linq_rs_sql` has at most `linq_rs`. Verified failing on a third-party
+  dependency (`libc`), and on an inverted layering (`linq_rs` depending on
+  `linq_rs_sql`).
+- **Note on the check itself:** the first version compared with
+  `printf '%s' "$got" | grep -qE '^$'`, which fails for the ALLOWED empty value —
+  `printf` of an empty string emits zero lines and `grep` needs one. A rule whose
+  check rejects the compliant state is worse than no check. It is a shell string
+  comparison now.
+
 ## D-031 — the provider is its own crate, not a feature flag
-- **Status:** SETTLED (2026-09-11) — implemented as `linq_rs_sqlite 0.1.0`.
+- **Status:** **SUPERSEDED by `D-032`** (2026-09-11). The crate it created,
+  `linq_rs_sqlite`, has been deleted: it took a third-party dependency, which the
+  owner's rule does not permit anywhere in this project. The entry is kept because
+  the driver-seam findings inside it are still correct and still in force.
 - **Ruling:** executing queries lives in a **third crate** that depends on
   `linq_rs_sql` and one driver. `linq_rs` and `linq_rs_sql` keep zero
   dependencies of any kind.

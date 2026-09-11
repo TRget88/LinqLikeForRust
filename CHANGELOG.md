@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed — `linq_rs_sqlite`, for taking a dependency (D-032)
+
+The dependency rule, stated by the owner and now recorded as `D-032`:
+
+- `linq_rs` — **no dependencies**
+- `linq_rs_sql` — **only `linq_rs`**
+- **nothing else is acceptable**
+
+`linq_rs_sqlite` violated it. One driver dependency pulled **24 crates** into the
+resolved graph (`rusqlite → libsqlite3-sys → cc, pkg-config, vcpkg, syn, …`), so
+the crate is deleted.
+
+`D-031` had argued a provider crate was fine because it kept the two core crates
+clean. That answered a question that was not asked: the rule is that the *project*
+takes no third-party dependency, not that the core two stay clean.
+
+**Nothing structural is lost.** `ColumnSet`, `RowSource`, `FromRow`, `LoadOpt` and
+`LoadField` are all in `linq_rs_sql` with no dependencies — the deleted crate was
+only the rusqlite glue, which is what a user was always going to write. It is
+preserved verbatim in `docs/DRIVER_ADAPTER.md`, about 36 lines, along with
+everything it was verified to do against a real SQLite.
+
+The packaging gate now enforces the rule on the **resolved** dependency graph
+rather than the manifests, because a transitive dependency is still a dependency.
+
 ### Added — `linq_rs_sqlite 0.1.0`, the SQLite provider (D-031)
 
 Queries now execute. A third crate, so the other two stay dependency-free.

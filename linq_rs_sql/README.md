@@ -4,8 +4,10 @@ A typed SQL query builder with an unusual property: **one query value, two
 interpreters.** The same value renders to SQL for a database, or evaluates
 lazily over a `Vec` in a unit test — and the two agree.
 
-Zero dependencies. No driver, no connection, no runtime. This crate builds SQL;
-[`linq_rs_sqlite`](https://crates.io/crates/linq_rs_sqlite) runs it.
+Zero dependencies. No driver, no connection, no runtime — this crate builds SQL
+and hands you the string plus its bound parameters. Running it is your driver's
+job; [`docs/DRIVER_ADAPTER.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/docs/DRIVER_ADAPTER.md)
+has a complete ~36-line rusqlite adapter, verified end-to-end.
 
 ```rust
 use linq_rs_sql::prelude::*;
@@ -133,12 +135,8 @@ A driver adapter implements `ColumnSet` and one method of `RowSource` — about 
 lines. Opt out of generation with `entity! { … } no_from_row` when a struct has a
 borrowed field or a field that is not a column.
 
-In practice you want [`linq_rs_sqlite`](https://crates.io/crates/linq_rs_sqlite),
-which does all of that:
-
-```text
-let staff: Vec<Employee> = Sqlite::new(&conn).fetch(&q.to_sql())?;
-```
+A complete rusqlite adapter, and the `fetch` loop that uses it, is in
+[`docs/DRIVER_ADAPTER.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/docs/DRIVER_ADAPTER.md).
 
 ## What you get over writing the SQL by hand
 

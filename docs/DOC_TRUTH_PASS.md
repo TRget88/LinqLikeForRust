@@ -145,3 +145,20 @@ detects a feature described as planned that has since shipped.
 | `crates.io/settings/tokens` | Authenticated page. |
 | `DECISIONS.md`, `CHANGELOG.md`, `ROADMAP.md` prose claims | Extraction exceeded the agent output limit twice. The highest-value part was verified mechanically instead: all 39 `Enforced by` blocks exist, 47/49 named targets resolve, and all four gates pass. Their remaining prose is unassessed. |
 | Whether a claim is true for a *user* today | Every verdict is against this SHA, which is the tip of a seven-branch stack that is neither merged nor published. 33 claims have a different verdict against the live crates. |
+
+## Addendum — `linq_rs_sqlite` removed after this pass
+
+The owner's dependency rule (`D-032`) is stricter than the one this pass assessed
+against: `linq_rs` takes no dependencies, `linq_rs_sql` may take only `linq_rs`,
+and nothing else is acceptable anywhere in the project. `linq_rs_sqlite` violated
+it and has been deleted.
+
+Consequences for the verdicts above. Every claim verified *against* a real SQLite
+still stands — the evidence was produced by running real queries, and deleting the
+crate does not unrun them. What changes is reachability: the adapter that produced
+that evidence now lives in `docs/DRIVER_ADAPTER.md` as code a user writes, not as
+a crate they depend on. The `LIKE` finding is unaffected and still open; it is a
+defect in `linq_rs_sql`'s in-memory matcher, which was never part of the provider.
+
+Claim counts in this report are as of `8501f87` and are not restated for the
+removal.
