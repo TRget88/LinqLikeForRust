@@ -113,7 +113,7 @@ pub trait DynPred<Row>: sealed::Sealed<Row> {
     /// under negation: `is_true(NOT NULL)` is `false`, while `!is_true(NULL)`
     /// is `true`. Since a boxed predicate is a first-class expression that can
     /// be fed back into `not(..)`, the erased form has to carry the third
-    /// value. See `DECISIONS.md` `D-027`.
+    /// value. See [`DECISIONS.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/DECISIONS.md) `D-027`.
     fn eval_row(&self, row: &Row) -> Option<bool>;
 }
 

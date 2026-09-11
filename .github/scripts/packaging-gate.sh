@@ -205,7 +205,12 @@ echo "=== a published crate must not cite a file it does not ship (D-023) ==="
 # linq_rs_sql referenced `DECISIONS.md` in three shipped files and shipped it
 # zero times -- it lives at the workspace root, which no member tarball can
 # reach. A bare filename gives the reader nothing to follow; a URL does.
-sib_files="$(cd "$ROOT/linq_rs_sql" && git ls-files 'src/*' README.md 2>/dev/null)"
+# Take the file list from the TARBALL, not from git. `git ls-files` cannot see a
+# newly-added file until it is staged, so a fresh source file citing a
+# repo-root doc passed this check locally and failed on CI -- the gate was
+# reading the repo when its entire subject is what ships. (D-023's own lesson,
+# reappearing inside D-023's gate.)
+sib_files="$(printf '%s\n' "$sib_listing" | grep -E '^(src/.*\.rs|README\.md)$')"
 bare=0
 for f in $sib_files; do
   # A mention is fine if the same line, or the file, also carries the URL.
