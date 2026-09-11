@@ -95,7 +95,7 @@ third, renames two methods, and lowers the MSRV to 1.65.
 For `except_by` / `intersect_by`, the second argument is the iterable of
 **keys** (matching C#). For `union_by` it is the iterable of **items**.
 
-| `distinct_partial_eq`, `distinct_by_partial_eq`, `except_partial_eq`, `intersect_partial_eq`, `union_partial_eq` | `PartialEq` escape hatches — same semantics, O(n²), for types that cannot implement `Hash`. See [Performance](#performance--the-default-is-hash-backed). |
+| `distinct_partial_eq`, `distinct_by_partial_eq`, `except_partial_eq`, `intersect_partial_eq`, `union_partial_eq` | `PartialEq` escape hatches — same output, O(n²) worst case, for types that cannot implement `Hash`. **Not** the same evaluation timing: `union_` is lazy, `union_partial_eq` drains both sides at the call. See [Performance](#performance--the-default-is-hash-backed). |
 
 ### Ordering
 
@@ -133,7 +133,9 @@ collects the receiver when it is called (measured; see *Evaluation timing*).
 
 ### Element Operations
 
-Strict (panicking) variants on the left; `_or_default` variants return `Option<T>`.
+Strict (panicking) variants on the left. `first_or_default` and `last_or_default` return
+`Option<T>`; `single_or_default` returns `Result<Option<T>, SingleError>`, because zero,
+one and many are three outcomes rather than two (see [below](#single_or_default-returns-a-result-c-throws-on-2-elements)).
 
 | Rust                            | C#                           |
 |---------------------------------|------------------------------|
@@ -156,7 +158,7 @@ Strict (panicking) variants on the left; `_or_default` variants return `Option<T
 |---------------------|-----------------|
 | `any_(p)`           | `Any(p)`        |
 | `all_(p)`           | `All(p)`        |
-| `contains_(value)`  | `Contains(val)` |
+| `contains_(&value)` | `Contains(val)` |
 
 ### Joining
 
@@ -178,8 +180,9 @@ Strict (panicking) variants on the left; `_or_default` variants return `Option<T
 | `aggregate_by(key_fn, seed_fn, accum)`            | `AggregateBy(keySelector, seedFn, func)` (.NET 9+) |
 
 `group_by_key` returns an iterator of `Grouping<K, T>` — each item has a
-`.key()` and `.elements()`. The overloads transform the elements or fold each
-group into a single value.
+`.key()` returning `&K` and `.elements()` returning `&[T]`, both borrowed from the
+group, so moving one out of a closure needs a copy or a clone. The overloads
+transform the elements or fold each group into a single value.
 
 | `group_by_key_partial_eq`, `count_by_partial_eq`, `aggregate_by_partial_eq` | `PartialEq` escape hatches — same semantics, O(n²), for types that cannot implement `Hash`. See [Performance](#performance--the-default-is-hash-backed). |
 
@@ -189,11 +192,6 @@ group into a single value.
 |--------------------------------|----------------------------------|
 | `into_hashmap(key_fn)`           | `ToDictionary(key_fn)`           |
 | `into_lookup(key_fn)`            | `ToLookup(key_fn)`               |
-
-### Utility
-
-| Rust                                      | C#                                  |
-|-------------------------------------------|-------------------------------------|
 
 ### Source Generators (free functions, not on `LinqExt`)
 
@@ -372,17 +370,21 @@ The remaining 35 have no direct std equivalent — that is the part of this crat
 
 ## Performance — the default is hash-backed
 
-Ten operators need to compare elements or keys. All of them use a **hash index
-by default**, and require `Eq + Hash`:
+Twenty-eight operators compare elements or keys. Ten of them use a **hash index
+by default** and have a `*_partial_eq` twin:
 
 `distinct` · `distinct_by` · `except` · `intersect` · `union_` ·
 `group_by_key` · `count_by` · `aggregate_by` · `inner_join` · `group_join`
-— plus `into_lookup`, whose `Lookup` is hash-indexed throughout.
+
+`into_lookup` and `into_hashmap` also hash-compare keys, making twelve that
+require `Eq + Hash`; five of the ten — `distinct`, `union_`, `group_by_key`,
+`inner_join`, `group_join` — additionally require `Clone`, as does `into_lookup`
+(`D-101`). The remaining sixteen compare via a key selector you supply.
 
 Each also has a `*_partial_eq` counterpart that compares with `PartialEq` and
 scans linearly:
 
-| Default (`Eq + Hash`, O(n) or O(n + m)) | Escape hatch (`PartialEq`, O(n²)) |
+| Default (`Eq + Hash`, O(n) or O(n + m)) | Escape hatch (`PartialEq`, O(n²) worst case) |
 |---|---|
 | `distinct` | `distinct_partial_eq` |
 | `distinct_by` | `distinct_by_partial_eq` |
