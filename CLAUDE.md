@@ -36,9 +36,20 @@ generator.
 
 ## Hard constraints
 
-- **Zero dependencies.** `Cargo.toml` is `std`-only. Do not introduce a crate
-  dependency without explicit user approval. If a feature genuinely needs one
-  (e.g. `rayon`, `serde`), gate it behind an opt-in cargo feature.
+- **Zero dependencies, and this one is not negotiable** (`D-032`):
+  - `linq_rs` — **no dependencies.**
+  - `linq_rs_sql` — **only `linq_rs`.**
+  - **Nothing else is acceptable.**
+
+  Not "ask first", and **not** "gate it behind an opt-in cargo feature" — that
+  escape hatch used to be written here and it is exactly the route `D-032`
+  forbids. An optional dependency is still a dependency: it is in the manifest,
+  it ends the claim as written, and it reaches the lockfile of everyone who
+  wanted none. A whole crate was deleted for taking one (`linq_rs_sqlite`, whose
+  single driver dependency pulled 24 crates into the resolved graph). If a
+  feature needs a third-party crate, the feature does not belong here — publish
+  it as a separate crate outside this workspace, or define a trait and let the
+  caller supply the glue, as `RowSource` does.
 - **Stable Rust.** No nightly features.
 - **No `unsafe`.** This library is a thin layer over safe iterator combinators —
   there is no reason to reach for `unsafe`.

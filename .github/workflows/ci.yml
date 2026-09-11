@@ -165,8 +165,10 @@ jobs:
       # v4 lockfile against `rust-version = "1.65"` and could not build on 1.65
       # at all; every check above passed because none looked inside the
       # tarball. (D-023)
-      # The provider crate's tarball needs the registry (it has a driver
-      # dependency), so this step is not offline. D-031.
+      # Every tarball builds fully OFFLINE, because no crate here has a
+      # third-party dependency (D-032). If this step ever needs the registry,
+      # a dependency has crept in and msrv-tarball.sh fails rather than
+      # helpfully resolving it.
       - name: Build the packaged tarballs on MSRV
         shell: bash
         run: ./.github/scripts/msrv-tarball.sh

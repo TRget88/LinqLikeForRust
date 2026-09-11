@@ -84,30 +84,32 @@ for d in "$WORK"/*/; do
     continue
   fi
 
-  # The two CORE crates have zero dependencies (D-024) and build fully offline.
+  # No crate here has a third-party dependency (D-032), so every tarball builds
+  # fully offline; the guard below is what keeps that true.
   # The PROVIDER (D-031) depends on `linq_rs_sql` and a driver, so its tarball
   # cannot resolve offline until those are published. Point its sibling
   # dependency at the extracted sibling TARBALL -- not at the working tree, so
   # this still grades the packaged artifact -- and let the registry supply the
   # driver.
-  offline="--offline"
-  # `cargo package` NORMALISES the manifest: a dependency becomes
-  # `[dependencies.name]`, never `[dependencies]` + `name = ...`. Matching the
-  # repo's shape here silently never fired -- the same mistake as reading the
-  # repo instead of the tarball, which D-023 exists to stop. Match the prefix.
+  # Every tarball must build fully OFFLINE, because D-032 permits no third-party
+  # dependency anywhere: `linq_rs` has none and `linq_rs_sql` may have only
+  # `linq_rs`. So a shipped manifest with a dependency is itself the failure --
+  # this used to patch around it and resolve from the registry, which quietly
+  # accommodated exactly what the rule forbids.
+  #
+  # Read from the TARBALL's manifest, and match `[dependencies.` with the dot:
+  # `cargo package` NORMALISES a dependency to `[dependencies.name]`, never
+  # `[dependencies]` + `name = ...`. An earlier version matched the repo's shape
+  # and so silently never fired -- the same mistake D-023 exists to stop.
   if grep -qE '^\[dependencies\.' "${d}Cargo.toml"; then
-    sibling="$(ls -d "$WORK"/linq_rs_sql-*/ 2>/dev/null | head -1)"
-    if [ -n "$sibling" ]; then
-      printf '\n[patch.crates-io]\nlinq_rs_sql = { path = "%s" }\n' "${sibling%/}" \
-        >> "${d}Cargo.toml"
-    fi
-    # Registry access is required here and that is not a silent cap: a driver
-    # cannot be vendored into this check.
-    offline=""
-    echo "  (has dependencies: resolving from the registry, sibling patched to its tarball)"
+    echo "FAIL: ${pkg}'s tarball declares a dependency:"
+    grep -E '^\[dependencies\.' "${d}Cargo.toml" | sed 's/^/    /'
+    echo "      D-032 permits none outside linq_rs_sql -> linq_rs."
+    fail=1
+    continue
   fi
 
-  if (cd "$d" && rustup run "$MSRV_TC" cargo build --lib $offline 2>&1 | tail -3); then
+  if (cd "$d" && rustup run "$MSRV_TC" cargo build --lib --offline 2>&1 | tail -3); then
     echo "  builds on ${MSRV_TC}"
   else
     echo "FAIL: ${pkg} does not build on ${MSRV_TC}"

@@ -265,8 +265,9 @@ This is what EF closes with scaffolding (model from database) or migrations
 
 - **Verify at runtime, once.** A `check_schema(&conn)` that compares
   `ALL_COLUMNS` and the declared SQL types against the driver's introspection and
-  returns a diff. Cheap, needs a driver, catches drift at startup rather than on
-  the first query that touches the missing column.
+  returns a diff. Cheap, catches drift at startup rather than on the first query
+  that touches the missing column. Needs driver introspection, which under `D-032`
+  means a trait the caller implements — not a dependency.
 - **Generate the declaration.** A `table!` emitted from the live schema, so the
   two cannot disagree. Bigger, needs a build step, and is the EF answer.
 

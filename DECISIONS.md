@@ -562,7 +562,14 @@ seam, not the seam.
   get generated.
 - **Forbids:** a driver dependency or feature on `linq_rs` or `linq_rs_sql`; a
   core crate depending on the provider; a second driver in this crate.
-- **Enforced by:** `linq_rs_sqlite/tests/roundtrip.rs` — 12 tests against a real
+- **Enforced by:** *nothing — the named target is deleted.* This said
+  `linq_rs_sqlite/tests/roundtrip.rs`, which went with the crate under `D-032`.
+  What those 12 tests proved is recorded in `docs/DRIVER_ADAPTER.md`; the
+  `linq_rs_sql`-side behaviour they exercised is still covered by
+  `linq_rs_sql/tests/{from_row,nullable,boxed}.rs`. Left visible rather than
+  quietly deleted, because an `Enforced by` line pointing at nothing is precisely
+  what the field exists to prevent. Historically it was:
+  `linq_rs_sqlite/tests/roundtrip.rs` — 12 tests against a real
   in-memory SQLite, including the database and the in-memory interpreter
   agreeing on one query value, three-valued logic matching the database,
   conditional composition, hostile input staying in `params`, `count` respecting
@@ -914,7 +921,12 @@ panics in every profile.
   restating the output.
 
 ## D-024 — zero dependencies means zero, dev-dependencies included
-- **Status:** SETTLED (2026-09-10) — implemented.
+- **Status:** SETTLED (2026-09-10) — implemented. **Extended by `D-032`**, which
+  is the binding statement: this entry only required the two core crates to be
+  clean, and `D-032` forbids a third-party dependency *anywhere*. `D-032` also
+  **permits** `linq_rs_sql` to depend on `linq_rs`, which this entry treats as
+  forbidden — so the `seam-tests` rationale below survives only on its second
+  ground (publish order), not its first.
 - **Ruling:** `linq_rs` and `linq_rs_sql` each declare **no dependencies of any
   kind**. Cross-crate tests live in `seam-tests`, a workspace member with
   `publish = false` that is free to depend on both by path because nothing ever
