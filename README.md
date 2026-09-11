@@ -341,15 +341,15 @@ a SQL clause **or a translatable execution of one** — 35 of the 62 are clauses
 |---|---|
 | `all_` | `all` |
 | `any_` | `any` |
-| `contains_` | `any()` |
+| `contains_` | `any(\|x\| x == *v)` |
 | `count_where` | `filter().count()` |
-| `first` | `next` |
-| `first_or` | `next` |
+| `first` | `next().expect(..)` |
+| `first_or` | `next().unwrap_or(d)` |
 | `first_or_default` | `next` |
 | `first_where` | `find` |
 | `into_hashmap` | `map().collect()` |
-| `last_` | `last` |
-| `last_or` | `last` |
+| `last_` | `last().expect(..)` |
+| `last_or` | `last().unwrap_or(d)` |
 | `last_or_default` | `last` |
 | `last_where` | `filter().last()` |
 | `max_` | `max` |
@@ -358,7 +358,7 @@ a SQL clause **or a translatable execution of one** — 35 of the 62 are clauses
 | `min_` | `min` |
 | `min_by_` | `min_by` |
 | `min_by_key_` | `min_by_key` |
-| `order_by_with` | `sort_by` |
+| `order_by_with` | `collect() + sort_by` |
 | `select` | `map` |
 | `select_many` | `flat_map` |
 | `skip_` | `skip` |
