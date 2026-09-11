@@ -984,8 +984,16 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
 pub trait CallToMemoryFirst {}
 
 impl<Row: Entity, P, O> Rows<Row, P, O> {
-    /// Not translatable to SQL (`D-019`: `terminal`). Call
-    /// [`Rows::to_memory`] first.
+    /// Not implemented on the seam — call [`Rows::to_memory`] first and use
+    /// `LinqExt::select_many` there. (`linq_rs` is not a dependency of this crate,
+    /// per `D-024`, so that name cannot be linked from here.)
+    ///
+    /// This used to say "`D-019`: `terminal`", which contradicted
+    /// `.github/data/operator-map.tsv`, where `select_many` is classified
+    /// `clause`. The two were answering different questions: the TSV's
+    /// `translatable` column records whether an operator *could* become a SQL
+    /// clause — `D-019`'s cut criterion — while this stub is about what the seam
+    /// implements *today*. Nothing here is a statement about `D-019`.
     pub fn select_many<F>(self, _f: F) -> Self
     where
         Self: CallToMemoryFirst,
