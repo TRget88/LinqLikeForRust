@@ -361,3 +361,47 @@ fn entity_accepts_every_lossless_field_type() {
     let ids: Vec<i64> = by_ratio.to_memory(&rows).map(|w| w.id).collect();
     assert_eq!(ids, [1], "0.5f32 widened to f64 must still be < 1.0");
 }
+
+/// D-028. A predicate's columns must belong to the table being queried. The
+/// in-memory interpreter always rejected a foreign column, because `Eval<'_,
+/// Row>` is only implemented for the row's own columns — but `to_sql()` did
+/// not, and emitted `SELECT * FROM employees WHERE (budget > ?)` for a
+/// `departments` column. That is backwards: SQL is the production path.
+///
+/// The rejection side is covered by `compile_fail` doctests on `BelongsTo`.
+/// This pins the side that must keep working: own columns, literals, and every
+/// combinator over them, on each of the three builders.
+#[test]
+fn predicates_over_the_querys_own_table_still_compile_everywhere() {
+    table! { staff (id) { id -> Integer, dept -> Text, salary -> Integer } }
+    pub struct Person {
+        pub id: i64,
+        pub dept: String,
+        pub salary: i64,
+    }
+    entity! { Person => staff { id: Integer = id, dept: Text = dept, salary: Integer = salary } }
+
+    // 1. the SQL-only builder
+    assert_eq!(
+        staff::table().filter(staff::salary.gt(1i64)).to_sql().sql,
+        "SELECT * FROM staff WHERE (salary > ?)"
+    );
+
+    // 2. the seam, with combinators and ordering over its own columns
+    let seam = linq_rs_sql::rows::query::<Person>()
+        .filter(staff::salary.gt(100i64).and(staff::dept.eq("eng")))
+        .order_by(staff::id);
+    assert_eq!(
+        seam.to_sql().sql,
+        "SELECT * FROM staff WHERE ((salary > ?) AND (dept = ?)) ORDER BY id"
+    );
+
+    // 3. the erased form
+    assert_eq!(
+        linq_rs_sql::boxed_query::<Person>()
+            .filter(staff::salary.gt(1i64))
+            .to_sql()
+            .sql,
+        "SELECT * FROM staff WHERE (salary > ?)"
+    );
+}

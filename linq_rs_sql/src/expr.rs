@@ -165,6 +165,11 @@ macro_rules! define_binary_compare {
             pub(crate) right: R,
         }
 
+        impl<T, L: $crate::expr::BelongsTo<T>, R: $crate::expr::BelongsTo<T>>
+            $crate::expr::BelongsTo<T> for $name<L, R>
+        {
+        }
+
         impl<L, R> Expr for $name<L, R>
         where
             L: Expr,
@@ -383,3 +388,84 @@ impl<T: Expr> Expr for Option<T> {
 pub(crate) fn and_node<L, R>(left: L, right: R) -> And<L, R> {
     And { left, right }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BelongsTo — which table an expression's columns come from
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// An expression every column of which belongs to table `T`.
+///
+/// Without this, a query over one table could be filtered by another table's
+/// column and the mismatch would only surface as a database error at runtime:
+///
+/// ```text
+/// query::<Employee>().filter(departments::budget.gt(100))
+/// // SELECT * FROM employees WHERE (budget > ?)      <- no such column
+/// ```
+///
+/// The in-memory interpreter already rejected that, because `Eval<'_, Row>` is
+/// only implemented for the row's own columns. `to_sql()` did not — which is
+/// backwards, since SQL is the production path. `BelongsTo` gives the SQL half
+/// the same guarantee, at compile time. See `D-028`.
+///
+/// **Literals belong to every table**, because they have no columns. That is
+/// what makes `salary.gt(100)` legal over any table that has a `salary`.
+///
+/// Implemented for columns by the [`table!`](crate::table) macro rather than by
+/// a blanket impl over [`Column`](crate::Column): a blanket impl would overlap
+/// the literal impls below, and Rust cannot prove `i64: !Column`.
+/// A query over one table cannot be filtered by another table's column:
+///
+/// ```compile_fail
+/// use linq_rs_sql::prelude::*;
+/// table! { employees (id) { id -> Integer, salary -> Integer } }
+/// table! { departments (id) { id -> Integer, budget -> Integer } }
+/// pub struct Employee { pub id: i64, pub salary: i64 }
+/// entity! { Employee => employees { id: Integer = id, salary: Integer = salary } }
+///
+/// // error[E0277]: the trait bound `budget: BelongsTo<employees::Marker>`
+/// //               is not satisfied
+/// let _ = query::<Employee>().filter(departments::budget.gt(100i64)).to_sql();
+/// ```
+///
+/// The same check applies to the SQL-only builder:
+///
+/// ```compile_fail
+/// use linq_rs_sql::prelude::*;
+/// table! { employees (id) { id -> Integer } }
+/// table! { departments (id) { budget -> Integer } }
+///
+/// let _ = employees::table().filter(departments::budget.gt(100i64)).to_sql();
+/// ```
+///
+/// A column from the query's own table, and any literal, are fine:
+///
+/// ```rust
+/// use linq_rs_sql::prelude::*;
+/// table! { employees (id) { id -> Integer, salary -> Integer } }
+/// pub struct Employee { pub id: i64, pub salary: i64 }
+/// entity! { Employee => employees { id: Integer = id, salary: Integer = salary } }
+///
+/// let q = query::<Employee>().filter(employees::salary.gt(100i64));
+/// assert_eq!(q.to_sql().sql, "SELECT * FROM employees WHERE (salary > ?)");
+/// ```
+pub trait BelongsTo<T> {}
+
+// Literals: no columns, so every table.
+impl<T> BelongsTo<T> for i32 {}
+impl<T> BelongsTo<T> for i64 {}
+impl<T> BelongsTo<T> for bool {}
+impl<T> BelongsTo<T> for f32 {}
+impl<T> BelongsTo<T> for f64 {}
+impl<T> BelongsTo<T> for String {}
+impl<T> BelongsTo<T> for &str {}
+impl<T, S: SqlType> BelongsTo<T> for Lit<S> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for Option<E> {}
+
+// Combinators: belong to `T` exactly when every operand does.
+impl<T, L: BelongsTo<T>, R: BelongsTo<T>> BelongsTo<T> for And<L, R> {}
+impl<T, L: BelongsTo<T>, R: BelongsTo<T>> BelongsTo<T> for Or<L, R> {}
+impl<T, L: BelongsTo<T>, R: BelongsTo<T>> BelongsTo<T> for Like<L, R> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for Not<E> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for IsNull<E> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for IsNotNull<E> {}

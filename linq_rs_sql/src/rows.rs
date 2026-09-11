@@ -669,6 +669,9 @@ pub trait Entity: Sized {
 #[derive(Debug, Clone, Copy)]
 pub struct AlwaysTrue;
 
+// No columns, so every table -- the identity of the conjunction.
+impl<T> crate::expr::BelongsTo<T> for AlwaysTrue {}
+
 impl Expr for AlwaysTrue {
     type SqlType = Boolean;
     fn write_to(&self, sql: &mut String, _params: &mut Vec<crate::SqlValue>) {
@@ -848,7 +851,9 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
     pub fn filter<P2>(self, predicate: P2) -> Rows<Row, P::Out, O>
     where
         P: Conj<P2>,
-        P2: Expr,
+        // D-028: the predicate's columns must belong to THIS row's table.
+        // `to_memory` already enforced it through `Eval`; `to_sql` did not.
+        P2: Expr + crate::expr::BelongsTo<Row::Table>,
         P2::SqlType: WhereClause,
     {
         Rows {
@@ -922,7 +927,7 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
     /// builder. Takes `&self`, so the same value can then be evaluated.
     pub fn to_sql(&self) -> QueryOutput
     where
-        P: Expr + Clone + 'static,
+        P: Expr + crate::expr::BelongsTo<Row::Table> + Clone + 'static,
         P::SqlType: WhereClause,
     {
         let mut q: Query<Row::Table, All<Row::Table>> = Query::new();

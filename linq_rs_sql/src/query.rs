@@ -221,7 +221,7 @@ impl<T: Table, S: Selection<Table = T>> Query<T, S> {
     /// `.filter()` calls accumulate; combine with `.or()` for OR-paths.
     pub fn filter<P>(mut self, predicate: P) -> Self
     where
-        P: Expr + 'static,
+        P: Expr + crate::expr::BelongsTo<T> + 'static,
         P::SqlType: WhereClause,
     {
         self.where_parts.push(Box::new(predicate));

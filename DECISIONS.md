@@ -477,6 +477,51 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-028 — a predicate's columns must belong to the table being queried
+- **Status:** SETTLED (2026-09-10) — fixed and gated.
+- **The defect.** A query over one table could be filtered by another table's
+  column, and the SQL builder emitted it:
+  ```rust
+  query::<Employee>().filter(departments::budget.gt(100i64)).to_sql()
+  // SELECT * FROM employees WHERE (budget > ?)
+  ```
+  That SQL fails at runtime with *no such column* — or worse, silently matches
+  a same-named column that means something else. Present in **both** builders,
+  found while assessing the crate against EF rather than by any gate.
+- **It was backwards.** `to_memory()` always rejected it, because
+  `Eval<'_, Row>` is only implemented for the row's own columns. `to_sql()` did
+  not. The production path had the weaker guarantee.
+- **Ruling:** a marker trait, `BelongsTo<T>` — an expression every column of
+  which belongs to table `T`. `Query::filter`, `Rows::filter`, `Rows::to_sql`
+  and `BoxedRows::filter` all require it.
+  - **Literals belong to every table**, because they have no columns. That is
+    what keeps `salary.gt(100)` legal.
+  - Combinators belong to `T` exactly when every operand does.
+  - **Columns get their impl from the `table!` macro, not from a blanket impl
+    over `Column`.** A blanket `impl<C: Column> BelongsTo<C::Table> for C` would
+    overlap the literal impls, because Rust has no negative reasoning and cannot
+    prove `i64: !Column`. Generating per column sidesteps coherence entirely.
+  - `Fragment` and `Box<dyn DynPred<Row>>` accept any table: both are built from
+    a predicate that already passed the check, so the guarantee was established
+    upstream rather than discarded.
+- **The error names both tables**, which is most of the value:
+  ```
+  error[E0277]: the trait bound `budget: BelongsTo<employees::Marker>` is not satisfied
+  help: the trait `BelongsTo<employees::Marker>` is not implemented for `budget`
+        but trait `BelongsTo<departments::Marker>` is implemented for it
+  ```
+- **Known wart:** a foreign column reports twice on the seam — once at
+  `.filter()` and once at `.to_sql()`, since both carry the bound. The
+  `.filter()` span comes first and is the right one. Not worth relaxing
+  `to_sql`'s bound to silence.
+- **Forbids:** any new `filter`-shaped entry point that does not carry
+  `BelongsTo`.
+- **Enforced by:** two `compile_fail` doctests on `BelongsTo` (the seam and the
+  SQL-only builder) plus
+  `linq_rs_sql/tests/sql_phase1.rs::predicates_over_the_querys_own_table_still_compile_everywhere`,
+  which pins the side that must keep working across all three builders — own
+  columns, literals and combinators.
+
 ## D-027 — type erasure for dynamic composition, sealed and three-valued
 - **Status:** SETTLED (2026-09-10) — implemented.
 - **The problem.** `Rows<Row, P, O>` parameterises the predicate by *type*, so

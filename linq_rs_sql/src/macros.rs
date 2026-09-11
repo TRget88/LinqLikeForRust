@@ -91,6 +91,11 @@ macro_rules! table {
                     const NAME: &'static str = stringify!($col);
                 }
 
+                // Generated per column rather than as a blanket impl over
+                // `Column`, which would overlap the literal impls of
+                // `BelongsTo` -- Rust cannot prove `i64: !Column`. See D-028.
+                impl $crate::expr::BelongsTo<Marker> for $col {}
+
                 impl Expr for $col {
                     type SqlType = $sql_ty;
                     fn write_to(&self, sql: &mut String, _params: &mut Vec<SqlValue>) {

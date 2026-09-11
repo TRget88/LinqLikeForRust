@@ -142,6 +142,12 @@ where
 // non-nullable predicate through it is still sound -- a known value is a valid
 // three-valued one -- and widening keeps ONE erased type rather than two, so a
 // `Vec<Box<dyn DynPred<_>>>` can hold predicates of both kinds.
+// Checked before boxing, so the erased form carries the guarantee forward.
+impl<'a, Row: Entity, T> crate::expr::BelongsTo<T> for Box<dyn DynPred<Row> + 'a> where
+    Row::Table: crate::query::Table
+{
+}
+
 impl<'a, Row> Expr for Box<dyn DynPred<Row> + 'a> {
     type SqlType = Nullable<Boolean>;
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
@@ -179,6 +185,12 @@ struct Fragment {
 // may have come from a nullable predicate, and there is no way to tell once it
 // is text. Widening is sound and keeps `Fragment` usable wherever a boxed
 // predicate is.
+// A fragment is rendered from a predicate that already passed the
+// `BelongsTo` check at `.filter()`. Once it is text there are no columns left
+// to attribute, so it is accepted anywhere -- the guarantee was established
+// upstream, not discarded here. (D-028)
+impl<T> crate::expr::BelongsTo<T> for Fragment {}
+
 impl Expr for Fragment {
     type SqlType = Nullable<Boolean>;
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
@@ -305,7 +317,7 @@ impl<'a, Row: Entity> BoxedRows<'a, Row> {
     /// with the same filters (asserted in `tests/boxed.rs`).
     pub fn filter<P2>(mut self, predicate: P2) -> Self
     where
-        P2: Expr + for<'x> Eval<'x, Row> + 'a,
+        P2: Expr + crate::expr::BelongsTo<Row::Table> + for<'x> Eval<'x, Row> + 'a,
         P2::SqlType: for<'x> TruthValue<'x>,
         Row: 'a,
     {
