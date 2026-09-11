@@ -1,53 +1,7 @@
-//! SQLite provider for [`linq_rs_sql`].
-//!
-//! `linq_rs_sql` builds SQL and knows nothing about drivers. This crate is the
-//! other half: it runs what that crate produces against a real SQLite and hands
-//! back typed rows.
-//!
-//! ```no_run
-//! use linq_rs_sql::prelude::*;
-//! use linq_rs_sqlite::Sqlite;
-//!
-//! # linq_rs_sql::table! { employees (id) { id -> Integer, dept -> Text, salary -> Integer } }
-//! # #[derive(Debug)] pub struct Employee { pub id: i64, pub dept: String, pub salary: i64 }
-//! # linq_rs_sql::entity! { Employee => employees { id: Integer = id, dept: Text = dept, salary: Integer = salary } }
-//! # fn main() -> Result<(), linq_rs_sqlite::Error> {
-//! let conn = rusqlite::Connection::open("staff.db")?;
-//! let db = Sqlite::new(&conn);
-//!
-//! let staff: Vec<Employee> = db.fetch(
-//!     &query::<Employee>()
-//!         .filter(pred!(employees, |e| e.salary > 100_000i64 && e.dept == "eng"))
-//!         .order_by_desc(employees::salary)
-//!         .to_sql(),
-//! )?;
-//! # Ok(()) }
-//! ```
-//!
-//! # Why a separate crate
-//!
-//! `linq_rs` and `linq_rs_sql` both declare **zero dependencies of any kind**,
-//! including dev-dependencies (`D-024`). A `rusqlite` feature on `linq_rs_sql`
-//! would end that, and would make every user who only wants to build SQL strings
-//! carry an optional driver in their lockfile. Splitting the provider out keeps
-//! both published crates dependency-free and mirrors EF Core, where the provider
-//! is a separate package from the core.
-//!
-//! # What this crate does *not* do
-//!
-//! It does not hide SQLite. There is no connection pool, no transaction wrapper
-//! and no `DbContext`: you own the [`rusqlite::Connection`], and this borrows it.
-//! Anything rusqlite does better is rusqlite's job.
-//!
-//! # Placeholders, and the dialect this assumes
-//!
-//! `linq_rs_sql` emits `?` placeholders, which SQLite and MySQL accept and
-//! **PostgreSQL rejects** — it wants `$1`, `$2`. So `linq_rs_sql` is currently a
-//! SQLite/MySQL dialect with no way to say so. This crate is the first place that
-//! assumption is written down rather than implied. A real dialect layer belongs
-//! in `linq_rs_sql`, and building one provider first is how its shape gets
-//! discovered rather than guessed — see `DECISIONS.md` `D-031`.
-
+//! The crate-level documentation is `README.md`, included below rather than
+//! duplicated here -- [`DECISIONS.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/DECISIONS.md) `D-016`. Including it also makes its
+//! examples doctests.
+#![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
 use linq_rs_sql::{ColumnSet, FromRow, QueryOutput, RowError, RowSource, SqlValue, SqlValueRef};

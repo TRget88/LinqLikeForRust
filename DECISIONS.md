@@ -496,7 +496,7 @@ seam, not the seam.
 - **`count` wraps rather than rewrites:** `SELECT COUNT(*) FROM (<sql>)`. A naive
   `SELECT COUNT(*)` rewrite drops `LIMIT` and over-reports. Tested.
 - **This is the first place the dialect assumption is written down.**
-  `linq_rs_sql` emits `?` placeholders in four sites, which SQLite and MySQL
+  `linq_rs_sql` emits `?` placeholders for every literal, which SQLite and MySQL
   accept and **PostgreSQL rejects** — it wants `$1`, `$2`. So the crate has been
   a SQLite/MySQL dialect with no way to say so. A real dialect layer belongs in
   `linq_rs_sql` and is still open; building one provider first is how its shape
@@ -517,6 +517,11 @@ seam, not the seam.
   lesson is apparently easy to re-learn. The gate now patches the unpublished
   sibling to its extracted tarball and resolves the driver from the registry,
   and says so in its output rather than skipping silently.
+- **A count in this entry was wrong when written.** It said "four sites"; it is
+  nine. I took it from a `grep | head -4`, which is the truncation trap that has
+  its own note in this ledger. Counts are now omitted here rather than corrected
+  — a number in prose drifts, and `D-016` is the rule that numbers which matter
+  get generated.
 - **Forbids:** a driver dependency or feature on `linq_rs` or `linq_rs_sql`; a
   core crate depending on the provider; a second driver in this crate.
 - **Enforced by:** `linq_rs_sqlite/tests/roundtrip.rs` — 12 tests against a real

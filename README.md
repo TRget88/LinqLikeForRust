@@ -275,17 +275,36 @@ assert_eq!(lookup.get(&"fruit"), &[("fruit", "apple"), ("fruit", "banana")]);
 **This crate does not touch a database.** It has no driver, no connection, and
 no dependencies; it runs over in-memory iterators.
 
-Its sibling [`linq_rs_sql`](https://github.com/TRget88/LinqLikeForRust/tree/main/linq_rs_sql) builds SQL — compile-time-checked
-columns, bound parameters, no interpolation — and hands you a string plus its
-parameters for whatever driver you already use. The two vocabularies are
-deliberately separate: this crate says `where_`, that one says `filter`, and no
-value passes between them today.
+Two sibling crates cover that:
 
-Joining them is the stated next step: one query value with two interpreters, so
-the same expression can run over a `Vec` in a unit test and render to SQL in
-production. No Rust library offers that today. It is tracked as `D-002` in
-`DECISIONS.md`, and the operator surface here was cut to fit it (`D-019`) — an
-operator earns its place only if it could become a SQL clause.
+- **[`linq_rs_sql`](https://github.com/TRget88/LinqLikeForRust/tree/main/linq_rs_sql)**
+  builds SQL — compile-time-checked columns, bound parameters, no
+  interpolation, nullable columns with SQL's three-valued logic. Also zero
+  dependencies.
+- **[`linq_rs_sqlite`](https://github.com/TRget88/LinqLikeForRust/tree/main/linq_rs_sqlite)**
+  runs it against SQLite and gives back typed structs.
+
+`D-002` — one query value with **two interpreters** — is built. The same value
+renders to SQL for a database or evaluates lazily over a `Vec` in a unit test,
+and the two agree:
+
+```text
+let q = query::<Employee>()
+    .filter(pred!(employees, |e| e.salary > 100_000i64 && e.dept == "eng"));
+
+q.to_sql();            // SELECT id, name, dept, salary FROM employees
+                       //   WHERE ((salary > ?) AND (dept = ?))
+q.to_memory(&staff);   // the same value, over a &[Employee], lazily
+```
+
+That agreement is asserted against a real SQLite, not just a `Vec`. No other
+Rust library does this as far as the survey behind `AUDIT.md` could find.
+
+The two vocabularies stay deliberately separate — this crate says `where_`, that
+one says `filter` — because one crate with two names for one concept is worse to
+hand a user than two crates with one each (`D-205`). The operator surface here
+was cut to fit the seam (`D-019`): an operator earns its place only if it could
+become a SQL clause.
 
 ## Overlap with `std::iter`
 

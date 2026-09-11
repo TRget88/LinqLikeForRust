@@ -7,8 +7,13 @@ typed rows.
 ```rust
 use linq_rs_sql::prelude::*;
 use linq_rs_sqlite::Sqlite;
-
-let conn = rusqlite::Connection::open("staff.db")?;
+# linq_rs_sql::table! { employees (id) { id -> Integer, dept -> Text, salary -> Integer } }
+# #[derive(Debug)] pub struct Employee { pub id: i64, pub dept: String, pub salary: i64 }
+# linq_rs_sql::entity! { Employee => employees { id: Integer = id, dept: Text = dept, salary: Integer = salary } }
+# fn run() -> Result<(), Box<dyn std::error::Error>> {
+let conn = rusqlite::Connection::open_in_memory()?;
+# conn.execute_batch("CREATE TABLE employees(id INTEGER, dept TEXT, salary INTEGER);
+#                     INSERT INTO employees VALUES(1,'eng',180000),(2,'sales',90000);")?;
 let db = Sqlite::new(&conn);
 
 let staff: Vec<Employee> = db.fetch(
@@ -17,6 +22,11 @@ let staff: Vec<Employee> = db.fetch(
         .order_by_desc(employees::salary)
         .to_sql(),
 )?;
+# assert_eq!(staff.len(), 1);
+# assert_eq!(staff[0].id, 1);
+# Ok(())
+# }
+# run().unwrap();
 ```
 
 `fetch`, `fetch_one` and `count`. That is the whole surface.
