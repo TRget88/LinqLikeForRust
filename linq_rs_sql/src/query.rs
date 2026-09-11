@@ -15,7 +15,7 @@
 
 use crate::column::Column;
 use crate::expr::Expr;
-use crate::types::Boolean;
+use crate::types::WhereClause;
 use crate::value::SqlValue;
 use core::fmt::Write;
 use core::marker::PhantomData;
@@ -149,7 +149,7 @@ trait SqlWriter {
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>);
 }
 
-impl<E: Expr<SqlType = Boolean> + 'static> SqlWriter for E {
+impl<E: Expr + 'static> SqlWriter for E {
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
         <E as Expr>::write_to(self, sql, params);
     }
@@ -221,7 +221,8 @@ impl<T: Table, S: Selection<Table = T>> Query<T, S> {
     /// `.filter()` calls accumulate; combine with `.or()` for OR-paths.
     pub fn filter<P>(mut self, predicate: P) -> Self
     where
-        P: Expr<SqlType = Boolean> + 'static,
+        P: Expr + 'static,
+        P::SqlType: WhereClause,
     {
         self.where_parts.push(Box::new(predicate));
         self

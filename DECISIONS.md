@@ -477,6 +477,55 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-026 — nullable columns, and three-valued logic that agrees with SQL
+- **Status:** SETTLED (2026-09-10) — implemented.
+- **The problem.** There were four SQL type markers and none was nullable. An
+  `Option<String>` field gave `E0608: cannot index into a value of type
+  Option<String>` — a raw leak from `&row.$field[..]` that did not mention
+  nullability at all. Most real tables have nullable columns, so the crate could
+  not model most real schemas.
+- **The trap, which is why this came before the erasure work.** SQL is
+  three-valued and Rust's `Option` is not. In SQL `NULL = NULL` is `NULL`, and
+  `NULL > 5` is `NULL` — neither true nor false. In Rust `None == None` is
+  `true`. Implement the obvious thing and the two interpreters disagree on
+  exactly the rows where it matters, which is `D-025` all over again.
+- **Ruling:** `Nullable<T>` is a distinct SQL type marker, and nullability
+  propagates at the **type** level:
+  - `Repr<Nullable<T>>::Rust = Option<T::Rust>` — so `Option<bool>` *is* the
+    three-valued type and `None` is UNKNOWN. There is no separate `Tri`.
+  - `CompareWith<Rhs>::Out` is `Boolean` when neither side is nullable and
+    `Nullable<Boolean>` when either is. `LogicWith` and `Negate` do the same for
+    `AND`/`OR`/`NOT`. A comparison touching a nullable column therefore has a
+    *different type* from one that cannot be null, and both interpreters see it.
+  - `Family` maps `T` and `Nullable<T>` to the same base, so `IntOps`, `TextOps`
+    and friends apply to nullable columns without being duplicated.
+  - `WhereClause` is implemented for `Boolean` **and** `Nullable<Boolean>`, and
+    a `WHERE` keeps a row only when the predicate is TRUE. **The collapse from
+    three values to two happens there and nowhere else** — never inside the
+    expression tree. That is exactly where SQL puts it.
+- **The two cells that decide whether a design is right:** `NULL AND FALSE` is
+  **FALSE**, and `NULL OR TRUE` is **TRUE** — an absorbing operand beats the
+  unknown. A naive `Option` zip returns `None` for both. Verified against real
+  SQLite, along with `NULL = NULL`, `NULL > 5`, `NOT (NULL = 1)`, `NULL AND
+  TRUE` and `NULL OR FALSE`.
+- **A row-set assertion cannot catch this**, which is the subtle part: `WHERE`
+  drops FALSE and NULL alike, so a broken Kleene `AND` still selects the right
+  rows. The truth table is therefore asserted cell by cell on the raw
+  `Option<bool>`, not on surviving ids.
+- **`entity!` changed shape** from per-type `@col` arms matching `$ty:ident` to a
+  single generic arm over `$ty:ty`, because `Nullable<Text>` is a type and not a
+  matchable token. `$ty` then resolves in the caller's scope, so the expansion
+  wraps its impls in `const _: () = { use $crate::types::*; … }` — trait impls
+  register globally regardless of the block they are written in. **No call site
+  changed**, verified: all 184 pre-existing tests passed untouched.
+- **Forbids:** collapsing three values to two anywhere but `WHERE`; adding a
+  comparison whose `Out` is `Boolean` when either operand is nullable.
+- **Enforced by:** `linq_rs_sql/tests/nullable.rs` — 15 tests, including
+  `the_kleene_truth_table_matches_sqlite_cell_by_cell` (asserts the raw
+  three-valued result, the only thing that can catch a broken absorbing case)
+  and `row_sets_match_sqlite_on_the_same_four_rows` (six predicates whose
+  expected rows were read out of a real SQLite).
+
 ## D-025 — a wrong answer is worse than a compile error or a panic
 - **Status:** SETTLED (2026-09-10) — three defects fixed in published crates.
 - Found by probing the published surface with compiled code rather than reading

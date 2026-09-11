@@ -63,13 +63,14 @@
 macro_rules! table {
     (
         $table:ident ($($pk:ident),+ $(,)?) {
-            $($col:ident -> $sql_ty:ident),+ $(,)?
+            $($col:ident -> $sql_ty:ty),+ $(,)?
         }
     ) => {
         #[allow(non_snake_case, non_camel_case_types, unused_imports, dead_code)]
         pub mod $table {
             use $crate::{
-                All, Boolean, Column, Expr, Float, Integer, Query, SqlValue, Table, Text,
+                All, Boolean, Column, Expr, Float, Integer, Nullable, Query, SqlValue,
+                Table, Text,
             };
 
             /// Type-level marker for this table.

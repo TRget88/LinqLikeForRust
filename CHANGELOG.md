@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — nullable columns with SQL three-valued logic (D-026)
+
+`linq_rs_sql 0.2.0`. Columns can now be `NULL`, and both interpreters agree
+about what that means.
+
+```rust
+table! { t (id) { id -> Integer, nick -> Nullable<Text>, score -> Nullable<Integer> } }
+pub struct T { pub id: i64, pub nick: Option<String>, pub score: Option<i64> }
+entity! { T => t { id: Integer = id, nick: Nullable<Text> = nick, score: Nullable<Integer> = score } }
+
+query::<T>().filter(t::nick.is_null())
+query::<T>().filter(t::score.gt(5i64))
+```
+
+Previously an `Option<String>` field gave `E0608: cannot index into a value of
+type Option<String>` — a raw leak that did not mention nullability.
+
+- **Nullability is a type-level property.** `Nullable<T>` is a distinct SQL
+  marker; `Repr<Nullable<T>>::Rust = Option<T::Rust>`, so `Option<bool>` *is*
+  the three-valued type and `None` is UNKNOWN. A comparison touching a nullable
+  column has type `Nullable<Boolean>` rather than `Boolean`, and both
+  interpreters can see the difference.
+- **Three values collapse to two only at `WHERE`**, which keeps a row when the
+  predicate is TRUE and drops it for FALSE and NULL alike. That is where SQL
+  puts the collapse, and it never happens inside the expression tree.
+- **The two cells that matter:** `NULL AND FALSE` is FALSE and `NULL OR TRUE` is
+  TRUE — an absorbing operand beats the unknown. A naive `Option` zip returns
+  UNKNOWN for both. Verified against real SQLite.
+- `is_null()` / `is_not_null()` now evaluate in memory; previously `is_null`
+  rendered SQL but had no `Eval` impl at all.
+- Nullable and non-nullable columns can be compared to each other; the result
+  is nullable.
+
+**`entity!` accepts a type rather than a marker name** — `$ty:ty`, not
+`$ty:ident` — because `Nullable<Text>` is a type and not a matchable token. No
+call site changed: all 184 pre-existing tests passed untouched.
+
 ### Fixed — three silent wrong answers in the published crates (D-025)
 
 `linq_rs 0.2.1` and `linq_rs_sql 0.1.1`. All three shipped; all three produced a

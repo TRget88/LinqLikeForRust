@@ -85,11 +85,16 @@ pub mod value;
 mod macros;
 
 pub use column::{BoolOps, Column, ExprExt, FloatOps, IntOps, TextOps};
-pub use expr::{not, And, Eq, Expr, Gt, GtEq, IsNull, Like, Lit, Lt, LtEq, Not, NotEq, Or};
+pub use expr::{
+    not, And, Eq, Expr, Gt, GtEq, IsNotNull, IsNull, Like, Lit, Lt, LtEq, Not, NotEq, Or,
+};
 pub use query::{All, Direction, Query, QueryOutput, Selection, Table};
 pub use value::SqlValue;
 // Re-export the SQL type markers and the sealed `SqlType` trait.
-pub use types::{Boolean, Float, Integer, SqlType, Text};
+pub use types::{
+    Boolean, CompareWith, Family, Float, Integer, LogicWith, Negate, Nullable, SqlType, Text,
+    WhereClause,
+};
 
 /// Everything `pred!` and the builder need, in one import.
 ///
@@ -113,7 +118,7 @@ pub mod prelude {
     pub use crate::column::{BoolOps, Column, ExprExt, FloatOps, IntOps, TextOps};
     pub use crate::expr::Expr;
     pub use crate::rows::{query, Entity, Rows};
-    pub use crate::types::{Boolean, Float, Integer, Text};
+    pub use crate::types::{Boolean, Float, Integer, Nullable, Text};
     pub use crate::value::SqlValue;
     pub use crate::{entity, pred, table};
 }
