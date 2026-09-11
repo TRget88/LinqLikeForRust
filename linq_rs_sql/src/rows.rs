@@ -1225,7 +1225,46 @@ where
 /// ```
 #[macro_export]
 macro_rules! entity {
+    // Opt out of `FromRow` generation. Required, not a convenience: a struct
+    // with a borrowed field (`name: &'d str`) or a field that is not a column
+    // cannot have a generated `FromRow`, and both are legal today.
+    ($row:ty => $table:ident { $($col:ident : $ty:ty = $field:ident),* $(,)? } no_from_row) => {
+        $crate::entity!(@base $row => $table { $($col : $ty = $field),* });
+    };
     ($row:ty => $table:ident { $($col:ident : $ty:ty = $field:ident),* $(,)? }) => {
+        $crate::entity!(@base $row => $table { $($col : $ty = $field),* });
+
+        // The reverse direction: one row of a result set -> one `$row`.
+        // Columns are matched by NAME, resolved once per result set. See D-029.
+        impl $crate::from_row::FromRow for $row {
+            const COLUMNS: &'static [&'static str] =
+                &[$(<$table::$col as $crate::Column>::NAME),*];
+
+            fn from_row<'r_, R_>(
+                row: &R_,
+                layout: &$crate::from_row::Layout<Self>,
+            ) -> ::core::result::Result<Self, $crate::from_row::RowError>
+            where
+                R_: $crate::from_row::RowSource<'r_> + ?Sized,
+            {
+                #[allow(unused_imports)]
+                use $crate::types::*;
+                let mut i_ = 0usize;
+                ::core::result::Result::Ok(Self {
+                    $($field: {
+                        let at_ = layout.position(i_);
+                        let name_ = <$table::$col as $crate::Column>::NAME;
+                        i_ += 1;
+                        <$ty as $crate::from_row::LoadField<'r_, _>>::load_field(
+                            row.value_at(at_, name_)?,
+                            name_,
+                        )?
+                    },)*
+                })
+            }
+        }
+    };
+    (@base $row:ty => $table:ident { $($col:ident : $ty:ty = $field:ident),* $(,)? }) => {
         impl $crate::rows::Entity for $row {
             type Table = $table::Marker;
         }

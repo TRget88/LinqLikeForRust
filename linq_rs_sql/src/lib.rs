@@ -78,6 +78,7 @@ pub mod pred;
 pub mod boxed;
 pub mod column;
 pub mod expr;
+pub mod from_row;
 pub mod query;
 pub mod rows;
 pub mod types;
@@ -89,6 +90,10 @@ pub use boxed::{boxed_query, Boxed, BoxedRowIter, BoxedRows, DynPred};
 pub use column::{BoolOps, Column, ExprExt, FloatOps, IntOps, TextOps};
 pub use expr::{
     not, And, Eq, Expr, Gt, GtEq, IsNotNull, IsNull, Like, Lit, Lt, LtEq, Not, NotEq, Or,
+};
+pub use from_row::{
+    resolve_by_name, ColumnSet, FromRow, Layout, LoadField, LoadOpt, RowError, RowSource,
+    SqlValueRef,
 };
 pub use query::{All, Direction, Query, QueryOutput, Selection, Table};
 pub use value::SqlValue;
@@ -120,6 +125,7 @@ pub mod prelude {
     pub use crate::boxed::{boxed_query, Boxed, BoxedRows};
     pub use crate::column::{BoolOps, Column, ExprExt, FloatOps, IntOps, TextOps};
     pub use crate::expr::Expr;
+    pub use crate::from_row::{ColumnSet, FromRow, Layout, RowError, RowSource, SqlValueRef};
     pub use crate::rows::{query, Entity, Rows};
     pub use crate::types::{Boolean, Float, Integer, Nullable, Text};
     pub use crate::value::SqlValue;

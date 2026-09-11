@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — row materialization: `FromRow`, `RowError`, and a driver seam (D-029)
+
+A query result can now become typed structs. `entity!` generates the reverse
+direction from the declaration it already had.
+
+```rust
+let stmt = conn.prepare(&q.to_sql().sql)?;
+let layout = Emp::resolve(&Stmt(&stmt))?;      // once per statement
+let emp = Emp::from_row(&Row(row, n), &layout)?;
+```
+
+The crate still executes nothing. A driver adapter implements `ColumnSet` and
+one method of `RowSource` — measured at 36 lines for rusqlite.
+
+- **Columns are matched by NAME, never by position.** `SELECT *` expands in
+  table-declaration order, which this crate cannot pin and which a migration
+  changes under an already-compiled binary. A positional decoder turns that into
+  a silent wrong value. Verified: a table physically ordered
+  `dept, active, id, nick, salary, name` resolves to `[2,5,0,4,3,1]` and
+  materializes correctly.
+- **Booleans accept only 0 and 1.** Every other SQLite binding treats non-zero
+  as true; doing so breaks the seam. For `active INTEGER` holding `1, 0, -1, 2`,
+  SQL `WHERE active = ?` bound `true` keeps `[1]` while a permissive reader keeps
+  `[1, 3, 4]`. Narrowing is likewise checked, never an `as` cast.
+- **`ColumnSet` is separate from `RowSource`** so resolution needs no row —
+  otherwise an empty result set and a populated one give different verdicts for
+  the same schema.
+- **A duplicated column name is an error, not first-wins.** `SELECT * FROM a
+  JOIN b` yields two `id` columns, and silently taking one makes the other
+  table's data unreachable.
+- **`Layout<R>` is tied to its shape**, so a layout resolved for one entity
+  cannot be used with another of the same arity.
+- `RowError` is `#[non_exhaustive]`, carries the column name as `&'static str`
+  (no allocation), and can be given a row ordinal with `.at_row(n)`. A missing
+  column and a NULL value are deliberately different variants.
+- `Nullable<S>` needs no duplicate decoding impls — `LoadField` lifts `LoadOpt`
+  once.
+- Opt out with `entity! { … } no_from_row` when the struct has a borrowed field
+  or a field that is not a column.
+
 ### Fixed — a query could be filtered by another table's column (D-028)
 
 ```rust

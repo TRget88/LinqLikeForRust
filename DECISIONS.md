@@ -477,6 +477,91 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-029 — row materialization: by name, and a refused coercion
+- **Status:** SETTLED (2026-09-11) — implemented.
+- `entity!` knew every field, column and SQL type, and generated only struct →
+  column *readers*. A query result could never become a `Vec<Employee>`, so
+  nothing could ever execute a query usefully. This is the reverse direction.
+- **Three competing designs were prototyped, each proven against a real
+  in-memory SQLite. All three were killed by adversarial review.** The
+  architecture below is what survived; the trees did not.
+
+### Columns are matched by NAME, never by position
+`Rows::to_sql` emits `SELECT *`, and SQLite and PostgreSQL expand `*` in
+**table-declaration order** — which this crate does not know, cannot pin, and
+which changes under an already-compiled binary. SQLite cannot reorder a column
+in place, so the documented migration is a table rebuild, which is exactly where
+declaration order drifts. Verified against real SQLite:
+```
+v1 schema:  SELECT * -> Employee { id: 1, name: "ada",         dept: "engineering" }
+v2 schema:  SELECT * -> Employee { id: 1, name: "engineering", dept: "ada" }
+```
+Same code, same entity, same types, so **no error is possible**. Positional
+decoding converts the database's choice of column order into a plausible wrong
+value — the `D-025` category. Two of the three spikes reproduced it
+independently. By-name makes the class unreachable: a table physically ordered
+`dept, active, id, nick, salary, name` resolves to `[2,5,0,4,3,1]` and
+materializes correct values.
+- **The survey's rule:** the SELECT list may be `*` **iff** you read by name.
+  Nobody who decodes positionally emits it; Diesel makes `*` *unrepresentable*
+  in a data-returning select (`star` has `type SqlType = NotSelectable`).
+
+### Booleans accept only 0 and 1
+Every other SQLite binding treats non-zero as true. Doing so **breaks the
+seam**, measured: for `active INTEGER` holding `1, 0, -1, 2`, SQL
+`WHERE active = ?` bound `true` renders `active = 1` and keeps `[1]`, while a
+permissive reader calls `-1` and `2` true and keeps `[1, 3, 4]`. One query value,
+two answers. Refusing the coercion makes the row fail loudly instead.
+Narrowing is likewise checked, never `as`.
+
+### `ColumnSet` is separate from `RowSource`
+Resolution must work with no row in hand. Fold the traits together and the same
+query against the same schema returns `Ok(vec![])` on empty data and
+`Err(NoSuchColumn)` on populated data — two verdicts for one schema, decided by
+whether rows happened to exist. Found by building it, not by inspection.
+
+### One required driver method
+`value_at(at, column) -> SqlValueRef<'a>`, and nothing else. The five-typed-
+accessor shape measured 101 lines per adapter because each re-implemented type
+checking and worded its own mismatch message; collapsing to one took it to ~36,
+and a new SQL type no longer breaks every adapter. **Name matching, ambiguity
+detection, type checking, NULL rules and every message live in the crate** — an
+earlier version delegated matching, and rusqlite's ASCII case folding then gave
+a different verdict from a strict adapter for the same schema.
+
+### A duplicated name is ambiguous, not first-wins
+`SELECT * FROM a JOIN b` yields two `id` columns. Taking the first makes the
+second table's data silently unreachable, and joins are the main reason anyone
+wants materialization at all. `AmbiguousColumn` names both positions.
+
+### `Layout<R>` is tied to its shape
+A layout resolved for one shape, fed to another of the same arity whose columns
+share types, produced `{ id: 42, n: 10 }` where the truth was `id: 10, n: 42`.
+The `PhantomData<fn() -> R>` parameter makes that a compile error.
+
+### `Nullable<S>` is one lift, and `FromRow` is opt-out
+`LoadOpt` is implemented only for base markers and keeps NULL as `None`;
+`LoadField` applies the NOT NULL rule in two blanket impls, so `Nullable<S>`
+needs no duplicate set. Generation is opt-out via `entity! { … } no_from_row`,
+because a borrowed field or a non-column field cannot have a generated impl and
+both are legal today.
+
+- **Forbids:** positional decoding; treating non-zero as `true`; `as` casts in
+  decoding; resolving a name to the first of several matches; delegating name
+  matching or error wording to an adapter.
+- **Enforced by:** 17 unit tests in `linq_rs_sql/src/from_row.rs` and 12 in
+  `linq_rs_sql/tests/from_row.rs`, including a reordered result set, two
+  same-typed adjacent columns not swapping, the bool refusal, join ambiguity,
+  and a missing column failing identically on empty and populated result sets.
+  Separately proven end-to-end against a real SQLite through a 36-line rusqlite
+  adapter.
+- **Still open, and next:** `to_sql()` emits `SELECT *`. By-name reading makes
+  that *safe*, not *good* — naming the columns moves order from the database's
+  control to the query's and is the precondition for `.select()` projection. It
+  costs a `0.3.0` behavioural break and re-opens the dialect question, because a
+  generated column list must quote identifiers and `"order"` versus `` `order` ``
+  has no spelling valid on SQLite, PostgreSQL and MySQL alike.
+
 ## D-028 — a predicate's columns must belong to the table being queried
 - **Status:** SETTLED (2026-09-10) — fixed and gated.
 - **The defect.** A query over one table could be filtered by another table's
