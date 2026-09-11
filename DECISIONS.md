@@ -477,6 +477,57 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-030 — `to_sql()` names the columns
+- **Status:** SETTLED (2026-09-11) — implemented. `linq_rs_sql 0.3.0`; the
+  emitted SQL changes.
+- **Ruling:** `Rows::to_sql` and `BoxedRows::to_sql` emit the entity's declared
+  columns instead of `*`. `Entity` gains `ALL_COLUMNS`, supplied by `entity!` on
+  both arms.
+- **Why, given `D-029` already made `*` safe.** Two reasons, and the first is the
+  one that matters:
+  1. **It is the precondition for projection.** A query cannot select a subset of
+     columns while its SELECT list is a wildcard. `.select()` — LINQ's
+     `Select`/`new { … }` — is unreachable without this.
+  2. Defence in depth. Naming the columns moves order from the *database's*
+     control to the *query's*, and resolution then provably returns the identity
+     permutation. By-name reading still earns its place for what the crate does
+     not control: a hand-written query, a join, a view, a driver that reorders.
+- **`ALL_COLUMNS` is required with no default.** A default of `&[]` would make
+  `to_sql` silently fall back to `SELECT *` for an entity that forgot it — a
+  silent wrong default in place of a compile error, which is the `D-025`
+  category. Breaking for hand-written `Entity` impls, deliberately.
+- **Named `ALL_COLUMNS`, not `COLUMNS`.** `FromRow::COLUMNS` already exists, both
+  would be in scope on the same type, and `Emp::COLUMNS` was `E0034` — verified
+  while writing this. That is precisely the defect that disqualified
+  `linq_rs 0.1.0`, where `LinqExt::skip` shadowed `Iterator::skip`. They are also
+  not the same concept: one is what to SELECT, the other what to READ, and a
+  future tuple projection will have the second without the first.
+- **The lower-level `Query` builder still emits `*`, on purpose.** It has no
+  `Entity`, so there is no declared list for it to name; a caller who wants one
+  passes `.select(...)`. So `employees::table()` gives `SELECT *` while
+  `query::<Employee>()` gives the named list. Pinned by a test so the asymmetry
+  is deliberate rather than discovered.
+- **Identifiers are emitted unquoted, unchanged.** A generated column list needs
+  quoting for a column named `order`, and there is no spelling valid on SQLite,
+  PostgreSQL and MySQL alike (`"order"` fails MySQL's default mode, backticks
+  fail PostgreSQL). But this is **not a new problem and not this decision's to
+  solve**: the crate already emits `WHERE (order > ?)` unquoted, which real
+  SQLite already rejects — verified. `*` was merely immune. Quoting wants one
+  ruling covering every emission site, alongside the dialect layer `D-025`
+  deferred, not a special case here. The failure is loud (a parse error), which
+  `D-025`'s rule permits.
+- **Cost, measured:** 25 assertion updates across six test files plus two
+  doctests, applied by re-running the suite and taking the actual output rather
+  than by hand. One of them, `predicates_over_the_querys_own_table_...`, had to
+  be reverted by hand: it asserts all three builders, and two of them correctly
+  still emit `*`.
+- **Forbids:** giving `ALL_COLUMNS` a default; letting the typed and erased forms
+  emit different SELECT lists.
+- **Enforced by:** `tests/boxed.rs::erased_sql_is_byte_identical_to_typed_sql`
+  (which caught the erased form still emitting `*` during this change),
+  `tests/from_row.rs::a_query_this_crate_generated_resolves_to_the_identity`, and
+  `tests/from_row.rs::the_entity_free_query_builder_still_emits_star`.
+
 ## D-029 — row materialization: by name, and a refused coercion
 - **Status:** SETTLED (2026-09-11) — implemented.
 - `entity!` knew every field, column and SQL type, and generated only struct →

@@ -348,7 +348,7 @@ fn entity_accepts_every_lossless_field_type() {
     let by_size = linq_rs_sql::rows::query::<Widget>().filter(widgets::size.gt(5i64));
     assert_eq!(
         by_size.to_sql().sql,
-        "SELECT * FROM widgets WHERE (size > ?)"
+        "SELECT id, size, ratio FROM widgets WHERE (size > ?)"
     );
     let ids: Vec<i64> = by_size.to_memory(&rows).map(|w| w.id).collect();
     assert_eq!(ids, [1]);
@@ -356,7 +356,7 @@ fn entity_accepts_every_lossless_field_type() {
     let by_ratio = linq_rs_sql::rows::query::<Widget>().filter(widgets::ratio.lt(1.0f64));
     assert_eq!(
         by_ratio.to_sql().sql,
-        "SELECT * FROM widgets WHERE (ratio < ?)"
+        "SELECT id, size, ratio FROM widgets WHERE (ratio < ?)"
     );
     let ids: Vec<i64> = by_ratio.to_memory(&rows).map(|w| w.id).collect();
     assert_eq!(ids, [1], "0.5f32 widened to f64 must still be < 1.0");
@@ -381,7 +381,10 @@ fn predicates_over_the_querys_own_table_still_compile_everywhere() {
     }
     entity! { Person => staff { id: Integer = id, dept: Text = dept, salary: Integer = salary } }
 
-    // 1. the SQL-only builder
+    // 1. the SQL-only builder. Still `SELECT *`, and that is correct: `Query`
+    //    has no `Entity`, so there is no declared column list to name. A caller
+    //    who wants one passes `.select(...)`. Only the entity-aware forms below
+    //    can name columns without being told which. (D-030)
     assert_eq!(
         staff::table().filter(staff::salary.gt(1i64)).to_sql().sql,
         "SELECT * FROM staff WHERE (salary > ?)"
@@ -393,7 +396,7 @@ fn predicates_over_the_querys_own_table_still_compile_everywhere() {
         .order_by(staff::id);
     assert_eq!(
         seam.to_sql().sql,
-        "SELECT * FROM staff WHERE ((salary > ?) AND (dept = ?)) ORDER BY id"
+        "SELECT id, dept, salary FROM staff WHERE ((salary > ?) AND (dept = ?)) ORDER BY id"
     );
 
     // 3. the erased form
@@ -402,6 +405,6 @@ fn predicates_over_the_querys_own_table_still_compile_everywhere() {
             .filter(staff::salary.gt(1i64))
             .to_sql()
             .sql,
-        "SELECT * FROM staff WHERE (salary > ?)"
+        "SELECT id, dept, salary FROM staff WHERE (salary > ?)"
     );
 }

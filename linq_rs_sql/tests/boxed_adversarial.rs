@@ -178,7 +178,10 @@ fn nested_or_at_top_of_a_flat_clause_list() {
 fn empty_predicate_set() {
     let rows = corpus();
     let q: Boxed<Employee> = query::<Employee>().into_boxed();
-    assert_eq!(q.to_sql().sql, "SELECT * FROM employees");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, dept, name, salary, active, score FROM employees"
+    );
     assert!(q.to_sql().params.is_empty());
     assert_eq!(ids(q.to_memory(&rows)).len(), 8);
     assert!(q.to_memory(&rows).is_streaming());
@@ -199,7 +202,7 @@ fn empty_predicate_set_with_order_limit_offset() {
     assert_eq!(typed.to_sql(), erased.to_sql());
     assert_eq!(
         erased.to_sql().sql,
-        "SELECT * FROM employees ORDER BY salary DESC LIMIT 3 OFFSET 1"
+        "SELECT id, dept, name, salary, active, score FROM employees ORDER BY salary DESC LIMIT 3 OFFSET 1"
     );
     assert_eq!(
         ids(typed.to_memory_sorted(&rows)),
@@ -231,7 +234,7 @@ fn typed_and_erased_side_by_side() {
         .filter(employees::salary.gt(100_000i64));
     assert_eq!(
         t.to_sql().sql,
-        "SELECT * FROM employees WHERE ((dept = ?) AND (salary > ?))"
+        "SELECT id, dept, name, salary, active, score FROM employees WHERE ((dept = ?) AND (salary > ?))"
     );
     assert_eq!(ids(t.to_memory(&rows)), [1, 4]);
 
@@ -254,7 +257,7 @@ fn typed_and_erased_side_by_side() {
     assert_eq!(ids(b3.to_memory(&rows)), [1, 4]);
     assert_eq!(
         b3.to_sql().sql,
-        "SELECT * FROM employees WHERE ((salary > ?) AND (dept = ?))"
+        "SELECT id, dept, name, salary, active, score FROM employees WHERE ((salary > ?) AND (dept = ?))"
     );
 }
 
@@ -279,7 +282,7 @@ fn boxed_predicate_reenters_the_expression_language() {
         .filter(BoolOps::and(b, employees::salary.gt(150_000i64)));
     assert_eq!(
         erased.to_sql().sql,
-        "SELECT * FROM employees WHERE ((dept = ?) AND (salary > ?))"
+        "SELECT id, dept, name, salary, active, score FROM employees WHERE ((dept = ?) AND (salary > ?))"
     );
     assert_eq!(ids(erased.to_memory(&rows)), [1, 4]);
 }
@@ -320,7 +323,7 @@ fn stored_query_runs_more_than_once() {
     assert_eq!(r.query.to_sql(), r.query.to_sql());
     assert_eq!(
         r.query.to_sql().sql,
-        "SELECT * FROM employees WHERE ((dept = ?) AND (salary > ?)) ORDER BY id"
+        "SELECT id, dept, name, salary, active, score FROM employees WHERE ((dept = ?) AND (salary > ?)) ORDER BY id"
     );
 }
 
@@ -351,7 +354,7 @@ fn vec_of_queries_through_both_interpreters() {
     let sql: Vec<String> = queries.iter().map(|q| q.to_sql().sql).collect();
     assert_eq!(
         sql[2],
-        "SELECT * FROM employees WHERE (salary > ?) ORDER BY salary DESC"
+        "SELECT id, dept, name, salary, active, score FROM employees WHERE (salary > ?) ORDER BY salary DESC"
     );
 }
 
@@ -389,7 +392,7 @@ fn conditional_filters_in_a_loop() {
     });
     assert_eq!(
         all.to_sql().sql,
-        "SELECT * FROM employees WHERE ((((dept = ?) AND (salary >= ?)) AND (active = ?)) AND (name LIKE ?))"
+        "SELECT id, dept, name, salary, active, score FROM employees WHERE ((((dept = ?) AND (salary >= ?)) AND (active = ?)) AND (name LIKE ?))"
     );
     assert_eq!(
         all.to_sql().params,
@@ -408,7 +411,10 @@ fn conditional_filters_in_a_loop() {
         active_only: false,
         name_prefix: None,
     });
-    assert_eq!(none.to_sql().sql, "SELECT * FROM employees");
+    assert_eq!(
+        none.to_sql().sql,
+        "SELECT id, dept, name, salary, active, score FROM employees"
+    );
     assert_eq!(ids(none.to_memory(&rows)).len(), 8);
 }
 
@@ -431,7 +437,7 @@ fn multi_key_order_matches_typed() {
     assert_eq!(typed.to_sql(), erased.to_sql());
     assert_eq!(
         erased.to_sql().sql,
-        "SELECT * FROM employees ORDER BY dept, salary DESC, id"
+        "SELECT id, dept, name, salary, active, score FROM employees ORDER BY dept, salary DESC, id"
     );
     assert_eq!(
         ids(typed.to_memory_sorted(&rows)),
@@ -587,6 +593,9 @@ pub struct BorrowedStaff<'d> {
 
 impl<'d> linq_rs_sql::rows::Entity for BorrowedStaff<'d> {
     type Table = staff::Marker;
+    // D-030: required with no default, so a hand-written entity says what it
+    // selects rather than silently falling back to `*`.
+    const ALL_COLUMNS: &'static [&'static str] = &["id", "name"];
 }
 impl<'r, 'd> linq_rs_sql::rows::Eval<'r, BorrowedStaff<'d>> for staff::id {
     fn eval(&'r self, row: &'r BorrowedStaff<'d>) -> i64 {
@@ -631,5 +640,8 @@ fn row_type_with_borrowed_columns_erased_path() {
         .filter(staff::name.like("A%"));
     let got: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(got, [1, 3]);
-    assert_eq!(q.to_sql().sql, "SELECT * FROM staff WHERE (name LIKE ?)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, name FROM staff WHERE (name LIKE ?)"
+    );
 }

@@ -64,7 +64,10 @@ fn fixture() -> Vec<T> {
 fn null_equals_null_is_not_true_so_no_row_survives() {
     let rows = fixture();
     let q = query::<T>().filter(t::score.eq(None::<i64>));
-    assert_eq!(q.to_sql().sql, "SELECT * FROM t WHERE (score = ?)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, nick, score, active FROM t WHERE (score = ?)"
+    );
     assert_eq!(q.to_sql().params, vec![SqlValue::Null]);
     // Rust's `None == None` is `true`. SQL's `NULL = NULL` is NULL. The row
     // whose score is NULL must NOT come back.
@@ -78,7 +81,10 @@ fn null_gt_five_is_null_not_false_which_only_shows_under_not() {
     // `NOT (score > 5)`: SQLite keeps only row 3. Row 2 is NULL, and
     // `NOT NULL` is NULL, so it stays out.
     let q = query::<T>().filter(not(t::score.gt(5)));
-    assert_eq!(q.to_sql().sql, "SELECT * FROM t WHERE NOT ((score > ?))");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, nick, score, active FROM t WHERE NOT ((score > ?))"
+    );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(ids, [3]);
 }
@@ -147,12 +153,18 @@ fn kleene_and_or() {
 fn is_null_and_is_not_null_now_evaluate() {
     let rows = fixture();
     let q = query::<T>().filter(t::score.is_null());
-    assert_eq!(q.to_sql().sql, "SELECT * FROM t WHERE (score IS NULL)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, nick, score, active FROM t WHERE (score IS NULL)"
+    );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(ids, [2]);
 
     let q = query::<T>().filter(t::nick.is_not_null());
-    assert_eq!(q.to_sql().sql, "SELECT * FROM t WHERE (nick IS NOT NULL)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, nick, score, active FROM t WHERE (nick IS NOT NULL)"
+    );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(ids, [1, 3]);
 }
@@ -161,7 +173,10 @@ fn is_null_and_is_not_null_now_evaluate() {
 fn is_null_on_a_non_nullable_column_is_constant_false_in_both_interpreters() {
     let rows = fixture();
     let q = query::<T>().filter(t::id.is_null());
-    assert_eq!(q.to_sql().sql, "SELECT * FROM t WHERE (id IS NULL)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, nick, score, active FROM t WHERE (id IS NULL)"
+    );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(
         ids,
@@ -175,7 +190,10 @@ fn nullable_may_be_compared_to_non_nullable() {
     let rows = fixture();
     // `score > id` — one nullable operand, one not. Result is nullable.
     let q = query::<T>().filter(t::score.gt(t::id));
-    assert_eq!(q.to_sql().sql, "SELECT * FROM t WHERE (score > id)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, nick, score, active FROM t WHERE (score > id)"
+    );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(ids, [1, 4]);
 }
@@ -188,7 +206,7 @@ fn mixing_nullable_and_non_nullable_predicates() {
         .filter(t::nick.is_not_null());
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM t WHERE ((score > ?) AND (nick IS NOT NULL))"
+        "SELECT id, nick, score, active FROM t WHERE ((score > ?) AND (nick IS NOT NULL))"
     );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(ids, [1]);
@@ -198,7 +216,10 @@ fn mixing_nullable_and_non_nullable_predicates() {
 fn like_over_a_nullable_text_column_is_three_valued() {
     let rows = fixture();
     let q = query::<T>().filter(t::nick.like("a%"));
-    assert_eq!(q.to_sql().sql, "SELECT * FROM t WHERE (nick LIKE ?)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, nick, score, active FROM t WHERE (nick LIKE ?)"
+    );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(
         ids,
@@ -214,7 +235,7 @@ fn pred_macro_works_over_nullable_columns_unchanged() {
     let q = query::<T>().filter(pred!(t, |r| r.score > 5 && r.active == true));
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM t WHERE ((score > ?) AND (active = ?))"
+        "SELECT id, nick, score, active FROM t WHERE ((score > ?) AND (active = ?))"
     );
     let ids: Vec<i64> = q.to_memory(&rows).map(|r| r.id).collect();
     assert_eq!(ids, [1, 4]);
@@ -228,7 +249,7 @@ fn ordering_by_a_non_nullable_column_still_works_with_a_nullable_filter() {
         .order_by_desc(t::id);
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM t WHERE (score IS NOT NULL) ORDER BY id DESC"
+        "SELECT id, nick, score, active FROM t WHERE (score IS NOT NULL) ORDER BY id DESC"
     );
     let ids: Vec<i64> = q.to_memory_sorted(&rows).map(|r| r.id).collect();
     assert_eq!(ids, [4, 3, 1]);

@@ -105,14 +105,17 @@ fn call_site_conditional_filters_in_a_loop() {
 
     // No filters selected: no WHERE clause at all, every row kept.
     let q = build(&none);
-    assert_eq!(q.to_sql().sql, "SELECT * FROM employees");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, name, dept, salary, active FROM employees"
+    );
     assert_eq!(ids(q.to_memory(&rows)), [1, 2, 3, 4, 5]);
 
     // All four selected: AND-chained in the order they were added.
     let q = build(&all);
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE ((((dept = ?) AND (salary >= ?)) AND (active = ?)) AND (name LIKE ?))"
+        "SELECT id, name, dept, salary, active FROM employees WHERE ((((dept = ?) AND (salary >= ?)) AND (active = ?)) AND (name LIKE ?))"
     );
     assert_eq!(
         q.to_sql().params,
@@ -183,7 +186,7 @@ fn call_site_query_in_a_struct_field() {
     assert_eq!(ids(r.query.to_memory(&rows)), [1, 4]);
     assert_eq!(
         r.query.to_sql().sql,
-        "SELECT * FROM employees WHERE ((dept = ?) AND (salary > ?)) ORDER BY id"
+        "SELECT id, name, dept, salary, active FROM employees WHERE ((dept = ?) AND (salary > ?)) ORDER BY id"
     );
 }
 
@@ -252,7 +255,10 @@ fn call_site_borrowed_predicate_needs_to_string() {
     let owned = String::from("eng");
     let q = in_dept(&owned);
     assert_eq!(ids(q.to_memory(&rows)), [1, 3, 4]);
-    assert_eq!(q.to_sql().sql, "SELECT * FROM employees WHERE (dept = ?)");
+    assert_eq!(
+        q.to_sql().sql,
+        "SELECT id, name, dept, salary, active FROM employees WHERE (dept = ?)"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -286,10 +292,13 @@ fn call_site_several_queries_in_a_vec() {
     );
 
     let sql: Vec<String> = queries.iter().map(|q| q.to_sql().sql).collect();
-    assert_eq!(sql[0], "SELECT * FROM employees");
+    assert_eq!(
+        sql[0],
+        "SELECT id, name, dept, salary, active FROM employees"
+    );
     assert_eq!(
         sql[2],
-        "SELECT * FROM employees WHERE (salary > ?) ORDER BY salary DESC"
+        "SELECT id, name, dept, salary, active FROM employees WHERE (salary > ?) ORDER BY salary DESC"
     );
 }
 
@@ -307,7 +316,7 @@ fn call_site_typed_path_unchanged() {
         .filter(employees::salary.gt(100_000i64));
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE ((dept = ?) AND (salary > ?))"
+        "SELECT id, name, dept, salary, active FROM employees WHERE ((dept = ?) AND (salary > ?))"
     );
     assert_eq!(ids(q.to_memory(&rows)), [1, 4]);
 
@@ -323,7 +332,7 @@ fn call_site_typed_path_unchanged() {
         query::<Employee>().filter(pred!(employees, |e| e.salary > 100_000i64 && e.dept == "eng"));
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE ((salary > ?) AND (dept = ?))"
+        "SELECT id, name, dept, salary, active FROM employees WHERE ((salary > ?) AND (dept = ?))"
     );
 }
 
@@ -355,7 +364,7 @@ fn erased_sql_is_byte_identical_to_typed_sql() {
     assert_eq!(typed.to_sql(), erased.to_sql());
     assert_eq!(
         erased.to_sql().sql,
-        "SELECT * FROM employees WHERE (((dept = ?) AND (salary > ?)) AND (name LIKE ?)) \
+        "SELECT id, name, dept, salary, active FROM employees WHERE (((dept = ?) AND (salary > ?)) AND (name LIKE ?)) \
          ORDER BY salary DESC LIMIT 10 OFFSET 2"
     );
 }
@@ -385,7 +394,7 @@ fn into_boxed_preserves_already_accumulated_clauses() {
         .filter(employees::active.eq(true));
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE ((dept = ?) AND (active = ?)) LIMIT 2"
+        "SELECT id, name, dept, salary, active FROM employees WHERE ((dept = ?) AND (active = ?)) LIMIT 2"
     );
     assert_eq!(ids(q.to_memory(&rows)), [1, 4]);
 }
@@ -402,7 +411,7 @@ fn erased_keeps_the_whole_expression_language() {
     assert_eq!(ids(q.to_memory(&rows)), [1, 2, 3, 4]);
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE ((dept = ?) OR (salary > ?))"
+        "SELECT id, name, dept, salary, active FROM employees WHERE ((dept = ?) OR (salary > ?))"
     );
 
     let q = query::<Employee>()

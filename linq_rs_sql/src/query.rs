@@ -62,6 +62,66 @@ impl<T> All<T> {
     }
 }
 
+/// A selection naming specific columns, in a fixed order.
+///
+/// `All` emits `*`, which makes the result set's column order the **database's**
+/// choice: SQLite and PostgreSQL expand `*` in table-declaration order, which
+/// this crate cannot pin and which a migration changes under an already-compiled
+/// binary. Naming the columns moves that choice to the query.
+///
+/// Reading by name ([`crate::from_row`]) already makes `*` *safe*. This makes it
+/// unnecessary, and is the precondition for narrow projections: a query cannot
+/// select a subset of columns while its SELECT list is a wildcard.
+///
+/// The names come from [`Column::NAME`], fixed at compile
+/// time by [`table!`](crate::table), so this allocates nothing beyond the SQL
+/// string itself.
+#[derive(Debug, Clone, Copy)]
+pub struct Named<T> {
+    names: &'static [&'static str],
+    _ty: PhantomData<T>,
+}
+
+impl<T> Named<T> {
+    /// Build a selection over `names`, which must be that table's columns in
+    /// the order the caller wants them back.
+    pub const fn new(names: &'static [&'static str]) -> Self {
+        Self {
+            names,
+            _ty: PhantomData,
+        }
+    }
+
+    /// The names this selection emits, in order.
+    pub const fn names(&self) -> &'static [&'static str] {
+        self.names
+    }
+}
+
+impl<T: Table> Selection for Named<T> {
+    type Table = T;
+    fn write_select(&self, sql: &mut String) {
+        if self.names.is_empty() {
+            // A zero-column SELECT is not valid SQL anywhere. An entity with no
+            // columns cannot happen via `entity!`, but `Named` is public.
+            sql.push('*');
+            return;
+        }
+        for (i, n) in self.names.iter().enumerate() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+            // Unquoted, consistently with how every other identifier in this
+            // crate is emitted -- `WHERE (order > ?)` is already a parse error
+            // today, before this existed. Quoting is a dialect question with no
+            // spelling valid on SQLite, PostgreSQL and MySQL alike, and it wants
+            // one ruling covering every emission site rather than a special case
+            // here. See D-030.
+            sql.push_str(n);
+        }
+    }
+}
+
 impl<T: Table> Selection for All<T> {
     type Table = T;
     fn write_select(&self, sql: &mut String) {

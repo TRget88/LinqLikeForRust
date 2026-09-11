@@ -447,7 +447,7 @@ pub(crate) fn and_node<L, R>(left: L, right: R) -> And<L, R> {
 /// entity! { Employee => employees { id: Integer = id, salary: Integer = salary } }
 ///
 /// let q = query::<Employee>().filter(employees::salary.gt(100i64));
-/// assert_eq!(q.to_sql().sql, "SELECT * FROM employees WHERE (salary > ?)");
+/// assert_eq!(q.to_sql().sql, "SELECT id, salary FROM employees WHERE (salary > ?)");
 /// ```
 pub trait BelongsTo<T> {}
 

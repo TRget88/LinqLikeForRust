@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `to_sql()` names the columns instead of emitting `*` (D-030)
+
+`linq_rs_sql 0.3.0`. **The emitted SQL changes**, so a snapshot test on it will
+move:
+
+```diff
+- SELECT * FROM employees WHERE (salary > ?) ORDER BY salary DESC
++ SELECT id, name, dept, salary, nick, active FROM employees WHERE (salary > ?) ORDER BY salary DESC
+```
+
+D-029 made `SELECT *` *safe* by reading columns by name. This makes it
+unnecessary, and is **the precondition for projection** — a query cannot select
+a subset of columns while its SELECT list is a wildcard, so `.select()` was
+unreachable without it.
+
+It is also defence in depth: column order moves from the database's control to
+the query's, and resolution then provably returns the identity permutation.
+
+- `Entity` gains `ALL_COLUMNS`, supplied by `entity!` on both arms. **Required
+  with no default** — a default of `&[]` would silently fall back to `SELECT *`
+  for an entity that forgot it. Breaking for hand-written `Entity` impls.
+- Named `ALL_COLUMNS` rather than `COLUMNS` because `FromRow::COLUMNS` already
+  exists and `Emp::COLUMNS` was `E0034`. That is the same class of defect that
+  disqualified `linq_rs 0.1.0`.
+- **The lower-level `Query` builder still emits `*`**, deliberately: it has no
+  `Entity`, so there is no declared list to name. `employees::table()` gives
+  `SELECT *`; `query::<Employee>()` gives the named list.
+- Identifiers are still emitted **unquoted**. A column named `order` was already
+  broken before this — the crate emits `WHERE (order > ?)`, which real SQLite
+  rejects. Quoting is a dialect question wanting one ruling across every
+  emission site, not a special case in the SELECT list.
+
 ### Added — row materialization: `FromRow`, `RowError`, and a driver seam (D-029)
 
 A query result can now become typed structs. `entity!` generates the reverse

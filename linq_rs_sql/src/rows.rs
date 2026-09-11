@@ -659,6 +659,26 @@ where
 pub trait Entity: Sized {
     /// The `Marker` type from this struct's `table!` invocation.
     type Table: Table;
+
+    /// This entity's columns, in declaration order.
+    ///
+    /// Required, with no default, deliberately. A default of `&[]` would make
+    /// [`Rows::to_sql`] silently fall back to `SELECT *` for any entity that
+    /// forgot to supply it — a silent wrong default in place of a compile error,
+    /// which is the category `D-025` forbids. An entity that cannot name its
+    /// columns cannot be projected, and should say so at the impl site.
+    ///
+    /// Supplied by [`entity!`](crate::entity) from the declaration, on both the
+    /// normal and `no_from_row` arms.
+    ///
+    /// Named `ALL_COLUMNS`, not `COLUMNS`, so it cannot collide with
+    /// [`FromRow::COLUMNS`](crate::from_row::FromRow::COLUMNS). Both would be in
+    /// scope on the same type and `Emp::COLUMNS` would be `E0034` — which is
+    /// exactly the defect that disqualified `linq_rs 0.1.0`, where `LinqExt::skip`
+    /// shadowed `Iterator::skip`. The two lists are also not the same concept:
+    /// this one is what to SELECT, `FromRow`'s is what to READ, and a future
+    /// tuple projection will have the second without the first.
+    const ALL_COLUMNS: &'static [&'static str];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -943,7 +963,15 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
         if let Some(n) = self.offset {
             q = q.offset(n);
         }
-        q.to_sql()
+        // Name the columns rather than emitting `*`. `*` expands in
+        // table-declaration order, which is the database's choice, not the
+        // query's -- see `Named` and D-030. Reading by name already made `*`
+        // safe; this makes the result set's shape the query's business.
+        //
+        // Applied last, because the order-by parts are closures typed over the
+        // `All` selection. `Query::select` carries the rest of the query across.
+        q.select(crate::query::Named::<Row::Table>::new(Row::ALL_COLUMNS))
+            .to_sql()
     }
 }
 
@@ -1267,6 +1295,8 @@ macro_rules! entity {
     (@base $row:ty => $table:ident { $($col:ident : $ty:ty = $field:ident),* $(,)? }) => {
         impl $crate::rows::Entity for $row {
             type Table = $table::Marker;
+            const ALL_COLUMNS: &'static [&'static str] =
+                &[$(<$table::$col as $crate::Column>::NAME),*];
         }
         // The impls are generated inside an anonymous `const` so the SQL type
         // markers can be brought into scope without the caller importing them

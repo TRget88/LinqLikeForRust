@@ -68,7 +68,7 @@
 ///
 /// assert_eq!(
 ///     q.to_sql().sql,
-///     "SELECT * FROM employees WHERE ((salary > ?) AND (dept = ?))"
+///     "SELECT id, dept, salary FROM employees WHERE ((salary > ?) AND (dept = ?))"
 /// );
 ///
 /// // The same value evaluates in memory.

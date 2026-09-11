@@ -95,7 +95,7 @@ pub use from_row::{
     resolve_by_name, ColumnSet, FromRow, Layout, LoadField, LoadOpt, RowError, RowSource,
     SqlValueRef,
 };
-pub use query::{All, Direction, Query, QueryOutput, Selection, Table};
+pub use query::{All, Direction, Named, Query, QueryOutput, Selection, Table};
 pub use value::SqlValue;
 // Re-export the SQL type markers and the sealed `SqlType` trait.
 pub use types::{

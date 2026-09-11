@@ -383,7 +383,13 @@ impl<'a, Row: Entity> BoxedRows<'a, Row> {
         if let Some(n) = self.offset {
             q = q.offset(n);
         }
-        q.to_sql()
+        // D-030: name the columns, exactly as the typed path does. Two spellings
+        // of the same query must render identically -- `tests/boxed.rs` asserts
+        // byte-equality, and it caught this.
+        q.select(crate::query::Named::<Row::Table>::new(
+            <Row as Entity>::ALL_COLUMNS,
+        ))
+        .to_sql()
     }
 
     /// Interpreter two, on the erased form.

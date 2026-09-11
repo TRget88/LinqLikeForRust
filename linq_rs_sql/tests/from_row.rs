@@ -331,6 +331,53 @@ fn the_opt_out_arm_still_gives_the_readers() {
         extra: "not a column".into(),
     }];
     let q = linq_rs_sql::rows::query::<Thing>().filter(thing::id.gt(1i64));
-    assert_eq!(q.to_sql().sql, "SELECT * FROM thing WHERE (id > ?)");
+    assert_eq!(q.to_sql().sql, "SELECT id FROM thing WHERE (id > ?)");
     assert_eq!(q.to_memory(&rows).map(|t| t.id).collect::<Vec<_>>(), [3]);
+}
+
+/// D-030. `to_sql()` now names the columns, so a result set produced by this
+/// crate's own SQL arrives in the entity's declared order and resolution is
+/// provably the identity permutation. By-name reading then costs nothing and
+/// still covers the cases the crate does *not* control: a hand-written query, a
+/// join, a view, a driver that reorders.
+///
+/// This is the defence-in-depth half. The reordered-result-set test above is the
+/// half that matters when something else chose the order.
+#[test]
+fn a_query_this_crate_generated_resolves_to_the_identity() {
+    // Model a result set shaped by `to_sql()`: the entity's own column list.
+    use linq_rs_sql::rows::Entity;
+    let names: Vec<&str> = <Emp as Entity>::ALL_COLUMNS.to_vec();
+    assert_eq!(
+        names,
+        Emp::COLUMNS,
+        "the projected SELECT list and the read list must be the same columns"
+    );
+    let row = Mock {
+        names,
+        values: vec![
+            int(1),
+            txt("a"),
+            txt("b"),
+            int(2),
+            SqlValueRef::Null,
+            int(1),
+        ],
+    };
+    let layout = Emp::resolve(&row).unwrap();
+    assert!(
+        layout.is_identity(),
+        "a query we generated must not need reordering"
+    );
+}
+
+/// The lower-level `Query` builder has no `Entity`, so it keeps emitting `*` —
+/// there is no declared column list for it to name. Worth pinning so the
+/// inconsistency is deliberate rather than discovered.
+#[test]
+fn the_entity_free_query_builder_still_emits_star() {
+    assert_eq!(
+        emp::table().filter(emp::id.gt(1i64)).to_sql().sql,
+        "SELECT * FROM emp WHERE (id > ?)"
+    );
 }
