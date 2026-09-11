@@ -5,7 +5,8 @@ It is organized by phase, with each phase shippable on its own.
 
 **This file is a work list, not a source of decisions.** Scope and API rulings
 live in [DECISIONS.md](DECISIONS.md); cite `D-NNN` rather than restating them.
-Phases 1 and 2 grew the surface from 48 to 90 methods, which `AUDIT.md` finding
+Phases 1 and 2 grew the surface from 48 to 90 methods (a figure from 2026-09-09;
+the surface is 62 today after the `D-019` cut), which `AUDIT.md` finding
 A-2 identifies as the crate's principal liability — see the v1.0 cut line in
 `AUDIT.md` §7.3 before adding another operator.
 
@@ -52,7 +53,8 @@ were not wired into `Cargo.toml`, so they had never actually run. When
 they were wired up, two pre-existing bugs surfaced and were fixed in the
 same change:
 
-- [x] **Register `linq_tests.rs` as an integration test** — added `[[test]]` block in `Cargo.toml`. 57 tests now run on every `cargo test`.
+- [x] **Register `linq_tests.rs` as an integration test** — added `[[test]]` block in `Cargo.toml`. 57 tests ran on every `cargo test` when
+  this landed; the workspace floor is 278 today.
 - [x] **`skip` → `skip_` rename** (breaking) — `LinqExt::skip` collided with `Iterator::skip` but lacked the trailing `_` per the project's documented convention. Renamed to match `take_`, `any_`, `all_`, etc.
 - [x] **`then_by` correctness fix** — `OrderedQueryable` was eagerly sorting in `order_by` and `then_by` re-sorted on the secondary key *alone*, destroying the primary order. Refactored to defer sorting and stack comparators; sort runs once at `into_iter` time using the comparators in lexicographic order. The `Fn` bound on key selectors tightened from `FnMut` to `Fn` + `'static` to allow boxed dyn dispatch (custom mutable-state key functions are not a realistic use case).
 
@@ -224,13 +226,23 @@ runs backwards from expectation: the ergonomic form is the type-erased one.
 took ownership. Worth checking whether `&self` is achievable now that `D-027`
 proved it for `BoxedRows`.
 
-### 2.8.2 Literals need explicit type suffixes
+### 2.8.2 Integer literals default to `i32`, not to the column's type
 
-`e.salary > 100_000` does not infer `i64` from the column; `100_000i64` is
-required. C# infers it, and this is the most visible remaining difference at a
-`pred!` call site. Likely wants the comparison operators to accept anything
-`Into<Lit<Self::SqlType>>` rather than a bare `Expr`, so an untyped integer
-literal has somewhere to land.
+Originally filed as "literals need explicit type suffixes". **That was wrong** —
+`e.salary > 100_000` compiles and emits byte-identical SQL to `100_000i64`,
+because `i32` also satisfies `Integer`. The real, narrower problem:
+
+```text
+e.big > 3_000_000_000
+error: literal out of range for `i32`
+help: consider using the type `u32` instead
+```
+
+Inference reaches `i32`, not the column's type, so a literal above `i32::MAX`
+needs a suffix — and the error never mentions the column, suggesting `u32`, which
+is not a SQL type here. Likely wants the comparison operators to accept anything
+`Into<Lit<Self::SqlType>>` rather than a bare `Expr`, so an untyped literal has
+somewhere to land.
 
 ---
 

@@ -55,7 +55,10 @@ The grammar is comparisons (`>`, `>=`, `<`, `<=`, `==`, `!=`) joined by `&&` and
 the translation boundary, so anything it rejects could not have become SQL
 anyway. Reach for `.to_memory()` and a real closure when you want arbitrary Rust.
 
-Note the `i64` suffix. Literals do not yet infer their type from the column.
+A bare integer literal works — `e.salary > 100_000` compiles and emits identical
+SQL. Literals default to `i32`, so a value above `i32::MAX` needs an explicit
+`i64` suffix, and the error you get if you forget is about `i32`, not about the
+column.
 
 ## Nullable columns
 
