@@ -281,30 +281,56 @@ Two sibling crates cover that:
   builds SQL — compile-time-checked columns, bound parameters, no
   interpolation, nullable columns with SQL's three-valued logic. Also zero
   dependencies.
-- **[`linq_rs_sqlite`](https://github.com/TRget88/LinqLikeForRust/tree/main/linq_rs_sqlite)**
+- **`linq_rs_sqlite`** (in this repo; not yet published)
   runs it against SQLite and gives back typed structs.
 
 `D-002` — one query value with **two interpreters** — is built. The same value
-renders to SQL for a database or evaluates lazily over a `Vec` in a unit test,
-and the two agree:
+renders to SQL for a database, or evaluates lazily over a `Vec` in a unit test:
 
 ```text
 let q = query::<Employee>()
-    .filter(pred!(employees, |e| e.salary > 100_000i64 && e.dept == "eng"));
+    .filter(pred!(employees, |e| e.salary > 100_000 && e.dept == "eng"));
 
 q.to_sql();            // SELECT id, name, dept, salary FROM employees
                        //   WHERE ((salary > ?) AND (dept = ?))
 q.to_memory(&staff);   // the same value, over a &[Employee], lazily
 ```
 
-That agreement is asserted against a real SQLite, not just a `Vec`. No other
-Rust library does this as far as the survey behind `AUDIT.md` could find.
+The projected column list is whatever `entity!` declares, in that order — not
+`table!`'s order and not the struct's. The table name comes from `entity!`'s
+`=> <table>` binding.
+
+### What the two interpreters do and do not promise
+
+They agree, checked against a real SQLite, for `=`, `!=`, `<`, `>`, `IS NULL`,
+`IS NOT NULL`, `NOT`, `AND`, `OR`, `LIMIT`/`OFFSET`, `ORDER BY`, and
+three-valued `NULL` logic.
+
+**They do not agree for `LIKE`, and that is a known defect, not a nuance.**
+SQLite's `LIKE` folds ASCII case; the in-memory matcher is case-sensitive. Every
+pattern in a six-case check disagreed:
+
+```text
+LIKE 'eve'    SQLite [1, 2, 3]   in-memory [2]
+LIKE '%PL%'   SQLite [4, 5]      in-memory [5]
+```
+
+So a `to_memory` test can pass while the database returns different rows. `LIKE`
+is classified **provider-defined** (`D-103`): what it promises is a documented
+per-operator stability class, never result identity across providers. Until the
+in-memory matcher is reconciled, treat `LIKE` as SQL-only.
+
+The compile-time checks are against your `table!`/`entity!` declaration, not
+against the live database. An undeclared column, a wrong SQL type and a column
+belonging to another table are all build errors; a declaration that disagrees
+with the actual schema is a runtime error naming the column.
 
 The two vocabularies stay deliberately separate — this crate says `where_`, that
 one says `filter` — because one crate with two names for one concept is worse to
 hand a user than two crates with one each (`D-205`). The operator surface here
-was cut to fit the seam (`D-019`): an operator earns its place only if it could
-become a SQL clause.
+was cut to fit the seam (`D-019`): an operator earns its place if it could become
+a SQL clause **or a translatable execution of one** — 35 of the 62 are clauses,
+27 are terminals.
 
 ## Overlap with `std::iter`
 
