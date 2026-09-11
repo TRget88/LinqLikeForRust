@@ -394,18 +394,31 @@ impl<'x, T: Repr<'x>> NullCheck<'x> for Nullable<T> {
 /// The collapse from three values to two, at the `WHERE` boundary and nowhere
 /// else. A row is kept when the predicate is TRUE; FALSE and NULL both drop it.
 pub trait TruthValue<'x>: WhereClause + Repr<'x> {
-    /// Does this predicate value keep the row?
-    fn is_true(v: Rust<'x, Self>) -> bool;
+    /// The three-valued result, normalised: `None` is UNKNOWN.
+    ///
+    /// This is the lossless view. [`is_true`](Self::is_true) is the lossy one,
+    /// and the difference matters: the collapse to two values distributes over
+    /// `AND` and `OR` but **not** over `NOT` — `is_true(NOT NULL)` is `false`
+    /// while `!is_true(NULL)` is `true`. Anything that might later negate a
+    /// value must carry the three-valued form, which is why type erasure
+    /// ([`crate::boxed`]) transports `Option<bool>` and not `bool`.
+    fn to_tri(v: Rust<'x, Self>) -> Option<bool>;
+
+    /// Does this predicate value keep the row? TRUE keeps it; FALSE and NULL
+    /// both drop it.
+    fn is_true(v: Rust<'x, Self>) -> bool {
+        matches!(Self::to_tri(v), Some(true))
+    }
 }
 
 impl<'x> TruthValue<'x> for Boolean {
-    fn is_true(v: bool) -> bool {
-        v
+    fn to_tri(v: bool) -> Option<bool> {
+        Some(v)
     }
 }
 impl<'x> TruthValue<'x> for Nullable<Boolean> {
-    fn is_true(v: Option<bool>) -> bool {
-        matches!(v, Some(true))
+    fn to_tri(v: Option<bool>) -> Option<bool> {
+        v
     }
 }
 
@@ -744,9 +757,39 @@ type SqlStep<T> = Box<dyn Fn(Query<T, All<T>>) -> Query<T, All<T>>>;
 /// Compares two rows by one accumulated `ORDER BY` column.
 type RowCmp<Row> = Box<dyn Fn(&Row, &Row) -> Ordering>;
 
-struct OrderPart<Row: Entity> {
-    render: SqlStep<Row::Table>,
-    cmp: RowCmp<Row>,
+pub(crate) struct OrderPart<Row: Entity> {
+    pub(crate) render: SqlStep<Row::Table>,
+    pub(crate) cmp: RowCmp<Row>,
+}
+
+/// Builds one `ORDER BY` part: the SQL step and the in-memory comparator, from
+/// a single column and direction.
+///
+/// Extracted so [`crate::boxed::BoxedRows`] orders through exactly this code
+/// rather than a second copy — two copies would be two chances for the erased
+/// and typed forms to sort differently.
+pub(crate) fn order_part<Row, C>(column: C, desc: bool) -> OrderPart<Row>
+where
+    Row: Entity + 'static,
+    C: Column<Table = Row::Table> + Copy + 'static,
+    C: for<'x> Eval<'x, Row>,
+    C::SqlType: Sortable,
+{
+    OrderPart {
+        render: if desc {
+            Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by_desc(column))
+        } else {
+            Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by(column))
+        },
+        cmp: Box::new(move |a: &Row, b: &Row| {
+            let ord = <C::SqlType as Sortable>::compare(column.eval(a), column.eval(b));
+            if desc {
+                ord.reverse()
+            } else {
+                ord
+            }
+        }),
+    }
 }
 
 /// A query value with two interpreters.
@@ -761,11 +804,14 @@ struct OrderPart<Row: Entity> {
 /// promoted to the type level, because it changes an operational guarantee —
 /// see [`Rows::to_memory`].
 pub struct Rows<Row: Entity, P, O> {
-    pred: P,
-    filtered: bool,
-    order: Vec<OrderPart<Row>>,
-    limit: Option<u64>,
-    offset: Option<u64>,
+    // `pub(crate)` only so `crate::boxed::Rows::into_boxed` can move these out.
+    // Still private to consumers -- the erased form is the supported way to get
+    // at them.
+    pub(crate) pred: P,
+    pub(crate) filtered: bool,
+    pub(crate) order: Vec<OrderPart<Row>>,
+    pub(crate) limit: Option<u64>,
+    pub(crate) offset: Option<u64>,
     _ord: PhantomData<O>,
 }
 
@@ -834,21 +880,7 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
         C::SqlType: Sortable,
         Row: 'static,
     {
-        self.order.push(OrderPart {
-            render: if desc {
-                Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by_desc(column))
-            } else {
-                Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by(column))
-            },
-            cmp: Box::new(move |a: &Row, b: &Row| {
-                let ord = <C::SqlType as Sortable>::compare(column.eval(a), column.eval(b));
-                if desc {
-                    ord.reverse()
-                } else {
-                    ord
-                }
-            }),
-        });
+        self.order.push(order_part(column, desc));
         Rows {
             pred: self.pred,
             filtered: self.filtered,

@@ -477,6 +477,65 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-027 — type erasure for dynamic composition, sealed and three-valued
+- **Status:** SETTLED (2026-09-10) — implemented.
+- **The problem.** `Rows<Row, P, O>` parameterises the predicate by *type*, so
+  every `.filter()` returns a different type. That is the right default — it is
+  what makes a `Text` column compared to an integer a build error — but it makes
+  the way applications actually build queries impossible:
+  ```rust
+  let mut q = query::<Employee>();
+  if want_eng { q = q.filter(employees::dept.eq("eng")); }   // E0308
+  ```
+  No conditional filters, no query in a struct field, no query returned from a
+  function, no `Vec` of queries.
+- **Ruling:** Diesel's answer — keep the typed form as the default and add
+  `into_boxed()` / `boxed_query()`, an erased form whose type does not move as
+  clauses are added. Chosen over a runtime AST, which was prototyped and
+  measured at **2.3×–5.0× slower** in memory and which made a type-mismatched
+  comparison *representable* through public API again.
+- **The type check survives erasure completely**, and this is the load-bearing
+  fact: the check fires at the `.gt()` call, before the box. Erasure cannot lose
+  what was already proven.
+- **Erased ONCE, not twice.** The obvious erasure — a `Vec<Box<dyn Fn(&Row) ->
+  bool>>` for memory and a separate list for SQL — erases the query into two
+  independent structures that can silently disagree. `DynPred` carries *both*
+  halves behind one trait object, and its blanket impl is keyed on the identical
+  bounds `to_memory` already requires, so nothing can be boxed for one
+  interpreter and not the other.
+- **Sealed, and this is not optional.** The first prototype left `DynPred`
+  public and unsealed. A hand-written impl could then make SQL select every row
+  and memory select none, from the same value, through entirely safe API — a
+  fresh instance of `D-025`. `mod sealed` makes the supertrait unnameable
+  downstream; the seal costs legitimate users nothing because its blanket impl
+  is keyed on exactly the bounds `DynPred`'s own blanket impl uses. Verified: a
+  hostile impl fails with
+  `` error[E0277]: the trait bound `Evil: sealed::Sealed<T>` is not satisfied ``.
+- **Three-valued, because of `D-026`.** `eval_row` returns `Option<bool>`, not
+  `bool`. The collapse to two values distributes over `AND` and `OR` but **not**
+  over `NOT` — `is_true(NOT NULL)` is `false` while `!is_true(NULL)` is `true` —
+  and a boxed predicate is a first-class expression that can be fed back into
+  `not(..)`. Collapsing inside the box would therefore be wrong the moment the
+  erased form was negated. A boxed predicate has `SqlType = Nullable<Boolean>`
+  even when its contents cannot be null: widening is sound, and it keeps one
+  erased type so a `Vec<Box<dyn DynPred<_>>>` can hold both kinds.
+  **This is why `D-026` was built first** — building erasure on the
+  non-nullable shape would have meant rewriting `DynPred`'s signature.
+- **Clauses are kept flat**, not folded into a nested `And` tree: re-boxing per
+  `.filter()` makes the nested form a *dependent* chain of indirect calls per
+  row. Measured over 1M rows, flat is ~20% faster at three clauses and ~14%
+  slower at one.
+- **Ordering goes through one code path.** `order_part` was extracted from
+  `Rows::push_order` so the erased form builds order parts with the same
+  function; two copies would be two chances for the forms to sort differently.
+- **Forbids:** unsealing `DynPred`; erasing to `bool`; a second erasure path
+  that carries only one interpreter.
+- **Enforced by:** `linq_rs_sql/tests/boxed.rs` and
+  `linq_rs_sql/tests/boxed_adversarial.rs` — 35 tests, including erased SQL
+  being byte-identical to the typed form across multi-clause chains, nested
+  `OR`/`NOT`, multi-key `ORDER BY` and limit/offset combinations, and both
+  interpreters agreeing on identical data.
+
 ## D-026 — nullable columns, and three-valued logic that agrees with SQL
 - **Status:** SETTLED (2026-09-10) — implemented.
 - **The problem.** There were four SQL type markers and none was nullable. An

@@ -75,6 +75,7 @@
 
 #[macro_use]
 pub mod pred;
+pub mod boxed;
 pub mod column;
 pub mod expr;
 pub mod query;
@@ -84,6 +85,7 @@ pub mod value;
 
 mod macros;
 
+pub use boxed::{boxed_query, Boxed, BoxedRowIter, BoxedRows, DynPred};
 pub use column::{BoolOps, Column, ExprExt, FloatOps, IntOps, TextOps};
 pub use expr::{
     not, And, Eq, Expr, Gt, GtEq, IsNotNull, IsNull, Like, Lit, Lt, LtEq, Not, NotEq, Or,
@@ -115,6 +117,7 @@ pub use types::{
 /// use linq_rs_sql::prelude::*;
 /// ```
 pub mod prelude {
+    pub use crate::boxed::{boxed_query, Boxed, BoxedRows};
     pub use crate::column::{BoolOps, Column, ExprExt, FloatOps, IntOps, TextOps};
     pub use crate::expr::Expr;
     pub use crate::rows::{query, Entity, Rows};

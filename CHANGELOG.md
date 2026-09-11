@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `into_boxed()`, for queries the type system cannot follow (D-027)
+
+Every `.filter()` used to return a different type, so this did not compile:
+
+```rust
+let mut q = query::<Employee>();
+if want_eng { q = q.filter(employees::dept.eq("eng")); }   // E0308
+```
+
+Now it does, via an erased form whose type stays put:
+
+```rust
+fn build(s: &Search) -> Boxed<T> {
+    let mut q = boxed_query::<T>();
+    if let Some(m) = s.min_score { q = q.filter(t::score.gt(m)); }
+    if s.only_named              { q = q.filter(t::nick.is_not_null()); }
+    q
+}
+```
+
+Conditional filters, a query in a struct field, a query returned from a
+function, and a `Vec` of differently-shaped queries all work.
+
+- **The type check survives erasure completely.** It fires at the `.gt()` call,
+  before the box — `employees::dept.gt(3i64)` is still `E0271` on both paths.
+- **Erased once, not twice.** `DynPred` carries the SQL half and the in-memory
+  half behind one trait object, keyed on the same bounds `to_memory` already
+  requires, so nothing can be boxed for one interpreter and not the other.
+- **Sealed.** A public, unsealed `DynPred` would let a hand-written impl make
+  SQL select every row and memory select none from the same value, through safe
+  API. `mod sealed` prevents it and costs legitimate users nothing.
+- **Three-valued**, per D-026: `eval_row` returns `Option<bool>`. Collapsing to
+  `bool` inside the box would be wrong under negation, since `is_true(NOT NULL)`
+  is `false` while `!is_true(NULL)` is `true`.
+- Chosen over a runtime expression AST, which was prototyped and measured at
+  2.3×–5.0× slower and which made a type-mismatched comparison representable
+  again.
+
 ### Added — nullable columns with SQL three-valued logic (D-026)
 
 `linq_rs_sql 0.2.0`. Columns can now be `NULL`, and both interpreters agree
