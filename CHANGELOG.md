@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `linq_rs_sqlite 0.1.0`, the SQLite provider (D-031)
+
+Queries now execute. A third crate, so the other two stay dependency-free.
+
+```rust
+use linq_rs_sqlite::Sqlite;
+
+let db = Sqlite::new(&conn);
+let staff: Vec<Employee> = db.fetch(
+    &query::<Employee>()
+        .filter(pred!(employees, |e| e.salary > 100_000i64 && e.dept == "eng"))
+        .order_by_desc(employees::salary)
+        .to_sql(),
+)?;
+```
+
+`fetch`, `fetch_one`, `count`. That is the whole surface.
+
+- **Not a feature flag on `linq_rs_sql`.** An optional dependency is still a
+  dependency — it ends the zero-dependency claim and lands in the lockfile of
+  everyone who only wanted SQL strings. Splitting is what lets D-024 stay true.
+  It is also EF Core's own architecture: core plus a provider package per
+  database.
+- It does **not** hide SQLite — no pool, no transaction wrapper, no `DbContext`.
+  You own the `rusqlite::Connection`; `Sqlite<'c>` borrows it.
+- `count` wraps rather than rewrites (`SELECT COUNT(*) FROM (<sql>)`), so a
+  `LIMIT` is not silently dropped.
+- 12 tests against a real in-memory SQLite, including **the database and the
+  in-memory interpreter agreeing on the same query value**.
+- **First place the dialect assumption is written down:** `linq_rs_sql` emits `?`
+  placeholders, which PostgreSQL rejects (it wants `$1`). There is consequently no
+  PostgreSQL provider, and a dialect layer is still open work.
+
 ### Changed — `to_sql()` names the columns instead of emitting `*` (D-030)
 
 `linq_rs_sql 0.3.0`. **The emitted SQL changes**, so a snapshot test on it will

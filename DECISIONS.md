@@ -477,6 +477,56 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-031 — the provider is its own crate, not a feature flag
+- **Status:** SETTLED (2026-09-11) — implemented as `linq_rs_sqlite 0.1.0`.
+- **Ruling:** executing queries lives in a **third crate** that depends on
+  `linq_rs_sql` and one driver. `linq_rs` and `linq_rs_sql` keep zero
+  dependencies of any kind.
+- **Why not a `rusqlite` feature on `linq_rs_sql`.** An optional dependency is
+  still a dependency: it appears in the manifest, it ends the "zero dependencies"
+  claim as written, and it lands in the lockfile of everyone who only wanted to
+  build SQL strings. Splitting is what *lets* `D-024` stay true.
+- **It also happens to be EF's own architecture** — EF Core plus a separate
+  provider package per database. That was not the reason, but it is a good sign
+  the shape is right.
+- **Surface: `fetch`, `fetch_one`, `count`.** Deliberately small, and it does not
+  hide SQLite. No connection pool, no transaction wrapper, no `DbContext`: the
+  caller owns the `rusqlite::Connection` and `Sqlite<'c>` borrows it. Anything
+  rusqlite does better stays rusqlite's job.
+- **`count` wraps rather than rewrites:** `SELECT COUNT(*) FROM (<sql>)`. A naive
+  `SELECT COUNT(*)` rewrite drops `LIMIT` and over-reports. Tested.
+- **This is the first place the dialect assumption is written down.**
+  `linq_rs_sql` emits `?` placeholders in four sites, which SQLite and MySQL
+  accept and **PostgreSQL rejects** — it wants `$1`, `$2`. So the crate has been
+  a SQLite/MySQL dialect with no way to say so. A real dialect layer belongs in
+  `linq_rs_sql` and is still open; building one provider first is how its shape
+  gets discovered instead of guessed, which is the same reason `D-026` came
+  before `D-027`.
+- **The gate had to be loosened, so it was also tightened.** `packaging-gate.sh`
+  now permits dependencies for the provider and nothing else, and additionally
+  asserts: the publishable set is exactly the three crates; the provider depends
+  on exactly `linq_rs_sql` + `rusqlite`; and **no core crate depends on the
+  provider**, because an inverted layering would make the split pointless. All
+  three verified failing when violated.
+- **Found while writing the MSRV gate, and worth recording separately:**
+  `cargo package` **normalises** the manifest, so a dependency is emitted as
+  `[dependencies.name]` and never as `[dependencies]` + `name = …`. My detection
+  matched the repo's shape, so it silently never fired and the provider's tarball
+  went unbuilt while the gate reported PASS. That is the third instance this
+  session of grading the repo's shape instead of the artifact's — `D-023`'s
+  lesson is apparently easy to re-learn. The gate now patches the unpublished
+  sibling to its extracted tarball and resolves the driver from the registry,
+  and says so in its output rather than skipping silently.
+- **Forbids:** a driver dependency or feature on `linq_rs` or `linq_rs_sql`; a
+  core crate depending on the provider; a second driver in this crate.
+- **Enforced by:** `linq_rs_sqlite/tests/roundtrip.rs` — 12 tests against a real
+  in-memory SQLite, including the database and the in-memory interpreter
+  agreeing on one query value, three-valued logic matching the database,
+  conditional composition, hostile input staying in `params`, `count` respecting
+  `LIMIT`, a NULL in a non-nullable column naming column and row, the `D-029`
+  bool refusal, join ambiguity, and a missing column failing identically on
+  empty and populated data. Plus the packaging and MSRV gates above.
+
 ## D-030 — `to_sql()` names the columns
 - **Status:** SETTLED (2026-09-11) — implemented. `linq_rs_sql 0.3.0`; the
   emitted SQL changes.

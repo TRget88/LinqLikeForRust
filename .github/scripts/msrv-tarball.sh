@@ -84,11 +84,30 @@ for d in "$WORK"/*/; do
     continue
   fi
 
-  # Both published crates have zero dependencies of any kind (D-024), so every
-  # tarball builds fully offline. If this ever needs a `[patch.crates-io]` to
-  # get through, a dependency crept back in.
+  # The two CORE crates have zero dependencies (D-024) and build fully offline.
+  # The PROVIDER (D-031) depends on `linq_rs_sql` and a driver, so its tarball
+  # cannot resolve offline until those are published. Point its sibling
+  # dependency at the extracted sibling TARBALL -- not at the working tree, so
+  # this still grades the packaged artifact -- and let the registry supply the
+  # driver.
+  offline="--offline"
+  # `cargo package` NORMALISES the manifest: a dependency becomes
+  # `[dependencies.name]`, never `[dependencies]` + `name = ...`. Matching the
+  # repo's shape here silently never fired -- the same mistake as reading the
+  # repo instead of the tarball, which D-023 exists to stop. Match the prefix.
+  if grep -qE '^\[dependencies\.' "${d}Cargo.toml"; then
+    sibling="$(ls -d "$WORK"/linq_rs_sql-*/ 2>/dev/null | head -1)"
+    if [ -n "$sibling" ]; then
+      printf '\n[patch.crates-io]\nlinq_rs_sql = { path = "%s" }\n' "${sibling%/}" \
+        >> "${d}Cargo.toml"
+    fi
+    # Registry access is required here and that is not a silent cap: a driver
+    # cannot be vendored into this check.
+    offline=""
+    echo "  (has dependencies: resolving from the registry, sibling patched to its tarball)"
+  fi
 
-  if (cd "$d" && rustup run "$MSRV_TC" cargo build --lib --offline 2>&1 | tail -3); then
+  if (cd "$d" && rustup run "$MSRV_TC" cargo build --lib $offline 2>&1 | tail -3); then
     echo "  builds on ${MSRV_TC}"
   else
     echo "FAIL: ${pkg} does not build on ${MSRV_TC}"

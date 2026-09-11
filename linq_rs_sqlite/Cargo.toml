@@ -1,0 +1,27 @@
+# The provider crate. `linq_rs_sql` builds SQL and knows nothing about drivers;
+# this turns that into rows from a real SQLite.
+#
+# It is the FIRST crate in this workspace with a dependency, and that is the
+# point of splitting it out rather than putting a `rusqlite` feature on
+# `linq_rs_sql`: both of those stay dependency-free (D-001, D-024), and a user
+# who only wants to build SQL strings never compiles a driver. Mirrors EF Core,
+# where the provider is a separate package from the core.
+[package]
+name = "linq_rs_sqlite"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.65"
+description = "SQLite provider for linq_rs_sql — executes its queries and materializes typed rows"
+license = "MIT OR Apache-2.0"
+keywords = ["sqlite", "sql", "query", "orm"]
+categories = ["database"]
+readme = "README.md"
+documentation = "https://docs.rs/linq_rs_sqlite"
+repository = "https://github.com/TRget88/LinqLikeForRust"
+
+[dependencies]
+linq_rs_sql = { path = "../linq_rs_sql", version = "0.3" }
+rusqlite = "0.30"
+
+[dev-dependencies]
+rusqlite = { version = "0.30", features = ["bundled"] }
