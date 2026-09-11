@@ -67,7 +67,7 @@ let staff: Vec<Employee> = db.fetch(
 
 ### Changed — `to_sql()` names the columns instead of emitting `*` (D-030)
 
-`linq_rs_sql 0.3.0`. **The emitted SQL changes**, so a snapshot test on it will
+`linq_rs_sql 0.2.0`. **The emitted SQL changes**, so a snapshot test on it will
 move:
 
 ```diff

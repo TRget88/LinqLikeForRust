@@ -74,6 +74,17 @@ for d in "$WORK"/*/; do
   # -- stale artifacts there would otherwise be silently graded as if they ship.
   name="$(awk -F'"' '/^name *=/ {print $2; exit}' "${d}Cargo.toml")"
   case " ${PUBLISHABLE} " in *" ${name} "*) ;; *) echo "skipping ${pkg} (not publishable)"; continue ;; esac
+  # Grade only the CURRENT version. `target/package/` accumulates .crate files
+  # across version bumps, and grading a stale one reports on an artifact that
+  # will never be published -- a linq_rs_sql-0.3.0 tarball survived a bump back
+  # to 0.2.0 and was still being built here. Same class as reading the repo when
+  # the subject is the tarball (D-023).
+  want_ver="$(cargo metadata --no-deps --format-version 1 \
+    | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${name}'][0]; print(p['version'])")"
+  if [ "${pkg}" != "${name}-${want_ver}" ]; then
+    echo "skipping ${pkg} (stale; ${name} is ${want_ver})"
+    continue
+  fi
   lock="${d}Cargo.lock"
   [ -f "$lock" ] || { echo "FAIL: ${pkg} ships no Cargo.lock"; fail=1; continue; }
   ver="$(awk -F'= *' '/^version *=/ {gsub(/[^0-9]/,"",$2); print $2; exit}' "$lock")"

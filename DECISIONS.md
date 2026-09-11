@@ -477,6 +477,36 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-033 — a version number counts releases, not branches
+- **Status:** SETTLED (2026-09-11) — corrected.
+- **The mistake.** `linq_rs_sql` was bumped three times across three unmerged
+  branches — `0.1.0 → 0.1.1 → 0.2.0 → 0.3.0` — as though each branch were a
+  release. **None of `0.1.1`, `0.2.0` or `0.3.0` was ever published**; `0.1.0` is
+  still the only version on crates.io. The owner caught it by asking why the
+  number was 0.3.0.
+- **Ruling:** the version in a manifest names the **next release**, not the count
+  of breaking changes since the last one. Accumulated unreleased work collapses
+  into one version bump. Under `0.x`, a minor bump already signals breaking, so
+  everything from `D-025` through `D-032` is one release: **`linq_rs_sql 0.2.0`**.
+- **Why it matters beyond tidiness.** A version that has never been published is
+  not a fact about anything — it cannot be depended on, yanked or diffed. Three
+  of them in sequence implied a release history that does not exist, and any doc
+  citing `0.3.0` was asserting a version no user could ever have seen.
+- **`linq_rs` is not affected.** Published `0.2.0` predates the `D-025` merge, so
+  `main` is `0.2.0` plus correctness fixes and `0.2.1` is the right next number —
+  one unreleased release, patch-level. Verified: nothing under `src/` has changed
+  since `main`.
+- **The earlier symptom.** The owner had already pushed back on release framing
+  mid-session ("why are you already concerned with publishing"). I agreed that a
+  manifest version is not a release, and then kept bumping once per branch anyway.
+  Recording that here because the correction did not stick the first time.
+- **Forbids:** bumping a version because a branch contains a breaking change.
+  Bump when deciding to release, or state the target once and leave it.
+- **Enforced by:** nothing mechanical, honestly. A gate would need to know the
+  published version and the intended release, and the second is a decision, not a
+  fact. `PUBLISHING.md` records the live versions so the delta is checkable by
+  hand.
+
 ## D-032 — the dependency rule, stated by the owner
 - **Status:** SETTLED (2026-09-11) — implemented; **supersedes `D-031`**.
 - **Ruling, verbatim from the owner:**
@@ -578,8 +608,9 @@ seam, not the seam.
   empty and populated data. Plus the packaging and MSRV gates above.
 
 ## D-030 — `to_sql()` names the columns
-- **Status:** SETTLED (2026-09-11) — implemented. `linq_rs_sql 0.3.0`; the
-  emitted SQL changes.
+- **Status:** SETTLED (2026-09-11) — implemented. The emitted SQL changes, so it
+  lands in the next `linq_rs_sql` minor (`0.2.0`, the first release after the
+  published `0.1.0` — see `D-033`).
 - **Ruling:** `Rows::to_sql` and `BoxedRows::to_sql` emit the entity's declared
   columns instead of `*`. `Entity` gains `ALL_COLUMNS`, supplied by `entity!` on
   both arms.
@@ -709,7 +740,7 @@ both are legal today.
 - **Still open, and next:** `to_sql()` emits `SELECT *`. By-name reading makes
   that *safe*, not *good* — naming the columns moves order from the database's
   control to the query's and is the precondition for `.select()` projection. It
-  costs a `0.3.0` behavioural break and re-opens the dialect question, because a
+  costs a behavioural break and re-opens the dialect question, because a
   generated column list must quote identifiers and `"order"` versus `` `order` ``
   has no spelling valid on SQLite, PostgreSQL and MySQL alike.
 
