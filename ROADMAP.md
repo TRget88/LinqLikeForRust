@@ -201,6 +201,69 @@ operators were O(n²) where O(n) is achievable.
 
 ---
 
+## Phase 2.8 — `linq_rs_sql` call-site ergonomics
+
+Both found by writing real calls rather than by reading the API, which is the
+only way this class of thing surfaces.
+
+### 2.8.1 The typed query is one-shot for in-memory use
+
+`Rows::to_memory` takes `self` by value, so this does not compile:
+
+```rust
+let q = query::<Employee>().filter(pred!(employees, |e| e.salary > 100_000i64));
+let sql = q.to_sql();                      // borrows
+let got = q.to_memory(&rows);              // moves  -> E0382
+```
+
+The caller has to bind `q.to_sql()` first. The **erased** form
+(`boxed_query()`) takes `&self` and can be used repeatedly, so the asymmetry
+runs backwards from expectation: the ergonomic form is the type-erased one.
+
+`to_memory` returns a lazy iterator borrowing the predicate, which is why it
+took ownership. Worth checking whether `&self` is achievable now that `D-027`
+proved it for `BoxedRows`.
+
+### 2.8.2 Literals need explicit type suffixes
+
+`e.salary > 100_000` does not infer `i64` from the column; `100_000i64` is
+required. C# infers it, and this is the most visible remaining difference at a
+`pred!` call site. Likely wants the comparison operators to accept anything
+`Into<Lit<Self::SqlType>>` rather than a bare `Expr`, so an untyped integer
+literal has somewhere to land.
+
+---
+
+## Phase 2.9 — Schema drift is the one EF protection with no counterpart
+
+`table!` is a **hand-written declaration with no link to the real database**.
+Everything it asserts is enforced against the *declaration*, never against the
+schema. Demonstrated against real SQLite:
+
+```
+declared: table! { emp (id) { id -> Integer, salary -> Integer, bonus -> Integer } }
+actual  : CREATE TABLE emp(id INTEGER, salary TEXT)
+
+compiles cleanly, emits:  SELECT id, salary, bonus FROM emp WHERE (bonus > ?)
+the database says:        no such column: bonus
+```
+
+This is what EF closes with scaffolding (model from database) or migrations
+(database from model). Two candidate directions, neither started:
+
+- **Verify at runtime, once.** A `check_schema(&conn)` that compares
+  `ALL_COLUMNS` and the declared SQL types against the driver's introspection and
+  returns a diff. Cheap, needs a driver, catches drift at startup rather than on
+  the first query that touches the missing column.
+- **Generate the declaration.** A `table!` emitted from the live schema, so the
+  two cannot disagree. Bigger, needs a build step, and is the EF answer.
+
+Worth noting what is *already* protected so the gap is not overstated — typo'd
+column, wrong type, wrong table, hostile input and NULL semantics are all caught
+at compile time (`D-026`, `D-028`, `D-029`). Drift is the one that is not.
+
+---
+
 ## Phase 5.5 — To revisit
 
 Decided-for-now, with a named reason to look again. See `DECISIONS.md`.
