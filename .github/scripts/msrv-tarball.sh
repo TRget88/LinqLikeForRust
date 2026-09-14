@@ -64,7 +64,18 @@ echo "reading tarballs from ${PKG_DIR}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-for c in "${crates[@]}"; do tar -xzf "$c" -C "$WORK"; done
+for c in "${crates[@]}"; do
+  # A malformed .crate used to kill the script with a bare `tar: Child returned
+  # status 1` and exit 2, saying nothing about what was being checked. An
+  # interrupted `cargo package` leaves exactly that -- it happened here when the
+  # machine died mid-run. Diagnose it instead.
+  if ! tar -tzf "$c" >/dev/null 2>&1; then
+    echo "FAIL: $(basename "$c") is not a readable gzip tarball"
+    echo "      (a truncated .crate from an interrupted \`cargo package\`? delete it and re-run)"
+    exit 1
+  fi
+  tar -xzf "$c" -C "$WORK"
+done
 
 fail=0
 echo
