@@ -477,6 +477,54 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-034 — in-memory `LIKE` folds ASCII case, matching SQLite
+- **Status:** SETTLED (2026-09-14) — implemented. Closes the code finding filed by
+  the documentation truth pass.
+- **The defect.** `to_sql()` and `to_memory()` disagreed on `LIKE`. SQLite's
+  default `LIKE` folds ASCII case; the matcher compared characters literally. Six
+  of six patterns disagreed:
+  ```text
+  LIKE 'eve'    SQLite [1, 2, 3]   in-memory [2]
+  LIKE '%PL%'   SQLite [4, 5]      in-memory [5]
+  ```
+  A `to_memory` unit test passed while the database returned different rows — the
+  seam's central promise, broken by a character comparison.
+- **Why no test caught it.** Every `.like()` test was `to_sql`-string-only or
+  `to_memory`-only, over fixtures where case never varied. Nothing ran `LIKE`
+  through both interpreters against a real database.
+- **Ruling:** fold **ASCII** case. That makes the in-memory answer agree with
+  every dialect this crate can currently reach — SQLite's default and MySQL's
+  default collation both fold ASCII, and `?` placeholders already rule PostgreSQL
+  out, whose `LIKE` is case-sensitive.
+- **ASCII-only, deliberately.** SQLite folds `EVE`/`eve` and does **not** fold
+  `É`/`é`. Folding Unicode would trade one divergence for another, so
+  `char::eq_ignore_ascii_case` is exactly the right primitive and the non-ASCII
+  cases are pinned by test.
+- **Rejected: a per-column case-sensitivity flag.** It invents configuration
+  before a second dialect exists to configure for. When the dialect layer arrives
+  (still open, `D-025`), case sensitivity becomes a dialect property alongside
+  placeholder style and identifier quoting — which is where it belongs.
+- **Rejected: documenting `LIKE` as SQL-only.** That surrenders the seam for one
+  operator when agreement was available.
+- **`D-103` still governs.** The promise is a documented per-operator stability
+  class, not identity across providers, and `LIKE`'s class remains
+  provider-defined. The README says which dialects agree rather than claiming
+  agreement flatly — the unqualified claim is what `D-103` forbids.
+- **Enforced by:** `linq_rs_sql/tests/like.rs` — a 43-case corpus whose every
+  expected value was **derived by asking SQLite**, plus
+  `.github/scripts/like-differential.py`, which re-derives them in CI and fails if
+  SQLite and the table ever disagree. That script is what stops the expectations
+  being self-referential: nothing in the corpus is checked against the
+  implementation that produced it. Verified failing in both directions — a
+  corrupted expectation is caught by the script, a regressed matcher by the test
+  (12 of 43 cases).
+- **The oracle is python3's built-in `sqlite3`, not a Rust crate.** `D-032`
+  permits no third-party dependency anywhere in this workspace, and that includes
+  a dev-dependency of a `publish = false` test crate — it would still appear in the
+  resolved graph `packaging-gate.sh` checks. The differential crossing a language
+  boundary is a feature here, not a workaround: the oracle shares no code with the
+  implementation.
+
 ## D-033 — a version number counts releases, not branches
 - **Status:** SETTLED (2026-09-11) — corrected.
 - **The mistake.** `linq_rs_sql` was bumped three times across three unmerged

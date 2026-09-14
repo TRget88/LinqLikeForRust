@@ -308,19 +308,21 @@ They agree, checked against a real SQLite, for `=`, `!=`, `<`, `>`, `IS NULL`,
 `IS NOT NULL`, `NOT`, `AND`, `OR`, `LIMIT`/`OFFSET`, `ORDER BY`, and
 three-valued `NULL` logic.
 
-**They do not agree for `LIKE`, and that is a known defect, not a nuance.**
-SQLite's `LIKE` folds ASCII case; the in-memory matcher is case-sensitive. Every
-pattern in a six-case check disagreed:
+`LIKE` agrees too, but only for the dialects this crate can reach, and that
+distinction is real. The in-memory matcher folds **ASCII** case, matching SQLite's
+default `LIKE` and MySQL's default collation. It does **not** fold non-ASCII,
+because SQLite does not either — `É` does not match `é` on either side.
 
-```text
-LIKE 'eve'    SQLite [1, 2, 3]   in-memory [2]
-LIKE '%PL%'   SQLite [4, 5]      in-memory [5]
-```
+PostgreSQL's `LIKE` is case-sensitive, so the in-memory answer would differ there.
+That costs nothing today (`?` placeholders already rule PostgreSQL out) but it is
+why `D-103` classifies `LIKE` **provider-defined**: the promise is a documented
+per-operator stability class, not result identity across every provider.
 
-So a `to_memory` test can pass while the database returns different rows. `LIKE`
-is classified **provider-defined** (`D-103`): what it promises is a documented
-per-operator stability class, never result identity across providers. Until the
-in-memory matcher is reconciled, treat `LIKE` as SQL-only.
+All 43 cases are derived from a real SQLite and re-checked in CI by
+[`like-differential.py`](https://github.com/TRget88/LinqLikeForRust/blob/main/.github/scripts/like-differential.py),
+so the two implementations cannot drift apart silently. They did once: before
+`D-034` the matcher compared characters literally and every case-varying pattern
+disagreed.
 
 The compile-time checks are against your `table!`/`entity!` declaration, not
 against the live database. An undeclared column, a wrong SQL type and a column

@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — in-memory `LIKE` disagreed with SQLite on every case-varying pattern (D-034)
+
+The seam's central promise is that one query value gives one answer. It did not,
+for `LIKE`:
+
+```text
+LIKE 'eve'    SQLite [1, 2, 3]   in-memory [2]
+LIKE '%PL%'   SQLite [4, 5]      in-memory [5]
+```
+
+SQLite's default `LIKE` folds ASCII case; the matcher compared characters
+literally. So a `to_memory` unit test passed while the database returned different
+rows. No test caught it because every `.like()` test was `to_sql`-string-only or
+`to_memory`-only, over fixtures where case never varied.
+
+The matcher now folds **ASCII** case, which agrees with every dialect this crate
+can reach — SQLite's default and MySQL's default collation. **Not** Unicode:
+SQLite folds `EVE`/`eve` and does not fold `É`/`é`, so folding more would trade one
+divergence for another.
+
+Rejected a per-column case-sensitivity flag (it invents configuration before a
+second dialect exists) and documenting `LIKE` as SQL-only (it surrenders the seam
+when agreement was available). `D-103` still governs: the README says *which*
+dialects agree rather than claiming agreement flatly, because the unqualified claim
+is the one `D-103` forbids.
+
+Gated by a 43-case corpus whose every expected value was derived by asking SQLite,
+plus `.github/scripts/like-differential.py`, which re-derives them in CI. The oracle
+is python3's built-in `sqlite3`, not a Rust crate — `D-032` permits no dependency
+anywhere, and the differential crossing a language boundary means the oracle shares
+no code with the implementation.
+
 ### Removed — `linq_rs_sqlite`, for taking a dependency (D-032)
 
 The dependency rule, stated by the owner and now recorded as `D-032`:

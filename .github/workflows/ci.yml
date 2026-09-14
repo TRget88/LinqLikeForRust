@@ -94,6 +94,11 @@ jobs:
       # D-009 / D-012. A ruling in DECISIONS.md that is checked by nothing is a
       # ruling that gets broken again: 0.1.0 shipped with no `repository`, the
       # wrong licence, and 421 lines of dead test code in the tarball.
+      # D-034: the in-memory LIKE matcher must answer what SQLite answers. The
+      # oracle is python3's built-in sqlite3, because D-032 permits no Rust
+      # dependency anywhere -- including a dev-dep of a publish = false crate.
+      - name: LIKE differential vs a real SQLite
+        run: python3 .github/scripts/like-differential.py
       - name: Packaging and licence gate
         if: runner.os == 'Linux'
         shell: bash

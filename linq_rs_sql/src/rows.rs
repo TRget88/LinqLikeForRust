@@ -606,7 +606,13 @@ fn like_match(text: &str, pattern: &str) -> bool {
                 mark = ti;
                 pi += 1;
             }
-            (Some(t), Some(p)) if p == '_' || p == t => {
+            // ASCII case is folded, matching SQLite's default `LIKE` exactly —
+            // and MySQL's default collation. It is what makes `to_memory` agree
+            // with every dialect this crate can currently reach (`?`
+            // placeholders rule PostgreSQL out). ASCII-ONLY is deliberate:
+            // SQLite folds `EVE`/`eve` and does NOT fold `É`/`é`, so folding
+            // Unicode here would trade one divergence for another. See D-034.
+            (Some(t), Some(p)) if p == '_' || p.eq_ignore_ascii_case(&t) => {
                 ti += t.len_utf8();
                 pi += p.len_utf8();
             }
