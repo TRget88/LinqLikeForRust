@@ -23,6 +23,11 @@ import sys
 import re
 from pathlib import Path
 
+# Windows consoles default to cp1252; printing a corpus row with `É` in it would
+# raise UnicodeEncodeError and hide the real diagnosis.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+
 RUST_TEST = Path(__file__).resolve().parents[2] / "linq_rs_sql" / "tests" / "like.rs"
 
 # (text, pattern) pairs. Chosen to cover: ASCII case in both directions, the two
@@ -72,7 +77,12 @@ def rust_expectations() -> dict:
     if not RUST_TEST.exists():
         print(f"FAIL: {RUST_TEST} does not exist", file=sys.stderr)
         sys.exit(1)
-    src = RUST_TEST.read_text()
+    # `encoding="utf-8"` is not optional: `read_text()` defaults to the LOCALE
+    # encoding, which is cp1252 on Windows, and the non-ASCII corpus rows come
+    # back as replacement characters. Caught by the Windows CI matrix -- the same
+    # class of bug as the `unicode_escape` mistake below, an unstated assumption
+    # about how bytes become text.
+    src = RUST_TEST.read_text(encoding="utf-8")
     m = re.search(r"const CORPUS: &\[\(&str, &str, bool\)\] = &\[(.*?)\];", src, re.S)
     if not m:
         print("FAIL: could not find `const CORPUS` in the Rust test", file=sys.stderr)
