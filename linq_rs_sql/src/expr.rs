@@ -6,7 +6,9 @@
 //! literal is emitted as a `?` placeholder; nothing user-supplied is
 //! inlined into the SQL text.
 
-use crate::types::{Boolean, Float, Integer, SqlType, Text};
+use crate::types::{
+    Boolean, CompareWith, Family, Float, Integer, LogicWith, Negate, Nullable, SqlType, Text,
+};
 use crate::value::SqlValue;
 use core::marker::PhantomData;
 
@@ -163,12 +165,20 @@ macro_rules! define_binary_compare {
             pub(crate) right: R,
         }
 
+        impl<T, L: $crate::expr::BelongsTo<T>, R: $crate::expr::BelongsTo<T>>
+            $crate::expr::BelongsTo<T> for $name<L, R>
+        {
+        }
+
         impl<L, R> Expr for $name<L, R>
         where
             L: Expr,
-            R: Expr<SqlType = L::SqlType>,
+            R: Expr,
+            L::SqlType: CompareWith<R::SqlType>,
         {
-            type SqlType = Boolean;
+            // NOT `Boolean`. Comparing anything to a nullable operand yields
+            // `Nullable<Boolean>`, because in SQL it yields NULL, not FALSE.
+            type SqlType = <L::SqlType as CompareWith<R::SqlType>>::Out;
             fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
                 sql.push('(');
                 self.left.write_to(sql, params);
@@ -218,10 +228,11 @@ pub struct And<L, R> {
 
 impl<L, R> Expr for And<L, R>
 where
-    L: Expr<SqlType = Boolean>,
-    R: Expr<SqlType = Boolean>,
+    L: Expr,
+    R: Expr,
+    L::SqlType: LogicWith<R::SqlType>,
 {
-    type SqlType = Boolean;
+    type SqlType = <L::SqlType as LogicWith<R::SqlType>>::Out;
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
         sql.push('(');
         self.left.write_to(sql, params);
@@ -240,10 +251,11 @@ pub struct Or<L, R> {
 
 impl<L, R> Expr for Or<L, R>
 where
-    L: Expr<SqlType = Boolean>,
-    R: Expr<SqlType = Boolean>,
+    L: Expr,
+    R: Expr,
+    L::SqlType: LogicWith<R::SqlType>,
 {
-    type SqlType = Boolean;
+    type SqlType = <L::SqlType as LogicWith<R::SqlType>>::Out;
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
         sql.push('(');
         self.left.write_to(sql, params);
@@ -259,8 +271,12 @@ pub struct Not<E> {
     pub(crate) inner: E,
 }
 
-impl<E: Expr<SqlType = Boolean>> Expr for Not<E> {
-    type SqlType = Boolean;
+impl<E> Expr for Not<E>
+where
+    E: Expr,
+    E::SqlType: Negate,
+{
+    type SqlType = <E::SqlType as Negate>::Out;
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
         sql.push_str("NOT (");
         self.inner.write_to(sql, params);
@@ -270,7 +286,11 @@ impl<E: Expr<SqlType = Boolean>> Expr for Not<E> {
 
 /// Boolean negation. Free function because `.not()` would collide with
 /// [`std::ops::Not`] when called on a `bool` literal.
-pub fn not<E: Expr<SqlType = Boolean>>(expr: E) -> Not<E> {
+pub fn not<E>(expr: E) -> Not<E>
+where
+    E: Expr,
+    E::SqlType: Negate,
+{
     Not { inner: expr }
 }
 
@@ -287,10 +307,13 @@ pub struct Like<L, R> {
 
 impl<L, R> Expr for Like<L, R>
 where
-    L: Expr<SqlType = Text>,
-    R: Expr<SqlType = Text>,
+    L: Expr,
+    R: Expr,
+    L::SqlType: Family<Base = Text> + CompareWith<R::SqlType>,
+    R::SqlType: Family<Base = Text>,
 {
-    type SqlType = Boolean;
+    // `NULL LIKE 'a%'` is NULL in SQL, verified against SQLite.
+    type SqlType = <L::SqlType as CompareWith<R::SqlType>>::Out;
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
         sql.push('(');
         self.left.write_to(sql, params);
@@ -318,3 +341,131 @@ impl<E: Expr> Expr for IsNull<E> {
         sql.push_str(" IS NULL)");
     }
 }
+
+/// `expr IS NOT NULL`. Produced by `.is_not_null`.
+#[derive(Debug, Clone, Copy)]
+pub struct IsNotNull<E> {
+    pub(crate) inner: E,
+}
+
+impl<E: Expr> Expr for IsNotNull<E> {
+    // Always two-valued: `x IS NULL` and `x IS NOT NULL` are never NULL.
+    type SqlType = Boolean;
+    fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
+        sql.push('(');
+        self.inner.write_to(sql, params);
+        sql.push_str(" IS NOT NULL)");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The NULL literal
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// `Option<T>` is the literal form of a nullable value: `Some(3i64)` binds
+/// `3`, `None::<i64>` binds SQL `NULL`.
+///
+/// Note what this makes possible and what it does not. `score.eq(None::<i64>)`
+/// compiles and renders `(score = ?)` with a `NULL` parameter — which is
+/// *never true* in SQL, and is never true here either. It is not rewritten
+/// into `IS NULL`; rewriting it would be a different query.
+impl<T: Expr> Expr for Option<T> {
+    type SqlType = Nullable<T::SqlType>;
+    fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
+        match self {
+            Some(v) => v.write_to(sql, params),
+            None => {
+                sql.push('?');
+                params.push(SqlValue::Null);
+            }
+        }
+    }
+}
+
+/// Build an `And` node with no bounds — the type checking happens in
+/// `impl Expr for And`. Used by `rows::Conj`, which must not re-state the
+/// bounds.
+pub(crate) fn and_node<L, R>(left: L, right: R) -> And<L, R> {
+    And { left, right }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BelongsTo — which table an expression's columns come from
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// An expression every column of which belongs to table `T`.
+///
+/// Without this, a query over one table could be filtered by another table's
+/// column and the mismatch would only surface as a database error at runtime:
+///
+/// ```text
+/// query::<Employee>().filter(departments::budget.gt(100))
+/// // SELECT * FROM employees WHERE (budget > ?)      <- no such column
+/// ```
+///
+/// The in-memory interpreter already rejected that, because `Eval<'_, Row>` is
+/// only implemented for the row's own columns. `to_sql()` did not — which is
+/// backwards, since SQL is the production path. `BelongsTo` gives the SQL half
+/// the same guarantee, at compile time. See `D-028`.
+///
+/// **Literals belong to every table**, because they have no columns. That is
+/// what makes `salary.gt(100)` legal over any table that has a `salary`.
+///
+/// Implemented for columns by the [`table!`](crate::table) macro rather than by
+/// a blanket impl over [`Column`](crate::Column): a blanket impl would overlap
+/// the literal impls below, and Rust cannot prove `i64: !Column`.
+/// A query over one table cannot be filtered by another table's column:
+///
+/// ```compile_fail
+/// use linq_rs_sql::prelude::*;
+/// table! { employees (id) { id -> Integer, salary -> Integer } }
+/// table! { departments (id) { id -> Integer, budget -> Integer } }
+/// pub struct Employee { pub id: i64, pub salary: i64 }
+/// entity! { Employee => employees { id: Integer = id, salary: Integer = salary } }
+///
+/// // error[E0277]: the trait bound `budget: BelongsTo<employees::Marker>`
+/// //               is not satisfied
+/// let _ = query::<Employee>().filter(departments::budget.gt(100i64)).to_sql();
+/// ```
+///
+/// The same check applies to the SQL-only builder:
+///
+/// ```compile_fail
+/// use linq_rs_sql::prelude::*;
+/// table! { employees (id) { id -> Integer } }
+/// table! { departments (id) { budget -> Integer } }
+///
+/// let _ = employees::table().filter(departments::budget.gt(100i64)).to_sql();
+/// ```
+///
+/// A column from the query's own table, and any literal, are fine:
+///
+/// ```rust
+/// use linq_rs_sql::prelude::*;
+/// table! { employees (id) { id -> Integer, salary -> Integer } }
+/// pub struct Employee { pub id: i64, pub salary: i64 }
+/// entity! { Employee => employees { id: Integer = id, salary: Integer = salary } }
+///
+/// let q = query::<Employee>().filter(employees::salary.gt(100i64));
+/// assert_eq!(q.to_sql().sql, "SELECT id, salary FROM employees WHERE (salary > ?)");
+/// ```
+pub trait BelongsTo<T> {}
+
+// Literals: no columns, so every table.
+impl<T> BelongsTo<T> for i32 {}
+impl<T> BelongsTo<T> for i64 {}
+impl<T> BelongsTo<T> for bool {}
+impl<T> BelongsTo<T> for f32 {}
+impl<T> BelongsTo<T> for f64 {}
+impl<T> BelongsTo<T> for String {}
+impl<T> BelongsTo<T> for &str {}
+impl<T, S: SqlType> BelongsTo<T> for Lit<S> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for Option<E> {}
+
+// Combinators: belong to `T` exactly when every operand does.
+impl<T, L: BelongsTo<T>, R: BelongsTo<T>> BelongsTo<T> for And<L, R> {}
+impl<T, L: BelongsTo<T>, R: BelongsTo<T>> BelongsTo<T> for Or<L, R> {}
+impl<T, L: BelongsTo<T>, R: BelongsTo<T>> BelongsTo<T> for Like<L, R> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for Not<E> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for IsNull<E> {}
+impl<T, E: BelongsTo<T>> BelongsTo<T> for IsNotNull<E> {}

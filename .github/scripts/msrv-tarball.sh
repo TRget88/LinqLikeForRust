@@ -64,7 +64,18 @@ echo "reading tarballs from ${PKG_DIR}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-for c in "${crates[@]}"; do tar -xzf "$c" -C "$WORK"; done
+for c in "${crates[@]}"; do
+  # A malformed .crate used to kill the script with a bare `tar: Child returned
+  # status 1` and exit 2, saying nothing about what was being checked. An
+  # interrupted `cargo package` leaves exactly that -- it happened here when the
+  # machine died mid-run. Diagnose it instead.
+  if ! tar -tzf "$c" >/dev/null 2>&1; then
+    echo "FAIL: $(basename "$c") is not a readable gzip tarball"
+    echo "      (a truncated .crate from an interrupted \`cargo package\`? delete it and re-run)"
+    exit 1
+  fi
+  tar -xzf "$c" -C "$WORK"
+done
 
 fail=0
 echo
@@ -74,6 +85,17 @@ for d in "$WORK"/*/; do
   # -- stale artifacts there would otherwise be silently graded as if they ship.
   name="$(awk -F'"' '/^name *=/ {print $2; exit}' "${d}Cargo.toml")"
   case " ${PUBLISHABLE} " in *" ${name} "*) ;; *) echo "skipping ${pkg} (not publishable)"; continue ;; esac
+  # Grade only the CURRENT version. `target/package/` accumulates .crate files
+  # across version bumps, and grading a stale one reports on an artifact that
+  # will never be published -- a linq_rs_sql-0.3.0 tarball survived a bump back
+  # to 0.2.0 and was still being built here. Same class as reading the repo when
+  # the subject is the tarball (D-023).
+  want_ver="$(cargo metadata --no-deps --format-version 1 \
+    | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${name}'][0]; print(p['version'])")"
+  if [ "${pkg}" != "${name}-${want_ver}" ]; then
+    echo "skipping ${pkg} (stale; ${name} is ${want_ver})"
+    continue
+  fi
   lock="${d}Cargo.lock"
   [ -f "$lock" ] || { echo "FAIL: ${pkg} ships no Cargo.lock"; fail=1; continue; }
   ver="$(awk -F'= *' '/^version *=/ {gsub(/[^0-9]/,"",$2); print $2; exit}' "$lock")"
@@ -84,9 +106,30 @@ for d in "$WORK"/*/; do
     continue
   fi
 
-  # Both published crates have zero dependencies of any kind (D-024), so every
-  # tarball builds fully offline. If this ever needs a `[patch.crates-io]` to
-  # get through, a dependency crept back in.
+  # No crate here has a third-party dependency (D-032), so every tarball builds
+  # fully offline; the guard below is what keeps that true.
+  # The PROVIDER (D-031) depends on `linq_rs_sql` and a driver, so its tarball
+  # cannot resolve offline until those are published. Point its sibling
+  # dependency at the extracted sibling TARBALL -- not at the working tree, so
+  # this still grades the packaged artifact -- and let the registry supply the
+  # driver.
+  # Every tarball must build fully OFFLINE, because D-032 permits no third-party
+  # dependency anywhere: `linq_rs` has none and `linq_rs_sql` may have only
+  # `linq_rs`. So a shipped manifest with a dependency is itself the failure --
+  # this used to patch around it and resolve from the registry, which quietly
+  # accommodated exactly what the rule forbids.
+  #
+  # Read from the TARBALL's manifest, and match `[dependencies.` with the dot:
+  # `cargo package` NORMALISES a dependency to `[dependencies.name]`, never
+  # `[dependencies]` + `name = ...`. An earlier version matched the repo's shape
+  # and so silently never fired -- the same mistake D-023 exists to stop.
+  if grep -qE '^\[dependencies\.' "${d}Cargo.toml"; then
+    echo "FAIL: ${pkg}'s tarball declares a dependency:"
+    grep -E '^\[dependencies\.' "${d}Cargo.toml" | sed 's/^/    /'
+    echo "      D-032 permits none outside linq_rs_sql -> linq_rs."
+    fail=1
+    continue
+  fi
 
   if (cd "$d" && rustup run "$MSRV_TC" cargo build --lib --offline 2>&1 | tail -3); then
     echo "  builds on ${MSRV_TC}"

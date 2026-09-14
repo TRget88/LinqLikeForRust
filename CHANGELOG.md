@@ -7,6 +7,272 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — in-memory `LIKE` disagreed with SQLite on every case-varying pattern (D-034)
+
+The seam's central promise is that one query value gives one answer. It did not,
+for `LIKE`:
+
+```text
+LIKE 'eve'    SQLite [1, 2, 3]   in-memory [2]
+LIKE '%PL%'   SQLite [4, 5]      in-memory [5]
+```
+
+SQLite's default `LIKE` folds ASCII case; the matcher compared characters
+literally. So a `to_memory` unit test passed while the database returned different
+rows. No test caught it because every `.like()` test was `to_sql`-string-only or
+`to_memory`-only, over fixtures where case never varied.
+
+The matcher now folds **ASCII** case, which agrees with every dialect this crate
+can reach — SQLite's default and MySQL's default collation. **Not** Unicode:
+SQLite folds `EVE`/`eve` and does not fold `É`/`é`, so folding more would trade one
+divergence for another.
+
+Rejected a per-column case-sensitivity flag (it invents configuration before a
+second dialect exists) and documenting `LIKE` as SQL-only (it surrenders the seam
+when agreement was available). `D-103` still governs: the README says *which*
+dialects agree rather than claiming agreement flatly, because the unqualified claim
+is the one `D-103` forbids.
+
+Gated by a 43-case corpus whose every expected value was derived by asking SQLite,
+plus `.github/scripts/like-differential.py`, which re-derives them in CI. The oracle
+is python3's built-in `sqlite3`, not a Rust crate — `D-032` permits no dependency
+anywhere, and the differential crossing a language boundary means the oracle shares
+no code with the implementation.
+
+### Removed — `linq_rs_sqlite`, for taking a dependency (D-032)
+
+The dependency rule, stated by the owner and now recorded as `D-032`:
+
+- `linq_rs` — **no dependencies**
+- `linq_rs_sql` — **only `linq_rs`**
+- **nothing else is acceptable**
+
+`linq_rs_sqlite` violated it. One driver dependency pulled **24 crates** into the
+resolved graph (`rusqlite → libsqlite3-sys → cc, pkg-config, vcpkg, syn, …`), so
+the crate is deleted.
+
+`D-031` had argued a provider crate was fine because it kept the two core crates
+clean. That answered a question that was not asked: the rule is that the *project*
+takes no third-party dependency, not that the core two stay clean.
+
+**Nothing structural is lost.** `ColumnSet`, `RowSource`, `FromRow`, `LoadOpt` and
+`LoadField` are all in `linq_rs_sql` with no dependencies — the deleted crate was
+only the rusqlite glue, which is what a user was always going to write. It is
+preserved verbatim in `docs/DRIVER_ADAPTER.md`, about 36 lines, along with
+everything it was verified to do against a real SQLite.
+
+The packaging gate now enforces the rule on the **resolved** dependency graph
+rather than the manifests, because a transitive dependency is still a dependency.
+
+### Added — `linq_rs_sqlite 0.1.0`, the SQLite provider (D-031)
+
+Queries now execute. A third crate, so the other two stay dependency-free.
+
+```rust
+use linq_rs_sqlite::Sqlite;
+
+let db = Sqlite::new(&conn);
+let staff: Vec<Employee> = db.fetch(
+    &query::<Employee>()
+        .filter(pred!(employees, |e| e.salary > 100_000i64 && e.dept == "eng"))
+        .order_by_desc(employees::salary)
+        .to_sql(),
+)?;
+```
+
+`fetch`, `fetch_one`, `count`. That is the whole surface.
+
+- **Not a feature flag on `linq_rs_sql`.** An optional dependency is still a
+  dependency — it ends the zero-dependency claim and lands in the lockfile of
+  everyone who only wanted SQL strings. Splitting is what lets D-024 stay true.
+  It is also EF Core's own architecture: core plus a provider package per
+  database.
+- It does **not** hide SQLite — no pool, no transaction wrapper, no `DbContext`.
+  You own the `rusqlite::Connection`; `Sqlite<'c>` borrows it.
+- `count` wraps rather than rewrites (`SELECT COUNT(*) FROM (<sql>)`), so a
+  `LIMIT` is not silently dropped.
+- 12 tests against a real in-memory SQLite, including **the database and the
+  in-memory interpreter agreeing on the same query value**.
+- **First place the dialect assumption is written down:** `linq_rs_sql` emits `?`
+  placeholders, which PostgreSQL rejects (it wants `$1`). There is consequently no
+  PostgreSQL provider, and a dialect layer is still open work.
+
+### Changed — `to_sql()` names the columns instead of emitting `*` (D-030)
+
+`linq_rs_sql 0.2.0`. **The emitted SQL changes**, so a snapshot test on it will
+move:
+
+```diff
+- SELECT * FROM employees WHERE (salary > ?) ORDER BY salary DESC
++ SELECT id, name, dept, salary, nick, active FROM employees WHERE (salary > ?) ORDER BY salary DESC
+```
+
+D-029 made `SELECT *` *safe* by reading columns by name. This makes it
+unnecessary, and is **the precondition for projection** — a query cannot select
+a subset of columns while its SELECT list is a wildcard, so `.select()` was
+unreachable without it.
+
+It is also defence in depth: column order moves from the database's control to
+the query's, and resolution then provably returns the identity permutation.
+
+- `Entity` gains `ALL_COLUMNS`, supplied by `entity!` on both arms. **Required
+  with no default** — a default of `&[]` would silently fall back to `SELECT *`
+  for an entity that forgot it. Breaking for hand-written `Entity` impls.
+- Named `ALL_COLUMNS` rather than `COLUMNS` because `FromRow::COLUMNS` already
+  exists and `Emp::COLUMNS` was `E0034`. That is the same class of defect that
+  disqualified `linq_rs 0.1.0`.
+- **The lower-level `Query` builder still emits `*`**, deliberately: it has no
+  `Entity`, so there is no declared list to name. `employees::table()` gives
+  `SELECT *`; `query::<Employee>()` gives the named list.
+- Identifiers are still emitted **unquoted**. A column named `order` was already
+  broken before this — the crate emits `WHERE (order > ?)`, which real SQLite
+  rejects. Quoting is a dialect question wanting one ruling across every
+  emission site, not a special case in the SELECT list.
+
+### Added — row materialization: `FromRow`, `RowError`, and a driver seam (D-029)
+
+A query result can now become typed structs. `entity!` generates the reverse
+direction from the declaration it already had.
+
+```rust
+let stmt = conn.prepare(&q.to_sql().sql)?;
+let layout = Emp::resolve(&Stmt(&stmt))?;      // once per statement
+let emp = Emp::from_row(&Row(row, n), &layout)?;
+```
+
+The crate still executes nothing. A driver adapter implements `ColumnSet` and
+one method of `RowSource` — measured at 36 lines for rusqlite.
+
+- **Columns are matched by NAME, never by position.** `SELECT *` expands in
+  table-declaration order, which this crate cannot pin and which a migration
+  changes under an already-compiled binary. A positional decoder turns that into
+  a silent wrong value. Verified: a table physically ordered
+  `dept, active, id, nick, salary, name` resolves to `[2,5,0,4,3,1]` and
+  materializes correctly.
+- **Booleans accept only 0 and 1.** Every other SQLite binding treats non-zero
+  as true; doing so breaks the seam. For `active INTEGER` holding `1, 0, -1, 2`,
+  SQL `WHERE active = ?` bound `true` keeps `[1]` while a permissive reader keeps
+  `[1, 3, 4]`. Narrowing is likewise checked, never an `as` cast.
+- **`ColumnSet` is separate from `RowSource`** so resolution needs no row —
+  otherwise an empty result set and a populated one give different verdicts for
+  the same schema.
+- **A duplicated column name is an error, not first-wins.** `SELECT * FROM a
+  JOIN b` yields two `id` columns, and silently taking one makes the other
+  table's data unreachable.
+- **`Layout<R>` is tied to its shape**, so a layout resolved for one entity
+  cannot be used with another of the same arity.
+- `RowError` is `#[non_exhaustive]`, carries the column name as `&'static str`
+  (no allocation), and can be given a row ordinal with `.at_row(n)`. A missing
+  column and a NULL value are deliberately different variants.
+- `Nullable<S>` needs no duplicate decoding impls — `LoadField` lifts `LoadOpt`
+  once.
+- Opt out with `entity! { … } no_from_row` when the struct has a borrowed field
+  or a field that is not a column.
+
+### Fixed — a query could be filtered by another table's column (D-028)
+
+```rust
+query::<Employee>().filter(departments::budget.gt(100i64)).to_sql()
+// SELECT * FROM employees WHERE (budget > ?)
+```
+
+That SQL fails at runtime with *no such column* — or worse, silently matches a
+same-named column meaning something else. It was present in **both** builders.
+
+The in-memory path always rejected it, because `Eval<'_, Row>` is only
+implemented for the row's own columns. `to_sql()` did not, so the production
+path had the weaker guarantee.
+
+Now a marker trait `BelongsTo<T>` is required by `Query::filter`,
+`Rows::filter`, `Rows::to_sql` and `BoxedRows::filter`. Literals belong to every
+table (they have no columns), so `salary.gt(100)` is unaffected; combinators
+belong to `T` when every operand does. The error names both tables:
+
+```
+error[E0277]: the trait bound `budget: BelongsTo<employees::Marker>` is not satisfied
+help: the trait `BelongsTo<employees::Marker>` is not implemented for `budget`
+      but trait `BelongsTo<departments::Marker>` is implemented for it
+```
+
+Column impls are generated by `table!` rather than by a blanket impl over
+`Column`, which would overlap the literal impls — Rust cannot prove
+`i64: !Column`.
+
+### Added — `into_boxed()`, for queries the type system cannot follow (D-027)
+
+Every `.filter()` used to return a different type, so this did not compile:
+
+```rust
+let mut q = query::<Employee>();
+if want_eng { q = q.filter(employees::dept.eq("eng")); }   // E0308
+```
+
+Now it does, via an erased form whose type stays put:
+
+```rust
+fn build(s: &Search) -> Boxed<T> {
+    let mut q = boxed_query::<T>();
+    if let Some(m) = s.min_score { q = q.filter(t::score.gt(m)); }
+    if s.only_named              { q = q.filter(t::nick.is_not_null()); }
+    q
+}
+```
+
+Conditional filters, a query in a struct field, a query returned from a
+function, and a `Vec` of differently-shaped queries all work.
+
+- **The type check survives erasure completely.** It fires at the `.gt()` call,
+  before the box — `employees::dept.gt(3i64)` is still `E0271` on both paths.
+- **Erased once, not twice.** `DynPred` carries the SQL half and the in-memory
+  half behind one trait object, keyed on the same bounds `to_memory` already
+  requires, so nothing can be boxed for one interpreter and not the other.
+- **Sealed.** A public, unsealed `DynPred` would let a hand-written impl make
+  SQL select every row and memory select none from the same value, through safe
+  API. `mod sealed` prevents it and costs legitimate users nothing.
+- **Three-valued**, per D-026: `eval_row` returns `Option<bool>`. Collapsing to
+  `bool` inside the box would be wrong under negation, since `is_true(NOT NULL)`
+  is `false` while `!is_true(NULL)` is `true`.
+- Chosen over a runtime expression AST, which was prototyped and measured at
+  2.3×–5.0× slower and which made a type-mismatched comparison representable
+  again.
+
+### Added — nullable columns with SQL three-valued logic (D-026)
+
+`linq_rs_sql 0.2.0`. Columns can now be `NULL`, and both interpreters agree
+about what that means.
+
+```rust
+table! { t (id) { id -> Integer, nick -> Nullable<Text>, score -> Nullable<Integer> } }
+pub struct T { pub id: i64, pub nick: Option<String>, pub score: Option<i64> }
+entity! { T => t { id: Integer = id, nick: Nullable<Text> = nick, score: Nullable<Integer> = score } }
+
+query::<T>().filter(t::nick.is_null())
+query::<T>().filter(t::score.gt(5i64))
+```
+
+Previously an `Option<String>` field gave `E0608: cannot index into a value of
+type Option<String>` — a raw leak that did not mention nullability.
+
+- **Nullability is a type-level property.** `Nullable<T>` is a distinct SQL
+  marker; `Repr<Nullable<T>>::Rust = Option<T::Rust>`, so `Option<bool>` *is*
+  the three-valued type and `None` is UNKNOWN. A comparison touching a nullable
+  column has type `Nullable<Boolean>` rather than `Boolean`, and both
+  interpreters can see the difference.
+- **Three values collapse to two only at `WHERE`**, which keeps a row when the
+  predicate is TRUE and drops it for FALSE and NULL alike. That is where SQL
+  puts the collapse, and it never happens inside the expression tree.
+- **The two cells that matter:** `NULL AND FALSE` is FALSE and `NULL OR TRUE` is
+  TRUE — an absorbing operand beats the unknown. A naive `Option` zip returns
+  UNKNOWN for both. Verified against real SQLite.
+- `is_null()` / `is_not_null()` now evaluate in memory; previously `is_null`
+  rendered SQL but had no `Eval` impl at all.
+- Nullable and non-nullable columns can be compared to each other; the result
+  is nullable.
+
+**`entity!` accepts a type rather than a marker name** — `$ty:ty`, not
+`$ty:ident` — because `Nullable<Text>` is a type and not a matchable token. No
+call site changed: all 184 pre-existing tests passed untouched.
+
 ### Fixed — three silent wrong answers in the published crates (D-025)
 
 `linq_rs 0.2.1` and `linq_rs_sql 0.1.1`. All three shipped; all three produced a

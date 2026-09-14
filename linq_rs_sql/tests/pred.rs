@@ -63,7 +63,7 @@ fn and_binds_tighter_than_or() {
         .to_sql();
     assert_eq!(
         q.sql,
-        "SELECT * FROM employees WHERE ((salary > ?) OR ((dept = ?) AND (salary >= ?)))"
+        "SELECT id, name, dept, salary FROM employees WHERE ((salary > ?) OR ((dept = ?) AND (salary >= ?)))"
     );
 }
 
@@ -75,7 +75,7 @@ fn parentheses_override_precedence() {
         .to_sql();
     assert_eq!(
         q.sql,
-        "SELECT * FROM employees WHERE (((dept = ?) OR (dept = ?)) AND (salary > ?))"
+        "SELECT id, name, dept, salary FROM employees WHERE (((dept = ?) OR (dept = ?)) AND (salary > ?))"
     );
 }
 
@@ -142,7 +142,7 @@ fn the_same_macro_built_value_evaluates_in_memory() {
 
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE ((salary > ?) AND (dept = ?))"
+        "SELECT id, name, dept, salary FROM employees WHERE ((salary > ?) AND (dept = ?))"
     );
     let names: Vec<&str> = q.to_memory(&people).map(|e| e.name.as_str()).collect();
     assert_eq!(names, ["Ada"]);

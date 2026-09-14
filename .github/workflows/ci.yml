@@ -94,6 +94,11 @@ jobs:
       # D-009 / D-012. A ruling in DECISIONS.md that is checked by nothing is a
       # ruling that gets broken again: 0.1.0 shipped with no `repository`, the
       # wrong licence, and 421 lines of dead test code in the tarball.
+      # D-034: the in-memory LIKE matcher must answer what SQLite answers. The
+      # oracle is python3's built-in sqlite3, because D-032 permits no Rust
+      # dependency anywhere -- including a dev-dep of a publish = false crate.
+      - name: LIKE differential vs a real SQLite
+        run: python3 .github/scripts/like-differential.py
       - name: Packaging and licence gate
         if: runner.os == 'Linux'
         shell: bash
@@ -165,6 +170,10 @@ jobs:
       # v4 lockfile against `rust-version = "1.65"` and could not build on 1.65
       # at all; every check above passed because none looked inside the
       # tarball. (D-023)
+      # Every tarball builds fully OFFLINE, because no crate here has a
+      # third-party dependency (D-032). If this step ever needs the registry,
+      # a dependency has crept in and msrv-tarball.sh fails rather than
+      # helpfully resolving it.
       - name: Build the packaged tarballs on MSRV
         shell: bash
         run: ./.github/scripts/msrv-tarball.sh

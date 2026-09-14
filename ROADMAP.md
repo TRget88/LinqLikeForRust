@@ -5,7 +5,8 @@ It is organized by phase, with each phase shippable on its own.
 
 **This file is a work list, not a source of decisions.** Scope and API rulings
 live in [DECISIONS.md](DECISIONS.md); cite `D-NNN` rather than restating them.
-Phases 1 and 2 grew the surface from 48 to 90 methods, which `AUDIT.md` finding
+Phases 1 and 2 grew the surface from 48 to 90 methods (a figure from 2026-09-09;
+the surface is 62 today after the `D-019` cut), which `AUDIT.md` finding
 A-2 identifies as the crate's principal liability — see the v1.0 cut line in
 `AUDIT.md` §7.3 before adding another operator.
 
@@ -52,7 +53,8 @@ were not wired into `Cargo.toml`, so they had never actually run. When
 they were wired up, two pre-existing bugs surfaced and were fixed in the
 same change:
 
-- [x] **Register `linq_tests.rs` as an integration test** — added `[[test]]` block in `Cargo.toml`. 57 tests now run on every `cargo test`.
+- [x] **Register `linq_tests.rs` as an integration test** — added `[[test]]` block in `Cargo.toml`. 57 tests ran on every `cargo test` when
+  this landed; the workspace floor is 278 today.
 - [x] **`skip` → `skip_` rename** (breaking) — `LinqExt::skip` collided with `Iterator::skip` but lacked the trailing `_` per the project's documented convention. Renamed to match `take_`, `any_`, `all_`, etc.
 - [x] **`then_by` correctness fix** — `OrderedQueryable` was eagerly sorting in `order_by` and `then_by` re-sorted on the secondary key *alone*, destroying the primary order. Refactored to defer sorting and stack comparators; sort runs once at `into_iter` time using the comparators in lexicographic order. The `Fn` bound on key selectors tightened from `FnMut` to `Fn` + `'static` to allow boxed dyn dispatch (custom mutable-state key functions are not a realistic use case).
 
@@ -198,6 +200,80 @@ operators were O(n²) where O(n) is achievable.
 - [x] **Semver policy** — documented in `README.md` under "Versioning". Headline: adding a `LinqExt` method is a minor bump, not breaking; tightening trait bounds is breaking; pre-1.0 anything can break on a minor.
 - [ ] **First tagged release (`v0.1.0`)** — ready to tag. Run `git tag v0.1.0 && cargo publish` when you're ready. CI must be green first (use the workflow's first run as the gate).
 - [ ] **`v1.0.0`** — after the API has marinated through at least one real user.
+
+---
+
+## Phase 2.8 — `linq_rs_sql` call-site ergonomics
+
+Both found by writing real calls rather than by reading the API, which is the
+only way this class of thing surfaces.
+
+### 2.8.1 The typed query is one-shot for in-memory use
+
+`Rows::to_memory` takes `self` by value, so this does not compile:
+
+```rust
+let q = query::<Employee>().filter(pred!(employees, |e| e.salary > 100_000i64));
+let sql = q.to_sql();                      // borrows
+let got = q.to_memory(&rows);              // moves  -> E0382
+```
+
+The caller has to bind `q.to_sql()` first. The **erased** form
+(`boxed_query()`) takes `&self` and can be used repeatedly, so the asymmetry
+runs backwards from expectation: the ergonomic form is the type-erased one.
+
+`to_memory` returns a lazy iterator borrowing the predicate, which is why it
+took ownership. Worth checking whether `&self` is achievable now that `D-027`
+proved it for `BoxedRows`.
+
+### 2.8.2 Integer literals default to `i32`, not to the column's type
+
+Originally filed as "literals need explicit type suffixes". **That was wrong** —
+`e.salary > 100_000` compiles and emits byte-identical SQL to `100_000i64`,
+because `i32` also satisfies `Integer`. The real, narrower problem:
+
+```text
+e.big > 3_000_000_000
+error: literal out of range for `i32`
+help: consider using the type `u32` instead
+```
+
+Inference reaches `i32`, not the column's type, so a literal above `i32::MAX`
+needs a suffix — and the error never mentions the column, suggesting `u32`, which
+is not a SQL type here. Likely wants the comparison operators to accept anything
+`Into<Lit<Self::SqlType>>` rather than a bare `Expr`, so an untyped literal has
+somewhere to land.
+
+---
+
+## Phase 2.9 — Schema drift is the one EF protection with no counterpart
+
+`table!` is a **hand-written declaration with no link to the real database**.
+Everything it asserts is enforced against the *declaration*, never against the
+schema. Demonstrated against real SQLite:
+
+```
+declared: table! { emp (id) { id -> Integer, salary -> Integer, bonus -> Integer } }
+actual  : CREATE TABLE emp(id INTEGER, salary TEXT)
+
+compiles cleanly, emits:  SELECT id, salary, bonus FROM emp WHERE (bonus > ?)
+the database says:        no such column: bonus
+```
+
+This is what EF closes with scaffolding (model from database) or migrations
+(database from model). Two candidate directions, neither started:
+
+- **Verify at runtime, once.** A `check_schema(&conn)` that compares
+  `ALL_COLUMNS` and the declared SQL types against the driver's introspection and
+  returns a diff. Cheap, catches drift at startup rather than on the first query
+  that touches the missing column. Needs driver introspection, which under `D-032`
+  means a trait the caller implements — not a dependency.
+- **Generate the declaration.** A `table!` emitted from the live schema, so the
+  two cannot disagree. Bigger, needs a build step, and is the EF answer.
+
+Worth noting what is *already* protected so the gap is not overstated — typo'd
+column, wrong type, wrong table, hostile input and NULL semantics are all caught
+at compile time (`D-026`, `D-028`, `D-029`). Drift is the one that is not.
 
 ---
 

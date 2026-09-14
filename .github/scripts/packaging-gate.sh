@@ -96,23 +96,53 @@ if [ -f "$sib" ]; then
   # prove `.to_memory()` hands back something LinqExt works on; dev-deps never
   # enter a consumer's graph, so D-020's "neither depends on the other" holds
   # for anyone actually using either crate.
-  # D-024: zero dependencies of EVERY kind, dev included. A dev-dependency does
-  # not reach consumers, but `cargo package` strips its `path` and keeps its
-  # `version`, which makes it a hard registry requirement at publish time and
-  # forces a publish order. It also makes the "no dependencies" claim false as
-  # written. Both published crates are checked; `seam-tests` is publish = false
-  # and is exempt by construction.
+  # D-032, the owner's rule, stated verbatim:
+  #   linq_rs     -- no dependencies.
+  #   linq_rs_sql -- only linq_rs.
+  #   nothing else is acceptable.
+  #
+  # So the whole dependency graph must contain no third-party crate at all, of
+  # any kind, including dev. This is stricter than D-024 (which only demanded the
+  # two core crates be clean) and it is what retired linq_rs_sqlite: one driver
+  # dependency pulled 24 crates into the graph via rusqlite -> libsqlite3-sys.
+  #
+  # Checked on the RESOLVED graph, not the manifests: a manifest lists direct
+  # dependencies, and a transitive one is still a dependency.
+  third="$(cargo metadata --format-version 1 2>/dev/null \
+    | python3 -c "
+import json,sys
+own={'linq_rs','linq_rs_sql','seam-tests'}
+names={p['name'] for p in json.load(sys.stdin)['packages']} - own
+print(','.join(sorted(names)))")"
+  if [ -n "$third" ]; then
+    err "third-party crates in the dependency graph: ${third}"
+  fi
+  echo "dependency graph contains no third-party crate"
+
+  # And per-package, so a violation names the package that introduced it.
+  # `linq_rs_sql` MAY depend on `linq_rs`; it is permitted, not required, and it
+  # currently has none, which is stricter and fine. Anything else fails.
   for pkg in linq_rs linq_rs_sql; do
-    sd="$(cargo metadata --no-deps --format-version 1 \
-      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${pkg}'][0]; print(','.join(sorted(d['name']+'('+(d['kind'] or 'normal')+')' for d in p['dependencies'])))")"
-    if [ -z "$sd" ]; then echo "${pkg} dependencies (all kinds): none"; else err "${pkg} gained a dependency: ${sd}"; fi
+    got="$(cargo metadata --no-deps --format-version 1 \
+      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${pkg}'][0]; print(','.join(sorted(set(d['name'] for d in p['dependencies']))))")"
+    # Plain string comparison, not grep: the ALLOWED value is the empty string,
+    # and `printf '%s' "" | grep -qE '^$'` fails because grep sees zero lines.
+    ok=no
+    case "${pkg}:${got}" in
+      linq_rs:)                ok=yes ;;
+      linq_rs_sql:|linq_rs_sql:linq_rs) ok=yes ;;
+    esac
+    if [ "$ok" != yes ]; then
+      err "${pkg} may depend only on $( [ "$pkg" = linq_rs_sql ] && echo 'linq_rs' || echo 'nothing' ); got '${got:-<none>}'"
+    fi
+    echo "${pkg} dependencies: ${got:-none}"
   done
-  # And nothing that is publish = false may ever be published.
+
   np="$(cargo metadata --no-deps --format-version 1 \
-    | python3 -c "import json,sys; print(','.join(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('publish') != []))")"
-  [ "$np" = "linq_rs,linq_rs_sql" ] || [ "$np" = "linq_rs_sql,linq_rs" ] \
-    || err "publishable packages changed: expected exactly linq_rs + linq_rs_sql, got: ${np}"
-  echo "publishable packages: linq_rs, linq_rs_sql (seam-tests is publish = false)"
+    | python3 -c "import json,sys; print(','.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('publish') != [])))")"
+  [ "$np" = "linq_rs,linq_rs_sql" ] \
+    || err "publishable packages changed: expected linq_rs + linq_rs_sql, got: ${np}"
+  echo "publishable packages: ${np} (seam-tests is publish = false)"
 else
   err "linq_rs_sql/Cargo.toml is missing — D-020 split the SQL builder into it"
 fi
@@ -205,7 +235,12 @@ echo "=== a published crate must not cite a file it does not ship (D-023) ==="
 # linq_rs_sql referenced `DECISIONS.md` in three shipped files and shipped it
 # zero times -- it lives at the workspace root, which no member tarball can
 # reach. A bare filename gives the reader nothing to follow; a URL does.
-sib_files="$(cd "$ROOT/linq_rs_sql" && git ls-files 'src/*' README.md 2>/dev/null)"
+# Take the file list from the TARBALL, not from git. `git ls-files` cannot see a
+# newly-added file until it is staged, so a fresh source file citing a
+# repo-root doc passed this check locally and failed on CI -- the gate was
+# reading the repo when its entire subject is what ships. (D-023's own lesson,
+# reappearing inside D-023's gate.)
+sib_files="$(printf '%s\n' "$sib_listing" | grep -E '^(src/.*\.rs|README\.md)$')"
 bare=0
 for f in $sib_files; do
   # A mention is fine if the same line, or the file, also carries the URL.

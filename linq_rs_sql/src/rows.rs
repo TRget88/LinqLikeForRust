@@ -26,9 +26,11 @@
 //! `to_memory` is the single visible token that crosses the boundary.
 
 use crate::column::Column;
-use crate::expr::{And, Eq, Expr, Gt, GtEq, IsNull, Like, Lt, LtEq, Not, NotEq, Or};
+use crate::expr::{And, Eq, Expr, Gt, GtEq, IsNotNull, IsNull, Like, Lt, LtEq, Not, NotEq, Or};
 use crate::query::{All, Query, QueryOutput, Table};
-use crate::types::{Boolean, Float, Integer, Text};
+use crate::types::{
+    Boolean, CompareWith, Float, Integer, LogicWith, Negate, Nullable, Text, WhereClause,
+};
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
@@ -59,6 +61,16 @@ impl<'r> Repr<'r> for Boolean {
 }
 impl<'r> Repr<'r> for Float {
     type Rust = f64;
+}
+
+/// The one honest Rust representation of a nullable SQL type.
+///
+/// `Nullable<Text>` is `Option<&'r str>`, `Nullable<Integer>` is
+/// `Option<i64>`. Crucially `Nullable<Boolean>` is `Option<bool>` — a *third*
+/// value, which is what makes three-valued logic representable rather than
+/// collapsed.
+impl<'r, T: Repr<'r>> Repr<'r> for Nullable<T> {
+    type Rust = Option<T::Rust>;
 }
 
 /// Shorthand for "the Rust value an expression of SQL type `S` produces".
@@ -99,6 +111,314 @@ impl Sortable for Text {
 impl Sortable for Boolean {
     fn compare<'x>(a: bool, b: bool) -> Ordering {
         a.cmp(&b)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Three-valued logic (SPIKE) — the memory half of nullability
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Every rule below was read off real SQLite (see `sqlite_truth.py`):
+//
+//   NULL = NULL   -> NULL        NULL AND TRUE  -> NULL
+//   NULL > 5      -> NULL        NULL AND FALSE -> FALSE
+//   NOT (NULL=1)  -> NULL        NULL OR  TRUE  -> TRUE
+//   NULL IS NULL  -> TRUE        NULL OR  FALSE -> NULL
+//
+// The point of the exercise: none of these can be expressed by `Option`'s own
+// `PartialOrd`/`PartialEq`, which say `None == None` is `true` and
+// `None > Some(5)` is `false`. Both are wrong, and both are *silently* wrong —
+// the D-025 failure mode. So `Option`'s comparison operators are never used
+// here; every rule is written out.
+
+/// A comparison operator as a type, so `cmp3` monomorphises to one inlined
+/// comparison rather than a branch on a runtime tag or a `fn` pointer.
+pub trait CmpOp {
+    /// Apply this operator to two values of the same (non-null) Rust type.
+    fn apply<T: PartialOrd>(l: &T, r: &T) -> bool;
+}
+
+macro_rules! cmp_ops {
+    ($($name:ident => $op:tt),* $(,)?) => {$(
+        /// Operator marker for [`CmpOp`].
+        #[derive(Debug, Clone, Copy)]
+        pub struct $name;
+        impl CmpOp for $name {
+            fn apply<T: PartialOrd>(l: &T, r: &T) -> bool { l $op r }
+        }
+    )*};
+}
+cmp_ops!(OpEq => ==, OpNe => !=, OpLt => <, OpLte => <=, OpGt => >, OpGte => >=);
+
+/// The value half of [`CompareWith`]: how a comparison actually evaluates once
+/// nullability is in play.
+///
+/// Shaped like [`Sortable`] — the operation lives *in* the trait rather than as
+/// a `for<'x> Rust<'x, T>: PartialOrd` bound at the call site — for the same
+/// reason `Sortable` is: Rust 1.65 cannot solve a higher-ranked bound through a
+/// two-level projection.
+pub trait Cmp3<'x, Rhs>: CompareWith<Rhs> + Repr<'x>
+where
+    Rhs: Repr<'x>,
+    Self::Out: Repr<'x>,
+{
+    /// Three-valued comparison. `NULL` on either side propagates.
+    fn cmp3<Op: CmpOp>(l: Rust<'x, Self>, r: Rust<'x, Rhs>) -> Rust<'x, Self::Out>;
+}
+
+macro_rules! impl_cmp3 {
+    ($($base:ty),* $(,)?) => {$(
+        impl<'x> Cmp3<'x, $base> for $base {
+            fn cmp3<Op: CmpOp>(l: Rust<'x, $base>, r: Rust<'x, $base>) -> bool {
+                Op::apply(&l, &r)
+            }
+        }
+        impl<'x> Cmp3<'x, Nullable<$base>> for $base {
+            fn cmp3<Op: CmpOp>(
+                l: Rust<'x, $base>,
+                r: Option<Rust<'x, $base>>,
+            ) -> Option<bool> {
+                match r {
+                    Some(r) => Some(Op::apply(&l, &r)),
+                    None => None,
+                }
+            }
+        }
+        impl<'x> Cmp3<'x, $base> for Nullable<$base> {
+            fn cmp3<Op: CmpOp>(
+                l: Option<Rust<'x, $base>>,
+                r: Rust<'x, $base>,
+            ) -> Option<bool> {
+                match l {
+                    Some(l) => Some(Op::apply(&l, &r)),
+                    None => None,
+                }
+            }
+        }
+        impl<'x> Cmp3<'x, Nullable<$base>> for Nullable<$base> {
+            fn cmp3<Op: CmpOp>(
+                l: Option<Rust<'x, $base>>,
+                r: Option<Rust<'x, $base>>,
+            ) -> Option<bool> {
+                // NOT `l == r`. `None == None` is `true` in Rust and NULL in
+                // SQL; this is the exact place the two interpreters would
+                // silently part company.
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(Op::apply(&l, &r)),
+                    _ => None,
+                }
+            }
+        }
+    )*};
+}
+impl_cmp3!(Integer, Text, Boolean, Float);
+
+/// `LIKE` lifted over nullability. Separate from [`Cmp3`] because the
+/// underlying operation is text-specific, not a `PartialOrd` comparison.
+pub trait Like3<'x, Rhs>: CompareWith<Rhs> + Repr<'x>
+where
+    Rhs: Repr<'x>,
+    Self::Out: Repr<'x>,
+{
+    /// Three-valued `LIKE`. `NULL LIKE 'a%'` is NULL, per SQLite.
+    fn like3(l: Rust<'x, Self>, r: Rust<'x, Rhs>) -> Rust<'x, Self::Out>;
+}
+
+impl<'x> Like3<'x, Text> for Text {
+    fn like3(l: &'x str, r: &'x str) -> bool {
+        like_match(l, r)
+    }
+}
+impl<'x> Like3<'x, Nullable<Text>> for Text {
+    fn like3(l: &'x str, r: Option<&'x str>) -> Option<bool> {
+        r.map(|r| like_match(l, r))
+    }
+}
+impl<'x> Like3<'x, Text> for Nullable<Text> {
+    fn like3(l: Option<&'x str>, r: &'x str) -> Option<bool> {
+        l.map(|l| like_match(l, r))
+    }
+}
+impl<'x> Like3<'x, Nullable<Text>> for Nullable<Text> {
+    fn like3(l: Option<&'x str>, r: Option<&'x str>) -> Option<bool> {
+        match (l, r) {
+            (Some(l), Some(r)) => Some(like_match(l, r)),
+            _ => None,
+        }
+    }
+}
+
+/// The value half of [`LogicWith`] — Kleene `AND` / `OR`.
+///
+/// The right operand arrives as a closure so `AND`/`OR` still short-circuit:
+/// `FALSE AND anything` is `FALSE` without evaluating the right side, exactly
+/// as the two-valued version did. It is a monomorphised `FnOnce`, so this
+/// costs nothing at runtime.
+pub trait Logic3<'x, Rhs>: LogicWith<Rhs> + Repr<'x>
+where
+    Rhs: Repr<'x>,
+    Self::Out: Repr<'x>,
+{
+    /// Kleene `AND`.
+    fn and3<F: FnOnce() -> Rust<'x, Rhs>>(l: Rust<'x, Self>, r: F) -> Rust<'x, Self::Out>;
+    /// Kleene `OR`.
+    fn or3<F: FnOnce() -> Rust<'x, Rhs>>(l: Rust<'x, Self>, r: F) -> Rust<'x, Self::Out>;
+}
+
+impl<'x> Logic3<'x, Boolean> for Boolean {
+    fn and3<F: FnOnce() -> bool>(l: bool, r: F) -> bool {
+        l && r()
+    }
+    fn or3<F: FnOnce() -> bool>(l: bool, r: F) -> bool {
+        l || r()
+    }
+}
+
+impl<'x> Logic3<'x, Nullable<Boolean>> for Boolean {
+    fn and3<F: FnOnce() -> Option<bool>>(l: bool, r: F) -> Option<bool> {
+        // FALSE AND NULL is FALSE; TRUE AND NULL is NULL.
+        if l {
+            r()
+        } else {
+            Some(false)
+        }
+    }
+    fn or3<F: FnOnce() -> Option<bool>>(l: bool, r: F) -> Option<bool> {
+        // TRUE OR NULL is TRUE; FALSE OR NULL is NULL.
+        if l {
+            Some(true)
+        } else {
+            r()
+        }
+    }
+}
+
+impl<'x> Logic3<'x, Boolean> for Nullable<Boolean> {
+    fn and3<F: FnOnce() -> bool>(l: Option<bool>, r: F) -> Option<bool> {
+        match l {
+            Some(false) => Some(false),
+            other => {
+                if r() {
+                    other
+                } else {
+                    Some(false)
+                }
+            }
+        }
+    }
+    fn or3<F: FnOnce() -> bool>(l: Option<bool>, r: F) -> Option<bool> {
+        match l {
+            Some(true) => Some(true),
+            other => {
+                if r() {
+                    Some(true)
+                } else {
+                    other
+                }
+            }
+        }
+    }
+}
+
+impl<'x> Logic3<'x, Nullable<Boolean>> for Nullable<Boolean> {
+    fn and3<F: FnOnce() -> Option<bool>>(l: Option<bool>, r: F) -> Option<bool> {
+        match l {
+            Some(false) => Some(false),
+            other => match r() {
+                Some(false) => Some(false),
+                Some(true) => other,
+                None => None,
+            },
+        }
+    }
+    fn or3<F: FnOnce() -> Option<bool>>(l: Option<bool>, r: F) -> Option<bool> {
+        match l {
+            Some(true) => Some(true),
+            other => match r() {
+                Some(true) => Some(true),
+                Some(false) => other,
+                None => None,
+            },
+        }
+    }
+}
+
+/// The value half of [`Negate`]. `NOT NULL` is NULL.
+pub trait Negate3<'x>: Negate + Repr<'x>
+where
+    Self::Out: Repr<'x>,
+{
+    /// Three-valued `NOT`.
+    fn not3(v: Rust<'x, Self>) -> Rust<'x, Self::Out>;
+}
+
+impl<'x> Negate3<'x> for Boolean {
+    fn not3(v: bool) -> bool {
+        !v
+    }
+}
+impl<'x> Negate3<'x> for Nullable<Boolean> {
+    fn not3(v: Option<bool>) -> Option<bool> {
+        // NOT NULL is NULL, not TRUE.
+        v.map(|b| !b)
+    }
+}
+
+/// `IS NULL` / `IS NOT NULL`, which are the *only* two-valued things in this
+/// module: they answer TRUE or FALSE and never NULL.
+///
+/// Implemented for the non-nullable markers too, returning `false`. That is
+/// not a shortcut — a column declared `Integer` is declared NOT NULL, and
+/// `NOT NULL col IS NULL` is FALSE in SQL as well. Both interpreters still
+/// agree; the query is merely pointless.
+pub trait NullCheck<'x>: Repr<'x> {
+    /// Is this value SQL NULL?
+    fn is_null(v: Rust<'x, Self>) -> bool;
+}
+
+macro_rules! impl_null_check {
+    ($($base:ty),* $(,)?) => {$(
+        impl<'x> NullCheck<'x> for $base {
+            fn is_null(_v: Rust<'x, $base>) -> bool { false }
+        }
+    )*};
+}
+impl_null_check!(Integer, Text, Boolean, Float);
+
+impl<'x, T: Repr<'x>> NullCheck<'x> for Nullable<T> {
+    fn is_null(v: Option<<T as Repr<'x>>::Rust>) -> bool {
+        v.is_none()
+    }
+}
+
+/// The collapse from three values to two, at the `WHERE` boundary and nowhere
+/// else. A row is kept when the predicate is TRUE; FALSE and NULL both drop it.
+pub trait TruthValue<'x>: WhereClause + Repr<'x> {
+    /// The three-valued result, normalised: `None` is UNKNOWN.
+    ///
+    /// This is the lossless view. [`is_true`](Self::is_true) is the lossy one,
+    /// and the difference matters: the collapse to two values distributes over
+    /// `AND` and `OR` but **not** over `NOT` — `is_true(NOT NULL)` is `false`
+    /// while `!is_true(NULL)` is `true`. Anything that might later negate a
+    /// value must carry the three-valued form, which is why type erasure
+    /// ([`crate::boxed`]) transports `Option<bool>` and not `bool`.
+    fn to_tri(v: Rust<'x, Self>) -> Option<bool>;
+
+    /// Does this predicate value keep the row? TRUE keeps it; FALSE and NULL
+    /// both drop it.
+    fn is_true(v: Rust<'x, Self>) -> bool {
+        matches!(Self::to_tri(v), Some(true))
+    }
+}
+
+impl<'x> TruthValue<'x> for Boolean {
+    fn to_tri(v: bool) -> Option<bool> {
+        Some(v)
+    }
+}
+impl<'x> TruthValue<'x> for Nullable<Boolean> {
+    fn to_tri(v: Option<bool>) -> Option<bool> {
+        v
     }
 }
 
@@ -163,61 +483,88 @@ where
     }
 }
 
+/// `None::<i64>` is the SQL `NULL` literal of type `Nullable<Integer>`;
+/// `Some(3i64)` is a nullable-typed `3`.
+impl<'r, Row, T> Eval<'r, Row> for Option<T>
+where
+    T: Eval<'r, Row>,
+    T::SqlType: Repr<'r>,
+{
+    fn eval(&'r self, row: &'r Row) -> Option<Rust<'r, T::SqlType>> {
+        self.as_ref().map(|v| v.eval(row))
+    }
+}
+
 // ── comparison nodes ───────────────────────────────────────────────────────
 
 macro_rules! eval_compare {
-    ($node:ident, $op:tt) => {
+    ($node:ident, $op:ty) => {
         impl<'r, Row, L, R> Eval<'r, Row> for $node<L, R>
         where
             L: Eval<'r, Row>,
-            R: Expr<SqlType = L::SqlType> + Eval<'r, Row>,
-            L::SqlType: Repr<'r>,
-            Rust<'r, L::SqlType>: PartialOrd,
-            Self: Expr<SqlType = Boolean>,
+            R: Eval<'r, Row>,
+            L::SqlType: Cmp3<'r, R::SqlType>,
+            R::SqlType: Repr<'r>,
+            <L::SqlType as CompareWith<R::SqlType>>::Out: Repr<'r>,
+            Self: Expr<SqlType = <L::SqlType as CompareWith<R::SqlType>>::Out>,
         {
-            fn eval(&'r self, row: &'r Row) -> bool {
-                self.left.eval(row) $op self.right.eval(row)
+            fn eval(&'r self, row: &'r Row) -> Rust<'r, Self::SqlType> {
+                <L::SqlType as Cmp3<'r, R::SqlType>>::cmp3::<$op>(
+                    self.left.eval(row),
+                    self.right.eval(row),
+                )
             }
         }
     };
 }
 
-eval_compare!(Eq, ==);
-eval_compare!(NotEq, !=);
-eval_compare!(Lt, <);
-eval_compare!(LtEq, <=);
-eval_compare!(Gt, >);
-eval_compare!(GtEq, >=);
+eval_compare!(Eq, OpEq);
+eval_compare!(NotEq, OpNe);
+eval_compare!(Lt, OpLt);
+eval_compare!(LtEq, OpLte);
+eval_compare!(Gt, OpGt);
+eval_compare!(GtEq, OpGte);
 
 // ── logical nodes ──────────────────────────────────────────────────────────
 
 impl<'r, Row, L, R> Eval<'r, Row> for And<L, R>
 where
-    L: Expr<SqlType = Boolean> + Eval<'r, Row>,
-    R: Expr<SqlType = Boolean> + Eval<'r, Row>,
+    L: Eval<'r, Row>,
+    R: Eval<'r, Row>,
+    L::SqlType: Logic3<'r, R::SqlType>,
+    R::SqlType: Repr<'r>,
+    <L::SqlType as LogicWith<R::SqlType>>::Out: Repr<'r>,
+    Self: Expr<SqlType = <L::SqlType as LogicWith<R::SqlType>>::Out>,
 {
-    fn eval(&'r self, row: &'r Row) -> bool {
-        // Short-circuits, like SQL is permitted (but not required) to.
-        self.left.eval(row) && self.right.eval(row)
+    fn eval(&'r self, row: &'r Row) -> Rust<'r, Self::SqlType> {
+        // Still short-circuits: the right operand is a closure.
+        <L::SqlType as Logic3<'r, R::SqlType>>::and3(self.left.eval(row), || self.right.eval(row))
     }
 }
 
 impl<'r, Row, L, R> Eval<'r, Row> for Or<L, R>
 where
-    L: Expr<SqlType = Boolean> + Eval<'r, Row>,
-    R: Expr<SqlType = Boolean> + Eval<'r, Row>,
+    L: Eval<'r, Row>,
+    R: Eval<'r, Row>,
+    L::SqlType: Logic3<'r, R::SqlType>,
+    R::SqlType: Repr<'r>,
+    <L::SqlType as LogicWith<R::SqlType>>::Out: Repr<'r>,
+    Self: Expr<SqlType = <L::SqlType as LogicWith<R::SqlType>>::Out>,
 {
-    fn eval(&'r self, row: &'r Row) -> bool {
-        self.left.eval(row) || self.right.eval(row)
+    fn eval(&'r self, row: &'r Row) -> Rust<'r, Self::SqlType> {
+        <L::SqlType as Logic3<'r, R::SqlType>>::or3(self.left.eval(row), || self.right.eval(row))
     }
 }
 
 impl<'r, Row, E> Eval<'r, Row> for Not<E>
 where
-    E: Expr<SqlType = Boolean> + Eval<'r, Row>,
+    E: Eval<'r, Row>,
+    E::SqlType: Negate3<'r>,
+    <E::SqlType as Negate>::Out: Repr<'r>,
+    Self: Expr<SqlType = <E::SqlType as Negate>::Out>,
 {
-    fn eval(&'r self, row: &'r Row) -> bool {
-        !self.inner.eval(row)
+    fn eval(&'r self, row: &'r Row) -> Rust<'r, Self::SqlType> {
+        <E::SqlType as Negate3<'r>>::not3(self.inner.eval(row))
     }
 }
 
@@ -225,15 +572,19 @@ where
 
 impl<'r, Row, L, R> Eval<'r, Row> for Like<L, R>
 where
-    L: Expr<SqlType = Text> + Eval<'r, Row>,
-    R: Expr<SqlType = Text> + Eval<'r, Row>,
+    L: Eval<'r, Row>,
+    R: Eval<'r, Row>,
+    L::SqlType: Like3<'r, R::SqlType>,
+    R::SqlType: Repr<'r>,
+    <L::SqlType as CompareWith<R::SqlType>>::Out: Repr<'r>,
+    Self: Expr<SqlType = <L::SqlType as CompareWith<R::SqlType>>::Out>,
 {
     /// Stability class (`D-103`): **provider-defined**. This evaluates
     /// case-sensitively with `%` and `_` wildcards, which matches PostgreSQL
     /// `LIKE` and SQLite with `PRAGMA case_sensitive_like=ON`; MySQL's default
     /// collation and SQLite's default are case-insensitive for ASCII.
-    fn eval(&'r self, row: &'r Row) -> bool {
-        like_match(self.left.eval(row), self.right.eval(row))
+    fn eval(&'r self, row: &'r Row) -> Rust<'r, Self::SqlType> {
+        <L::SqlType as Like3<'r, R::SqlType>>::like3(self.left.eval(row), self.right.eval(row))
     }
 }
 
@@ -255,7 +606,13 @@ fn like_match(text: &str, pattern: &str) -> bool {
                 mark = ti;
                 pi += 1;
             }
-            (Some(t), Some(p)) if p == '_' || p == t => {
+            // ASCII case is folded, matching SQLite's default `LIKE` exactly —
+            // and MySQL's default collation. It is what makes `to_memory` agree
+            // with every dialect this crate can currently reach (`?`
+            // placeholders rule PostgreSQL out). ASCII-ONLY is deliberate:
+            // SQLite folds `EVE`/`eve` and does NOT fold `É`/`é`, so folding
+            // Unicode here would trade one divergence for another. See D-034.
+            (Some(t), Some(p)) if p == '_' || p.eq_ignore_ascii_case(&t) => {
                 ti += t.len_utf8();
                 pi += p.len_utf8();
             }
@@ -272,11 +629,31 @@ fn like_match(text: &str, pattern: &str) -> bool {
     }
 }
 
-// NOTE, deliberately: there is **no** `Eval` impl for `IsNull<E>`.
-// Phase 1 has no nullable columns, so there is no honest in-memory answer,
-// and `D-103` says nulls are where the three interpreters disagree worst.
-// Under `D-102` the absence of the impl *is* the design: `.is_null()` in a
-// two-interpreter query is a compile error, not a silently-`false` row.
+// `IsNull` / `IsNotNull` now HAVE `Eval` impls. The note that used to stand
+// here said there was "no honest in-memory answer" because Phase 1 had no
+// nullable columns; `Nullable<T>` supplies one.
+
+impl<'r, Row, E> Eval<'r, Row> for IsNull<E>
+where
+    E: Eval<'r, Row>,
+    E::SqlType: NullCheck<'r>,
+    Self: Expr<SqlType = Boolean>,
+{
+    fn eval(&'r self, row: &'r Row) -> bool {
+        <E::SqlType as NullCheck<'r>>::is_null(self.inner.eval(row))
+    }
+}
+
+impl<'r, Row, E> Eval<'r, Row> for IsNotNull<E>
+where
+    E: Eval<'r, Row>,
+    E::SqlType: NullCheck<'r>,
+    Self: Expr<SqlType = Boolean>,
+{
+    fn eval(&'r self, row: &'r Row) -> bool {
+        !<E::SqlType as NullCheck<'r>>::is_null(self.inner.eval(row))
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Entity — binds a Rust struct to a `table!` module
@@ -288,6 +665,26 @@ fn like_match(text: &str, pattern: &str) -> bool {
 pub trait Entity: Sized {
     /// The `Marker` type from this struct's `table!` invocation.
     type Table: Table;
+
+    /// This entity's columns, in declaration order.
+    ///
+    /// Required, with no default, deliberately. A default of `&[]` would make
+    /// [`Rows::to_sql`] silently fall back to `SELECT *` for any entity that
+    /// forgot to supply it — a silent wrong default in place of a compile error,
+    /// which is the category `D-025` forbids. An entity that cannot name its
+    /// columns cannot be projected, and should say so at the impl site.
+    ///
+    /// Supplied by [`entity!`](crate::entity) from the declaration, on both the
+    /// normal and `no_from_row` arms.
+    ///
+    /// Named `ALL_COLUMNS`, not `COLUMNS`, so it cannot collide with
+    /// [`FromRow::COLUMNS`](crate::from_row::FromRow::COLUMNS). Both would be in
+    /// scope on the same type and `Emp::COLUMNS` would be `E0034` — which is
+    /// exactly the defect that disqualified `linq_rs 0.1.0`, where `LinqExt::skip`
+    /// shadowed `Iterator::skip`. The two lists are also not the same concept:
+    /// this one is what to SELECT, `FromRow`'s is what to READ, and a future
+    /// tuple projection will have the second without the first.
+    const ALL_COLUMNS: &'static [&'static str];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -297,6 +694,9 @@ pub trait Entity: Sized {
 /// The predicate of a query that has not been filtered yet.
 #[derive(Debug, Clone, Copy)]
 pub struct AlwaysTrue;
+
+// No columns, so every table -- the identity of the conjunction.
+impl<T> crate::expr::BelongsTo<T> for AlwaysTrue {}
 
 impl Expr for AlwaysTrue {
     type SqlType = Boolean;
@@ -338,12 +738,13 @@ macro_rules! conj_binary {
     ($($node:ident),* $(,)?) => {$(
         impl<L, R, P2> Conj<P2> for $node<L, R>
         where
-            Self: Expr<SqlType = Boolean>,
-            P2: Expr<SqlType = Boolean>,
+            Self: Expr,
+            P2: Expr,
+            <Self as Expr>::SqlType: LogicWith<P2::SqlType>,
         {
             type Out = And<Self, P2>;
             fn conj(self, rhs: P2) -> And<Self, P2> {
-                crate::column::BoolOps::and(self, rhs)
+                crate::expr::and_node(self, rhs)
             }
         }
     )*};
@@ -354,17 +755,18 @@ macro_rules! conj_unary {
     ($($node:ident),* $(,)?) => {$(
         impl<E, P2> Conj<P2> for $node<E>
         where
-            Self: Expr<SqlType = Boolean>,
-            P2: Expr<SqlType = Boolean>,
+            Self: Expr,
+            P2: Expr,
+            <Self as Expr>::SqlType: LogicWith<P2::SqlType>,
         {
             type Out = And<Self, P2>;
             fn conj(self, rhs: P2) -> And<Self, P2> {
-                crate::column::BoolOps::and(self, rhs)
+                crate::expr::and_node(self, rhs)
             }
         }
     )*};
 }
-conj_unary!(Not, IsNull);
+conj_unary!(Not, IsNull, IsNotNull);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Rows — the query value
@@ -384,9 +786,39 @@ type SqlStep<T> = Box<dyn Fn(Query<T, All<T>>) -> Query<T, All<T>>>;
 /// Compares two rows by one accumulated `ORDER BY` column.
 type RowCmp<Row> = Box<dyn Fn(&Row, &Row) -> Ordering>;
 
-struct OrderPart<Row: Entity> {
-    render: SqlStep<Row::Table>,
-    cmp: RowCmp<Row>,
+pub(crate) struct OrderPart<Row: Entity> {
+    pub(crate) render: SqlStep<Row::Table>,
+    pub(crate) cmp: RowCmp<Row>,
+}
+
+/// Builds one `ORDER BY` part: the SQL step and the in-memory comparator, from
+/// a single column and direction.
+///
+/// Extracted so [`crate::boxed::BoxedRows`] orders through exactly this code
+/// rather than a second copy — two copies would be two chances for the erased
+/// and typed forms to sort differently.
+pub(crate) fn order_part<Row, C>(column: C, desc: bool) -> OrderPart<Row>
+where
+    Row: Entity + 'static,
+    C: Column<Table = Row::Table> + Copy + 'static,
+    C: for<'x> Eval<'x, Row>,
+    C::SqlType: Sortable,
+{
+    OrderPart {
+        render: if desc {
+            Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by_desc(column))
+        } else {
+            Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by(column))
+        },
+        cmp: Box::new(move |a: &Row, b: &Row| {
+            let ord = <C::SqlType as Sortable>::compare(column.eval(a), column.eval(b));
+            if desc {
+                ord.reverse()
+            } else {
+                ord
+            }
+        }),
+    }
 }
 
 /// A query value with two interpreters.
@@ -401,11 +833,14 @@ struct OrderPart<Row: Entity> {
 /// promoted to the type level, because it changes an operational guarantee —
 /// see [`Rows::to_memory`].
 pub struct Rows<Row: Entity, P, O> {
-    pred: P,
-    filtered: bool,
-    order: Vec<OrderPart<Row>>,
-    limit: Option<u64>,
-    offset: Option<u64>,
+    // `pub(crate)` only so `crate::boxed::Rows::into_boxed` can move these out.
+    // Still private to consumers -- the erased form is the supported way to get
+    // at them.
+    pub(crate) pred: P,
+    pub(crate) filtered: bool,
+    pub(crate) order: Vec<OrderPart<Row>>,
+    pub(crate) limit: Option<u64>,
+    pub(crate) offset: Option<u64>,
     _ord: PhantomData<O>,
 }
 
@@ -442,7 +877,10 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
     pub fn filter<P2>(self, predicate: P2) -> Rows<Row, P::Out, O>
     where
         P: Conj<P2>,
-        P2: Expr<SqlType = Boolean>,
+        // D-028: the predicate's columns must belong to THIS row's table.
+        // `to_memory` already enforced it through `Eval`; `to_sql` did not.
+        P2: Expr + crate::expr::BelongsTo<Row::Table>,
+        P2::SqlType: WhereClause,
     {
         Rows {
             pred: self.pred.conj(predicate),
@@ -473,21 +911,7 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
         C::SqlType: Sortable,
         Row: 'static,
     {
-        self.order.push(OrderPart {
-            render: if desc {
-                Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by_desc(column))
-            } else {
-                Box::new(move |q: Query<Row::Table, All<Row::Table>>| q.order_by(column))
-            },
-            cmp: Box::new(move |a: &Row, b: &Row| {
-                let ord = <C::SqlType as Sortable>::compare(column.eval(a), column.eval(b));
-                if desc {
-                    ord.reverse()
-                } else {
-                    ord
-                }
-            }),
-        });
+        self.order.push(order_part(column, desc));
         Rows {
             pred: self.pred,
             filtered: self.filtered,
@@ -529,7 +953,8 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
     /// builder. Takes `&self`, so the same value can then be evaluated.
     pub fn to_sql(&self) -> QueryOutput
     where
-        P: Expr<SqlType = Boolean> + Clone + 'static,
+        P: Expr + crate::expr::BelongsTo<Row::Table> + Clone + 'static,
+        P::SqlType: WhereClause,
     {
         let mut q: Query<Row::Table, All<Row::Table>> = Query::new();
         if self.filtered {
@@ -544,7 +969,15 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
         if let Some(n) = self.offset {
             q = q.offset(n);
         }
-        q.to_sql()
+        // Name the columns rather than emitting `*`. `*` expands in
+        // table-declaration order, which is the database's choice, not the
+        // query's -- see `Named` and D-030. Reading by name already made `*`
+        // safe; this makes the result set's shape the query's business.
+        //
+        // Applied last, because the order-by parts are closures typed over the
+        // `All` selection. `Query::select` carries the rest of the query across.
+        q.select(crate::query::Named::<Row::Table>::new(Row::ALL_COLUMNS))
+            .to_sql()
     }
 }
 
@@ -557,8 +990,16 @@ impl<Row: Entity, P, O> Rows<Row, P, O> {
 pub trait CallToMemoryFirst {}
 
 impl<Row: Entity, P, O> Rows<Row, P, O> {
-    /// Not translatable to SQL (`D-019`: `terminal`). Call
-    /// [`Rows::to_memory`] first.
+    /// Not implemented on the seam — call [`Rows::to_memory`] first and use
+    /// `LinqExt::select_many` there. (`linq_rs` is not a dependency of this crate,
+    /// per `D-024`, so that name cannot be linked from here.)
+    ///
+    /// This used to say "`D-019`: `terminal`", which contradicted
+    /// `.github/data/operator-map.tsv`, where `select_many` is classified
+    /// `clause`. The two were answering different questions: the TSV's
+    /// `translatable` column records whether an operator *could* become a SQL
+    /// clause — `D-019`'s cut criterion — while this stub is about what the seam
+    /// implements *today*. Nothing here is a statement about `D-019`.
     pub fn select_many<F>(self, _f: F) -> Self
     where
         Self: CallToMemoryFirst,
@@ -587,7 +1028,8 @@ impl<Row: Entity, P> Rows<Row, P, Unordered> {
     where
         I: IntoIterator<Item = &'a Row>,
         Row: 'a,
-        P: Expr<SqlType = Boolean> + for<'x> Eval<'x, Row>,
+        P: Expr + for<'x> Eval<'x, Row>,
+        P::SqlType: for<'x> TruthValue<'x>,
     {
         RowIter {
             inner: src.into_iter(),
@@ -613,7 +1055,8 @@ impl<'a, Row, I, P> Iterator for RowIter<'a, Row, I, P>
 where
     I: Iterator<Item = &'a Row>,
     Row: 'a,
-    P: Expr<SqlType = Boolean> + for<'x> Eval<'x, Row>,
+    P: Expr + for<'x> Eval<'x, Row>,
+    P::SqlType: for<'x> TruthValue<'x>,
 {
     type Item = &'a Row;
 
@@ -622,7 +1065,9 @@ where
             return None;
         }
         for row in self.inner.by_ref() {
-            if !self.pred.eval(row) {
+            // The single place three values collapse to two: TRUE keeps the
+            // row, FALSE and NULL both drop it — SQL's `WHERE` rule exactly.
+            if !<P::SqlType as TruthValue<'_>>::is_true(self.pred.eval(row)) {
                 continue;
             }
             if self.skip > 0 {
@@ -659,10 +1104,14 @@ impl<Row: Entity, P> Rows<Row, P, Ordered> {
     where
         I: IntoIterator<Item = &'a Row>,
         Row: 'a,
-        P: Expr<SqlType = Boolean> + for<'x> Eval<'x, Row>,
+        P: Expr + for<'x> Eval<'x, Row>,
+        P::SqlType: for<'x> TruthValue<'x>,
     {
         let pred = &self.pred;
-        let mut kept: Vec<&'a Row> = src.into_iter().filter(|r| pred.eval(r)).collect();
+        let mut kept: Vec<&'a Row> = src
+            .into_iter()
+            .filter(|r| <P::SqlType as TruthValue<'_>>::is_true(pred.eval(r)))
+            .collect();
         let order = &self.order;
         kept.sort_by(|a, b| {
             for part in order {
@@ -702,6 +1151,88 @@ impl<'a, Row> Iterator for SortedRows<'a, Row> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ReadField — the Rust-field -> SQL-type bridge `entity!` expands to
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// How a Rust struct field of type `F` is read as SQL type `Self`.
+///
+/// This replaces `entity!`'s per-SQL-type macro arms. The reason is
+/// mechanical: `Nullable<Text>` is not an `ident`, so the old
+/// `(@col $row:ty, $col:path, Text, $field:ident)` dispatch could not match
+/// it. Moving the dispatch from the macro to the trait system also makes
+/// nullability compositional — `Nullable<S>` is **one** impl that lifts every
+/// base impl, instead of four more macro arms.
+///
+/// `D-025` is preserved verbatim: the numeric impls are keyed on
+/// `i64: From<F>` / `f64: From<F>`, which is exactly the lossless-widening
+/// whitelist the macro used to spell as `::core::convert::From::from`. An
+/// `f64` field declared `Integer` is still a compile error at the `entity!`
+/// call site.
+pub trait ReadField<'r, F: ?Sized>: Repr<'r> {
+    /// Read the field.
+    fn read(field: &'r F) -> Self::Rust;
+}
+
+impl<'r, F: Copy> ReadField<'r, F> for Integer
+where
+    i64: From<F>,
+{
+    fn read(field: &'r F) -> i64 {
+        i64::from(*field)
+    }
+}
+
+impl<'r, F: Copy> ReadField<'r, F> for Float
+where
+    f64: From<F>,
+{
+    fn read(field: &'r F) -> f64 {
+        f64::from(*field)
+    }
+}
+
+impl<'r> ReadField<'r, bool> for Boolean {
+    fn read(field: &'r bool) -> bool {
+        *field
+    }
+}
+
+/// Any field that derefs to `str`: `String`, `Box<str>`, `Rc<str>`,
+/// `Arc<str>`, `Cow<str>`, `&str`. This is deliberately as wide as the old
+/// `&row.$field[..]`, which accepted all of those through autoderef — a
+/// narrower whitelist here would have been a silent API break.
+impl<'r, F> ReadField<'r, F> for Text
+where
+    F: core::ops::Deref<Target = str> + ?Sized,
+{
+    fn read(field: &'r F) -> &'r str {
+        field
+    }
+}
+
+/// The one impl that makes every base type nullable. `Option<F>` read as
+/// `Nullable<S>` is `S` read through the `Some`.
+impl<'r, S, F> ReadField<'r, Option<F>> for Nullable<S>
+where
+    S: ReadField<'r, F>,
+{
+    fn read(field: &'r Option<F>) -> Option<S::Rust> {
+        field.as_ref().map(<S as ReadField<'r, F>>::read)
+    }
+}
+
+/// Free function so `entity!` can name the SQL type by turbofish
+/// (`read_field::<Nullable<Text>, _>(&row.nick)`) and let the field type be
+/// inferred. Written as a method call the `Self` type would be ambiguous.
+pub fn read_field<'r, S, F>(field: &'r F) -> Rust<'r, S>
+where
+    S: ReadField<'r, F>,
+    F: ?Sized,
+{
+    S::read(field)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // entity! — the usability answer
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -736,40 +1267,70 @@ impl<'a, Row> Iterator for SortedRows<'a, Row> {
 /// ```
 #[macro_export]
 macro_rules! entity {
-    ($row:ty => $table:ident { $($col:ident : $ty:ident = $field:ident),* $(,)? }) => {
+    // Opt out of `FromRow` generation. Required, not a convenience: a struct
+    // with a borrowed field (`name: &'d str`) or a field that is not a column
+    // cannot have a generated `FromRow`, and both are legal today.
+    ($row:ty => $table:ident { $($col:ident : $ty:ty = $field:ident),* $(,)? } no_from_row) => {
+        $crate::entity!(@base $row => $table { $($col : $ty = $field),* });
+    };
+    ($row:ty => $table:ident { $($col:ident : $ty:ty = $field:ident),* $(,)? }) => {
+        $crate::entity!(@base $row => $table { $($col : $ty = $field),* });
+
+        // The reverse direction: one row of a result set -> one `$row`.
+        // Columns are matched by NAME, resolved once per result set. See D-029.
+        impl $crate::from_row::FromRow for $row {
+            const COLUMNS: &'static [&'static str] =
+                &[$(<$table::$col as $crate::Column>::NAME),*];
+
+            fn from_row<'r_, R_>(
+                row: &R_,
+                layout: &$crate::from_row::Layout<Self>,
+            ) -> ::core::result::Result<Self, $crate::from_row::RowError>
+            where
+                R_: $crate::from_row::RowSource<'r_> + ?Sized,
+            {
+                #[allow(unused_imports)]
+                use $crate::types::*;
+                let mut i_ = 0usize;
+                ::core::result::Result::Ok(Self {
+                    $($field: {
+                        let at_ = layout.position(i_);
+                        let name_ = <$table::$col as $crate::Column>::NAME;
+                        i_ += 1;
+                        <$ty as $crate::from_row::LoadField<'r_, _>>::load_field(
+                            row.value_at(at_, name_)?,
+                            name_,
+                        )?
+                    },)*
+                })
+            }
+        }
+    };
+    (@base $row:ty => $table:ident { $($col:ident : $ty:ty = $field:ident),* $(,)? }) => {
         impl $crate::rows::Entity for $row {
             type Table = $table::Marker;
+            const ALL_COLUMNS: &'static [&'static str] =
+                &[$(<$table::$col as $crate::Column>::NAME),*];
         }
-        $( $crate::entity!(@col $row, $table::$col, $ty, $field); )*
-    };
-    // `i64::from`, deliberately NOT `as`. `as` is a silent lossy cast, and the
-    // two interpreters then disagree on the same data: an `f64` field declared
-    // `Integer` with value 2.9 makes `n.gt(2)` true in SQL (2.9 > 2) and false
-    // in memory (`2.9 as i64` == 2). A row is dropped, with no warning. `From`
-    // is implemented only for widening conversions, so the mismatch is a
-    // compile error at the `entity!` call instead. See D-025.
-    (@col $row:ty, $col:path, Integer, $field:ident) => {
-        impl<'r> $crate::rows::Eval<'r, $row> for $col {
-            fn eval(&'r self, row: &'r $row) -> i64 { ::core::convert::From::from(row.$field) }
-        }
-    };
-    (@col $row:ty, $col:path, Text, $field:ident) => {
-        impl<'r> $crate::rows::Eval<'r, $row> for $col {
-            fn eval(&'r self, row: &'r $row) -> &'r str { &row.$field[..] }
-        }
-    };
-    (@col $row:ty, $col:path, Boolean, $field:ident) => {
-        impl<'r> $crate::rows::Eval<'r, $row> for $col {
-            fn eval(&'r self, row: &'r $row) -> bool { row.$field }
-        }
-    };
-    // Same reasoning as `Integer` above: `f64::from` accepts `f32`/`i32`/`u32`
-    // and rejects `i64`/`u64`, whose upper range `f64` cannot represent
-    // exactly. `2^53 + 1` declared `Float` used to compare unequal to itself
-    // across the two interpreters.
-    (@col $row:ty, $col:path, Float, $field:ident) => {
-        impl<'r> $crate::rows::Eval<'r, $row> for $col {
-            fn eval(&'r self, row: &'r $row) -> f64 { ::core::convert::From::from(row.$field) }
-        }
+        // The impls are generated inside an anonymous `const` so the SQL type
+        // markers can be brought into scope without the caller importing them
+        // and without leaking the glob into the caller's namespace. Trait impls
+        // register globally regardless of the block they are written in.
+        //
+        // `$ty` is a `:ty`, not an `:ident`, because `Nullable<Text>` is a type
+        // and not a token the macro can match per-variant -- which is exactly
+        // what makes nullable columns expressible. That means `$ty` resolves in
+        // the scope of the expansion, so the markers have to be here.
+        const _: () = {
+            #[allow(unused_imports)]
+            use $crate::types::*;
+            $(
+                impl<'r> $crate::rows::Eval<'r, $row> for $table::$col {
+                    fn eval(&'r self, row: &'r $row) -> $crate::rows::Rust<'r, $ty> {
+                        $crate::rows::read_field::<$ty, _>(&row.$field)
+                    }
+                }
+            )*
+        };
     };
 }

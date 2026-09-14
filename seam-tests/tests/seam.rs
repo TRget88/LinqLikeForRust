@@ -65,7 +65,8 @@ fn one_value_two_interpreters() {
 
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE ((salary > ?) AND (dept = ?)) \
+        "SELECT id, name, dept, salary, remote FROM employees \
+         WHERE ((salary > ?) AND (dept = ?)) \
          ORDER BY dept, salary DESC LIMIT 2"
     );
     let ids: Vec<i64> = q.to_memory_sorted(&people).map(|e| e.id).collect();
@@ -131,7 +132,7 @@ fn like_translates_and_evaluates() {
     let q = query::<Employee>().filter(employees::name.like("%e%"));
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE (name LIKE ?)"
+        "SELECT id, name, dept, salary, remote FROM employees WHERE (name LIKE ?)"
     );
     let names: Vec<&str> = q.to_memory(&people).map(|e| e.name.as_str()).collect();
     assert_eq!(names, ["Brent", "Dev", "Eve"]);
@@ -158,7 +159,7 @@ fn offset_and_limit_agree_across_interpreters() {
         .limit(2);
     assert_eq!(
         q.to_sql().sql,
-        "SELECT * FROM employees WHERE (salary > ?) LIMIT 2 OFFSET 1"
+        "SELECT id, name, dept, salary, remote FROM employees WHERE (salary > ?) LIMIT 2 OFFSET 1"
     );
     let ids: Vec<i64> = q.to_memory(&people).map(|e| e.id).collect();
     assert_eq!(ids, [2, 3]);

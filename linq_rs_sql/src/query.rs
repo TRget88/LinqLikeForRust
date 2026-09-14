@@ -15,7 +15,7 @@
 
 use crate::column::Column;
 use crate::expr::Expr;
-use crate::types::Boolean;
+use crate::types::WhereClause;
 use crate::value::SqlValue;
 use core::fmt::Write;
 use core::marker::PhantomData;
@@ -59,6 +59,66 @@ impl<T> All<T> {
     /// [`Query::new`] which sets this as the default.
     pub fn new() -> Self {
         Self { _ty: PhantomData }
+    }
+}
+
+/// A selection naming specific columns, in a fixed order.
+///
+/// `All` emits `*`, which makes the result set's column order the **database's**
+/// choice: SQLite and PostgreSQL expand `*` in table-declaration order, which
+/// this crate cannot pin and which a migration changes under an already-compiled
+/// binary. Naming the columns moves that choice to the query.
+///
+/// Reading by name ([`crate::from_row`]) already makes `*` *safe*. This makes it
+/// unnecessary, and is the precondition for narrow projections: a query cannot
+/// select a subset of columns while its SELECT list is a wildcard.
+///
+/// The names come from [`Column::NAME`], fixed at compile
+/// time by [`table!`](crate::table), so this allocates nothing beyond the SQL
+/// string itself.
+#[derive(Debug, Clone, Copy)]
+pub struct Named<T> {
+    names: &'static [&'static str],
+    _ty: PhantomData<T>,
+}
+
+impl<T> Named<T> {
+    /// Build a selection over `names`, which must be that table's columns in
+    /// the order the caller wants them back.
+    pub const fn new(names: &'static [&'static str]) -> Self {
+        Self {
+            names,
+            _ty: PhantomData,
+        }
+    }
+
+    /// The names this selection emits, in order.
+    pub const fn names(&self) -> &'static [&'static str] {
+        self.names
+    }
+}
+
+impl<T: Table> Selection for Named<T> {
+    type Table = T;
+    fn write_select(&self, sql: &mut String) {
+        if self.names.is_empty() {
+            // A zero-column SELECT is not valid SQL anywhere. An entity with no
+            // columns cannot happen via `entity!`, but `Named` is public.
+            sql.push('*');
+            return;
+        }
+        for (i, n) in self.names.iter().enumerate() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+            // Unquoted, consistently with how every other identifier in this
+            // crate is emitted -- `WHERE (order > ?)` is already a parse error
+            // today, before this existed. Quoting is a dialect question with no
+            // spelling valid on SQLite, PostgreSQL and MySQL alike, and it wants
+            // one ruling covering every emission site rather than a special case
+            // here. See D-030.
+            sql.push_str(n);
+        }
     }
 }
 
@@ -149,7 +209,7 @@ trait SqlWriter {
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>);
 }
 
-impl<E: Expr<SqlType = Boolean> + 'static> SqlWriter for E {
+impl<E: Expr + 'static> SqlWriter for E {
     fn write_to(&self, sql: &mut String, params: &mut Vec<SqlValue>) {
         <E as Expr>::write_to(self, sql, params);
     }
@@ -221,7 +281,8 @@ impl<T: Table, S: Selection<Table = T>> Query<T, S> {
     /// `.filter()` calls accumulate; combine with `.or()` for OR-paths.
     pub fn filter<P>(mut self, predicate: P) -> Self
     where
-        P: Expr<SqlType = Boolean> + 'static,
+        P: Expr + crate::expr::BelongsTo<T> + 'static,
+        P::SqlType: WhereClause,
     {
         self.where_parts.push(Box::new(predicate));
         self
