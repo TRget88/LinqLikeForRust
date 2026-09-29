@@ -11,6 +11,9 @@
 //! Note the path: `include_str!` resolves relative to *this file*, so
 //! `"README.md"` would look for `src/README.md` and fail to compile.
 #![doc = include_str!("../README.md")]
+// Every public item carries docs. The deleted provider crate was the only one
+// that enforced this; both published crates do now.
+#![deny(missing_docs)]
 
 #[macro_use]
 pub mod pred;

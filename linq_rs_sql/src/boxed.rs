@@ -83,11 +83,8 @@ use core::cmp::Ordering;
 // DynPred — one trait object, both interpreters
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// A boolean predicate with its type erased, retaining both interpretations.
-///
-/// You do not implement this. The blanket impl below covers every value that
-/// is already both an [`Expr`] of SQL type `Boolean` and an
-/// [`Eval`] over `Row`.
+// Private, so `DynPred` cannot be implemented downstream. See `DynPred`'s own
+// docs for why that matters.
 mod sealed {
     /// Not nameable outside the crate, so `DynPred` cannot be implemented
     /// outside it. The blanket impl below is keyed on exactly the pair of
@@ -103,6 +100,17 @@ where
 {
 }
 
+/// A boolean predicate with its type erased, retaining **both** interpretations.
+///
+/// You do not implement this, and cannot: the supertrait is private. The blanket
+/// impl below covers every value that is already both an [`Expr`] whose `SqlType`
+/// is a [`TruthValue`] — `Boolean` or `Nullable<Boolean>` — and an [`Eval`] over
+/// `Row`. So boxing admits nothing new to the expression language, and nothing can
+/// be boxed for one interpreter but not the other.
+///
+/// The seal is not decoration. An unsealed version let a hand-written impl make
+/// SQL select every row while memory selected none, from the same value, through
+/// entirely safe API.
 pub trait DynPred<Row>: sealed::Sealed<Row> {
     /// Interpreter one: append this predicate's SQL, binding its literals.
     fn write_sql(&self, sql: &mut String, params: &mut Vec<SqlValue>);

@@ -477,6 +477,53 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-035 — release hygiene: a changelog with releases in it, and `deny(missing_docs)`
+- **Status:** SETTLED (2026-09-14) — implemented.
+- Three gaps that blocked a release without being bugs.
+
+### `CHANGELOG.md` had no released-version headings
+966 lines, everything under one `## [Unreleased]` — **including what actually
+shipped as `linq_rs 0.2.0` and `linq_rs_sql 0.1.0`**. Found as `RR-028` by the
+documentation truth pass and disclosed rather than fixed, because fixing it needed
+a decision about where the release boundary falls.
+- **Ruling:** dated release headings naming the versions that shipped together,
+  because the two crates version independently and a single version number in the
+  heading would be a lie about one of them. `[Unreleased]` states which versions it
+  targets, so nothing in it can read as shipped.
+- **The boundary is derived, not guessed.** Both crates were published from
+  `fae7a35`; every section that existed in `CHANGELOG.md` at that commit is
+  released, everything added after is not. Verified mechanically: all **33**
+  sections below the release heading are present in `git show fae7a35:CHANGELOG.md`,
+  and none above it is.
+- The header also claimed to document "changes to `linq_rs`" while documenting both
+  crates. Corrected.
+
+### `PUBLISHING.md` was a completed checklist, not a runbook
+Seven of its eleven steps were marked `DONE 2026-09-10`. Anyone following it for
+the next release would have been reading someone else's finished work.
+- **Ruling:** a runbook for the **next** release (all steps un-run), with the
+  finished run demoted to a dated record at the end, keeping the two things that
+  release taught. Also corrected: the token section demanded `publish-new`, which
+  is unnecessary now that both names exist, and the dependency note cited `D-024`
+  where `D-032` is binding.
+
+### `deny(missing_docs)` was on zero published crates
+The deleted provider crate was the only one that had it, so removing it under
+`D-032` silently removed the guarantee from the workspace.
+- **Ruling:** both published crates deny it.
+- **It found a real defect immediately.** `DynPred`'s doc comment was attached to
+  the private `mod sealed` sitting above it, not to the trait — so the
+  documentation for a public trait **rendered nowhere at all**. Confirmed by
+  reading the generated HTML before and after. The prose was also stale: it said
+  `Expr` of SQL type `Boolean`, from before `D-027` made a predicate's type
+  possibly `Nullable<Boolean>`.
+- That is the argument for the lint over a convention: a misplaced doc comment
+  looks correct in the source and is invisible in the output.
+- **Enforced by:** `#![deny(missing_docs)]` in `src/lib.rs` and
+  `linq_rs_sql/src/lib.rs`; `gen-docs.py --check` for the changelog's generated
+  neighbours; nothing mechanical for the release headings, which need a human to
+  say when a release happened.
+
 ## D-034 — in-memory `LIKE` folds ASCII case, matching SQLite
 - **Status:** SETTLED (2026-09-14) — implemented. Closes the code finding filed by
   the documentation truth pass.

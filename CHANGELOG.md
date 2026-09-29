@@ -1,11 +1,19 @@
 # Changelog
 
-All notable changes to `linq_rs` will be documented in this file.
+All notable changes to `linq_rs` **and** `linq_rs_sql` are documented in this
+file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+The two crates version **independently**, so release headings below are dated and
+name the versions that shipped together, rather than being a single version
+number. Every entry states which crate it concerns.
+
 ## [Unreleased]
+
+Targets **`linq_rs 0.2.1`** and **`linq_rs_sql 0.2.0`**. Nothing in this section is
+published; `linq_rs 0.2.0` and `linq_rs_sql 0.1.0` are the live versions.
 
 ### Fixed — in-memory `LIKE` disagreed with SQLite on every case-varying pattern (D-034)
 
@@ -307,6 +315,14 @@ Also fixed: the `#[must_use]` message on `into_lookup` told users to use
 
 
 
+---
+
+## [2026-09-10] — `linq_rs 0.2.0`, `linq_rs_sql 0.1.0`
+
+Both live on crates.io. The boundary is not a guess: every section below existed
+in the tree at `fae7a35`, the commit these were published from; everything above
+was added afterwards.
+
 ### Yanked
 
 - **`0.1.0` is yanked.** It was published on 2026-03-28 and should not be used.
@@ -355,6 +371,10 @@ Also fixed: the `#[must_use]` message on `into_lookup` told users to use
 
 Recorded here rather than discovered later. The yank notice above lists three
 defects in 0.1.0; **two of the three are fixed. This is the third.**
+
+> **Still true of the live `0.2.0`.** Both items below are open in the published
+> crate. The operator-surface item is reversed on the unreleased branch (the
+> `D-019` cut took 90 methods to 62); `concat_` is unchanged.
 
 - **`concat_` is still unusable mid-chain.** Its bound
   `I2: IntoIterator<Item = Self::Item, IntoIter = Self>` requires the argument's
