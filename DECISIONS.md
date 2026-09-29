@@ -323,6 +323,33 @@ seam, not the seam.
 - **Lowered from 1.75 by `D-106` (2026-09-10).** The floor was never a
   considered choice — it was wherever the 23 RPITIT sites happened to put it.
   Converting them to named types for unrelated reasons dropped it ten releases.
+- **The floor is now measured, not inherited (2026-09-29).** The bullet above is
+  honest that 1.65 was an accident of the RPITIT conversion rather than a decision,
+  which left open whether it is *too high* — a needlessly high MSRV excludes users,
+  and lowering one later is not a breaking change. Measured by stripping
+  `rust-version` from the packaged tarball and running the suite downward:
+
+  | toolchain | `cargo build --lib` | `cargo test` |
+  |---|---|---|
+  | 1.65 (declared) | builds | passes |
+  | 1.64 | builds | **passes** (186) |
+  | 1.63 | builds | **FAILS** |
+  | 1.60 | builds | **FAILS** |
+
+  So the real floor is **1.64** and the declared 1.65 carries exactly one release
+  of headroom — conservative, but not arbitrary. The failing test is
+  `skip_matches_std_on_a_non_fused_source` (`tests/adaptor_contracts.rs:46`):
+  `std::iter::Skip`'s behaviour on a **non-fused** source changed in 1.64, so on
+  1.63 `std` yields `[None, Some(40), …]` where `skip_` yields
+  `[Some(40), Some(50), Some(60), None, None, None]`. `skip_`'s contract is that it
+  agrees with `Iterator::skip`; below 1.64 it cannot.
+- **Note the shape of that result: it builds five releases lower and is wrong
+  there.** `msrv-tarball.sh` runs `cargo build --lib`, so a build-only MSRV gate
+  would have accepted `rust-version = "1.60"` without complaint. The floor is a
+  *behavioural* bound, and only the test suite can see it. Nothing currently fails
+  if someone lowers the declared MSRV below 1.64 — the gate would need to run the
+  suite one release *under* the declared floor and require it to fail. Not built;
+  recorded as the known hole (`D-036`'s class: a real claim with no gate).
 - **Why:** Eight return-position-`impl Trait`-in-trait sites pin the floor at
   exactly 1.75 with zero headroom. The branch declares it, but its MSRV job runs
   `cargo test --all-targets`, which **excludes doctests** — and the job never ran
@@ -339,10 +366,13 @@ seam, not the seam.
   `rustc --version` first) and runs `test-count-floor.sh`, which covers both
   `--all-targets` and `--doc`; the latter is the bucket a bare
   `cargo test --all-targets` would have skipped. `msrv-tarball.sh` additionally
-  builds the packaged tarballs — verified on a genuine 1.65.0 toolchain. The CI job now also asserts `rustc --version` is 1.75.x
-  before trusting the run — during this remediation two local verifications used
-  a `PATH` that silently fell through to stable, which produces a confident and
-  false MSRV claim.
+  builds the packaged tarballs — verified on a genuine 1.65.0 toolchain. The CI
+  job also asserts `rustc --version` matches **1.65** before trusting the run —
+  during this remediation two local verifications used a `PATH` that silently fell
+  through to stable, which produces a confident and false MSRV claim. (This
+  sentence read *"asserts `rustc --version` is 1.75.x"* until 2026-09-29: residue
+  from the pre-`D-106` floor, inside the one block a reader consults to find out
+  what is enforced. The workflow has always asserted `1.65.`)
 
 ## D-011 — `std` only, `alloc` door left open
 - **Status:** PROVISIONAL (2026-09-09)

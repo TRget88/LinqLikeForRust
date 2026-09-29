@@ -54,8 +54,7 @@ linq_rs = "0.2"
 > keep working, so update the pin.
 
 See [CHANGELOG.md](https://github.com/TRget88/LinqLikeForRust/blob/main/CHANGELOG.md)
-(everything is still under a single `[Unreleased]` heading, including what shipped
-as 0.2.0)
+(under the dated heading `## [2026-09-10] — linq_rs 0.2.0, linq_rs_sql 0.1.0`)
 for the full 0.2.0 entry. It is a large one: relative to published 0.1.0 it
 renames five methods (`skip`, `group_by`, `join`, `to_lookup`, `to_hashmap`) and
 lowers the MSRV to 1.65. The operator surface grew 48 -> 94 during development
