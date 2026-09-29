@@ -562,8 +562,24 @@ types are gated and which are not.
 - **Honest residue:** those 663 claims remain unguarded and will drift again. What
   changed is that the shape of the risk is written down, so the next pass knows
   where to look first.
-- **Enforced by:** `link-check.py` in CI for links; nothing for behaviour prose,
-  stated plainly rather than implied by a gate list that looks complete.
+- **Three of them have since been converted, and the pattern is worth naming
+  (2026-09-29).** Each took a different route out of the residue:
+  - `README.md`'s adaptor/refinement counts: **derived**. They were prose naming six
+    types the `D-019` cut had deleted; now a generated `gen-docs.py` block.
+  - `TextOps::like`'s case-folding semantics: **doctested**. A behaviour claim became
+    six lines that assert it, at the public method a user actually reads.
+  - `docs/DRIVER_ADAPTER.md`: **compiled**. An entire page of guidance went from
+    unchecked prose to a CI gate (`adapter-gate.sh`, `D-109`).
+
+  So the three exits are *derive it*, *assert it*, or *compile it* — and the choice
+  follows the claim's shape rather than taste. A count derives. A behaviour asserts.
+  A code sample compiles. What cannot take any of the three is a summary judgement
+  about the whole system, which is exactly the kind that produced the 22 dangerous
+  claims, and the honest move there is a smaller claim rather than a bigger gate.
+- **Enforced by:** `link-check.py` in CI for links; `gen-docs.py`, the doctests and
+  `adapter-gate.sh` for the three converted above; nothing for the rest of the
+  behaviour prose, stated plainly rather than implied by a gate list that looks
+  complete.
 
 ## D-035 — release hygiene: a changelog with releases in it, and `deny(missing_docs)`
 - **Status:** SETTLED (2026-09-14) — implemented.
@@ -756,7 +772,10 @@ The deleted provider crate was the only one that had it, so removing it under
   and `LoadField` all live in `linq_rs_sql` and have no dependencies (`D-029`).
   The deleted crate was only the rusqlite glue, and that glue is what a user was
   always going to write. It is preserved verbatim, with everything it was verified
-  to do, in `docs/DRIVER_ADAPTER.md` — 42 lines, 30 of them code.
+  to do, in `docs/DRIVER_ADAPTER.md` — 42 lines, 30 of them code. **Compiled in CI
+  since 2026-09-29** by `adapter-gate.sh`, against a hand-written `rusqlite`
+  stand-in, so deleting the crate cost the glue its test coverage for eighteen days
+  and no longer does. See `D-109`, which found out the hard way.
 - **`linq_rs_sql` may depend on `linq_rs`; it does not.** The permission is
   recorded because it changes what is possible: `seam-tests` exists (`D-024`) only
   to hold cross-crate tests without that dependency, so it could now be collapsed.
@@ -1801,17 +1820,45 @@ while these remain open — which is exactly the intended latitude.
   value, which is the guidance this entry gives rather than a `panic!` or a silent
   `NULL` bind. The first fenced block is untouched, so the "42 lines, 30 of them
   code" figure still holds; the helper block grew from 29 lines to 39.
-- **The gap worth naming: that file is prose nothing compiles.** `D-032` deleted
-  `linq_rs_sqlite` and preserved the adapter as documentation, and since then no
-  gate, test or doctest has built it — it cannot be a doctest, because compiling it
-  needs `rusqlite` and `D-032` permits no dependency anywhere in the workspace. So
-  the crate's central "you write this glue" promise is the one piece of code in the
-  project with no mechanical check at all, and an upstream change silently
-  invalidating it is exactly what just happened. I verified my edit by extracting
-  `bind` and compiling it against a hand-written stub for the one `rusqlite` trait
-  it touches (all five variants bound, in a scratchpad crate, not committed) — which
-  is also the shape a real gate would take: a stub thin enough to need no
-  dependency. Not built; recorded here and in `D-036`'s class.
+- **That gap is now closed: `adapter-gate.sh`.** `D-032` deleted `linq_rs_sqlite`
+  and preserved the adapter as documentation, and from then until 2026-09-29 nothing
+  built it. It cannot be a doctest — compiling it needs `rusqlite`, and `D-032`
+  permits no dependency anywhere in the workspace, including a dev-dependency of a
+  `publish = false` crate, which would still appear in the resolved graph
+  `packaging-gate.sh` checks. So the crate's central "you write this glue" promise
+  was the one piece of code here with no mechanical check, and this entry's own
+  ruling silently invalidating it is what forced the issue.
+
+  The gate extracts every fenced Rust block from the doc and compiles it in a
+  throwaway crate against `linq_rs_sql` plus a **hand-written stand-in named
+  `rusqlite`** — a separate crate, not a `mod`, because a bare `use rusqlite::..`
+  path resolves to a crate and the documented `use` has to compile *verbatim*. The
+  stub is ~90 lines with every body `unimplemented!()`; the gate type-checks and
+  never runs. Nothing enters the workspace, so the resolved graph is untouched, which
+  is what makes this possible under `D-032` at all.
+
+  **Verified failing in five ways**, because a gate that has only ever passed is a
+  claim:
+
+  | perturbation | result |
+  |---|---|
+  | `bind`'s wildcard arm removed — the exact `D-109` regression | `E0004: non-exhaustive patterns` |
+  | `SqlValueRef::Text` handed bytes instead of `&str` | `E0308: mismatched types` |
+  | ` ```rust ` fences relabelled ` ```rs ` | FAIL: no blocks found |
+  | a block silently emptied | FAIL, naming the absent markers |
+  | the `bind`/`fetch` block deleted outright | FAIL, naming the absent markers |
+
+  The last three matter most: an extraction that quietly returns nothing would
+  otherwise report success, which is what `release-gate.sh` did in this same repo.
+  So the extractor asserts that specific adapter markers are present rather than
+  trusting a non-zero block count.
+- **What the stub does *not* prove, stated in the script and in the doc.** The
+  signatures are copied from rusqlite's public API, so this catches a `linq_rs_sql`
+  change that breaks the adapter — the half that actually drifts, because it is the
+  half this repo edits. It would **not** catch a *rusqlite* change, because finding
+  that out requires the dependency `D-032` forbids. A documented limitation beats a
+  silent assumption, and the honest scope is "the adapter agrees with this crate",
+  not "the adapter compiles against rusqlite".
 
 # DO-NOT-BUILD
 

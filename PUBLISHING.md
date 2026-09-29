@@ -103,19 +103,21 @@ reproduces the stale picture exactly, which is how the paragraph survived.
 ### 2. Run every gate on `main`
 
 ```bash
-./.github/scripts/test-count-floor.sh && ./.github/scripts/packaging-gate.sh && ./.github/scripts/msrv-tarball.sh && ./.github/scripts/release-gate.sh && python3 .github/scripts/gen-docs.py --check && python3 .github/scripts/like-differential.py && python3 .github/scripts/link-check.py && ./.github/scripts/itertools-interop.sh
+./.github/scripts/test-count-floor.sh && ./.github/scripts/packaging-gate.sh && ./.github/scripts/msrv-tarball.sh && ./.github/scripts/release-gate.sh && python3 .github/scripts/gen-docs.py --check && python3 .github/scripts/like-differential.py && python3 .github/scripts/link-check.py && ./.github/scripts/adapter-gate.sh && ./.github/scripts/itertools-interop.sh
 ```
 
 `msrv-tarball.sh` is the one that matters: a green repo does not imply a green
 tarball (`D-023`).
 
-That is **all eight** scripts in `.github/scripts/`, which is what the heading
+That is **all nine** scripts in `.github/scripts/`, which is what the heading
 claims. It listed six until 2026-09-29 — `link-check.py` was created in the commit
 directly after this runbook's last edit and never added here, and
-`itertools-interop.sh` was never listed. The last two both need network:
+`itertools-interop.sh` was never listed; `adapter-gate.sh` was added the same day
+and is in the chain from the start. Of the additions, two need network:
 `link-check.py` resolves external URLs (pass `--no-network` to skip that third of
 it) and `itertools-interop.sh` builds a throwaway crate against the real
-`itertools`. If you add a script to `.github/scripts/`, add it here in the same
+`itertools`. `adapter-gate.sh` needs none — its rusqlite stand-in is written on the
+spot, which is what lets it exist under `D-032` at all. If you add a script to `.github/scripts/`, add it here in the same
 commit, or this list becomes the thing it was meant to prevent — a gate list that
 looks complete and is not.
 

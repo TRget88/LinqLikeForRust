@@ -6,9 +6,17 @@ depend on a driver, and **neither it nor `linq_rs` will ever take a third-party
 dependency**: `linq_rs` has none, and `linq_rs_sql` may depend only on `linq_rs`.
 See `DECISIONS.md` `D-032`.
 
-So the driver glue is yours to write. It is small — the version below is 42 lines, 30 of them code and was verified end-to-end against a real in-memory SQLite
-before being moved here from a crate that has since been deleted for taking a
-dependency.
+So the driver glue is yours to write. It is small: the adapter below is 42 lines,
+30 of them code. It was verified end-to-end against a real in-memory SQLite before
+being moved here from a crate that has since been deleted for taking a dependency.
+
+**Every Rust block on this page is compiled in CI** by
+`.github/scripts/adapter-gate.sh`, against `linq_rs_sql`'s real traits and a
+hand-written stand-in for the slice of rusqlite used here. So this is checked code
+rather than a transcript — but note what the stub means: a change to
+`linq_rs_sql` that breaks this page fails CI, while a change to *rusqlite* that
+breaks it would not be caught, because depending on rusqlite to find out is the
+thing `D-032` forbids.
 
 `RowSource` has **one required method**. An earlier design had five typed
 accessors and measured 101 lines per adapter, because each adapter re-implemented

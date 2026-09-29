@@ -15,6 +15,34 @@ number. Every entry states which crate it concerns.
 Targets **`linq_rs 0.2.1`** and **`linq_rs_sql 0.2.0`**. Nothing in this section is
 published; `linq_rs 0.2.0` and `linq_rs_sql 0.1.0` are the live versions.
 
+### Added — the driver adapter in the docs is now compiled in CI (D-109)
+
+`docs/DRIVER_ADAPTER.md` is the code the README hands you when it says the driver
+glue is yours to write. Nothing had built it since `D-032` deleted the provider
+crate that used to: it cannot be a doctest, because compiling it needs `rusqlite`
+and this project takes no third-party dependency anywhere. So the crate's central
+"here is the glue" promise was unchecked prose — and making `SqlValue`
+`#[non_exhaustive]` in this same release broke it, silently, because `bind`'s
+`match` had no wildcard arm.
+
+`.github/scripts/adapter-gate.sh` extracts every fenced Rust block from the page
+and compiles it against `linq_rs_sql` plus a hand-written stand-in named
+`rusqlite` — a separate throwaway crate rather than a `mod`, so the documented
+`use rusqlite::types::ValueRef;` compiles verbatim. Nothing enters the workspace,
+so the zero-dependency guarantee is untouched.
+
+Verified failing five ways rather than only passing: the missing wildcard arm
+(`E0004`), a type error (`E0308`), the fences relabelled, a block emptied, and a
+block deleted. The last three are the ones that matter — an extraction that
+silently returns nothing would otherwise report success, so the extractor asserts
+that specific adapter markers are present rather than trusting a block count.
+
+**What it does not prove**, said in the script and on the page itself: the stub's
+signatures are copied from rusqlite's public API, so this catches a `linq_rs_sql`
+change that breaks the adapter — the half that drifts, since it is the half this
+repo edits — but not a *rusqlite* change, which would need the dependency the
+project forbids.
+
 ### Changed — **breaking:** `SqlValue` is now `#[non_exhaustive]` (D-109)
 
 Matching `SqlValue` exhaustively from outside `linq_rs_sql` no longer compiles;
