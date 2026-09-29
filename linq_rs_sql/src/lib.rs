@@ -11,14 +11,13 @@
 //! Note the path: `include_str!` resolves relative to *this file*, so
 //! `"README.md"` would look for `src/README.md` and fail to compile.
 #![doc = include_str!("../README.md")]
-// Every public item carries docs. The deleted provider crate was the only one
-// that enforced this; both published crates do now.
-// Symmetric with `linq_rs`, which has had this since its first commit. Absent
-// here until 2026-09-29, while the roadmap
-// (https://github.com/TRget88/LinqLikeForRust/blob/main/ROADMAP.md) checked it
-// off as applied "on the crate root" -- the same asymmetry as the `missing_docs`
-// override (`D-035`), in the same two files.
+// Symmetric with `linq_rs`, which has had this since its first commit; absent here
+// until 2026-09-29. See `D-109`.
 #![forbid(unsafe_code)]
+// Every public item carries docs. The deleted provider crate was the only one that
+// enforced this; both published crates do now. `D-035` records the two weeks
+// `linq_rs` spent with its own `deny` silently overridden by a `warn` on the line
+// below it -- do not add one here.
 #![deny(missing_docs)]
 
 #[macro_use]
