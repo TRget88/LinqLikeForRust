@@ -8,9 +8,11 @@
 //! first-appearance order, and a `HashMap<K, usize>` points into it, so each
 //! key is stored twice. For the key types this is built for — integers, `&str`,
 //! `String` — that is cheap, and the alternative was `get()` being a linear scan
-//! over every group, which is what this type did before (`AUDIT.md` P-1: 288x
+//! over every group, which is what this type did before ([`AUDIT.md`] P-1: 288x
 //! slower than `HashMap::get` at 10,000 keys, in the one type whose entire
 //! purpose is keyed random access).
+//!
+//! [`AUDIT.md`]: https://github.com/TRget88/LinqLikeForRust/blob/main/AUDIT.md
 
 use crate::grouping::Grouping;
 use std::collections::HashMap;

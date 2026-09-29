@@ -242,18 +242,43 @@ echo "=== a published crate must not cite a file it does not ship (D-023) ==="
 # repo-root doc passed this check locally and failed on CI -- the gate was
 # reading the repo when its entire subject is what ships. (D-023's own lesson,
 # reappearing inside D-023's gate.)
-sib_files="$(printf '%s\n' "$sib_listing" | grep -E '^(src/.*\.rs|README\.md)$')"
+# Generalized 2026-09-29. This checked ONE crate (linq_rs_sql) against ONE
+# filename (DECISIONS.md), so the identical defect was live and unguarded in the
+# ROOT crate: src/lookup.rs bare-cited `AUDIT.md` in a rendered `//!` doc on
+# `pub mod lookup`, and AUDIT.md is in the root crate's `exclude`. "The same check
+# for the sibling" was assumed and had never been true. Now: every published
+# crate, every repo-root doc, derived rather than hardcoded.
 bare=0
-for f in $sib_files; do
-  # A mention is fine if the same line, or the file, also carries the URL.
-  if grep -q 'DECISIONS\.md' "$ROOT/linq_rs_sql/$f" \
-     && ! grep -q 'LinqLikeForRust/blob/main/DECISIONS\.md' "$ROOT/linq_rs_sql/$f"; then
-    echo "  linq_rs_sql/${f} cites DECISIONS.md with no URL, and the tarball does not ship it"
-    bare=1
+for pkg in linq_rs linq_rs_sql; do
+  if [ "$pkg" = "linq_rs" ]; then
+    pkg_dir="$ROOT"; pkg_listing="$listing"
+  else
+    pkg_dir="$ROOT/linq_rs_sql"; pkg_listing="$sib_listing"
   fi
+  pkg_files="$(printf '%s\n' "$pkg_listing" | grep -E '^(src/.*\.rs|README\.md)$' || true)"
+  for doc in $(cd "$ROOT" && ls *.md docs/*.md 2>/dev/null); do
+    # Shipped by THIS tarball? Then a bare mention is followable. Compare against
+    # the tarball listing, never the repo -- that is D-023's whole point.
+    if printf '%s\n' "$pkg_listing" | grep -qxF "$doc"; then continue; fi
+    docbase="${doc##*/}"
+    esc="$(printf '%s' "$docbase" | sed 's/\./\\./g')"
+    for f in $pkg_files; do
+      [ -f "$pkg_dir/$f" ] || continue
+      if grep -q "$esc" "$pkg_dir/$f" \
+         && ! grep -q "LinqLikeForRust/blob/main/[^ )]*${esc}" "$pkg_dir/$f"; then
+        echo "  ${pkg}/${f} cites ${docbase} with no URL, and ${pkg}'s tarball does not ship it"
+        bare=1
+      fi
+    done
+  done
 done
-[ "$bare" -eq 0 ] || err "linq_rs_sql cites DECISIONS.md without a URL; its tarball has no path to that file"
-echo "linq_rs_sql's citations of DECISIONS.md all carry a URL"
+if [ "$bare" -eq 0 ]; then
+  echo "every citation of an unshipped doc carries a URL (both crates, all root docs)"
+else
+  # `err` accumulates rather than exits, so an unconditional success echo here
+  # would print directly under its own FAIL line.
+  err "a published crate cites a doc it does not ship, without a URL"
+fi
 
 echo
 echo "=== source invariants (D-001, D-003, D-004) ==="
@@ -279,6 +304,12 @@ fi
 # A real `Rc<RefCell<_>>` is never on a `//` line, so this filter cannot hide one.
 # Verified by injecting `let _x: Rc<RefCell<u8>>;` into each crate and confirming
 # the gate still fails.
+# "Looked and found nothing" was byte-identical to "could not look": with `src/`
+# absent the grep finds nothing, the `if` is false, and the gate printed success.
+# Assert the directories exist before trusting a clean result.
+for d in src linq_rs_sql/src; do
+  [ -d "$ROOT/$d" ] || err "$d does not exist -- this scan cannot have looked at it"
+done
 if hits="$(grep -rnE 'Rc<|RefCell|Arc<|Mutex<|RwLock<' src/ linq_rs_sql/src/ 2>/dev/null \
             | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//')"; then
   err "interior mutability found in src/ — D-003 and D-004 forbid it:"
