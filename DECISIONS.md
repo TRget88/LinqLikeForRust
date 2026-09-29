@@ -994,12 +994,29 @@ both are legal today.
 - **Forbids:** positional decoding; treating non-zero as `true`; `as` casts in
   decoding; resolving a name to the first of several matches; delegating name
   matching or error wording to an adapter.
-- **Enforced by:** 17 unit tests in `linq_rs_sql/src/from_row.rs` and 14 in
-  `linq_rs_sql/tests/from_row.rs`, including a reordered result set, two
-  same-typed adjacent columns not swapping, the bool refusal, join ambiguity,
-  and a missing column failing identically on empty and populated result sets.
-  Separately proven end-to-end against a real SQLite through a 42-line rusqlite
-  adapter.
+- **Enforced by:** **31 tests in `linq_rs_sql/tests/from_row.rs`** — 14 covering the
+  `entity!` macro path and the public properties, plus the 17 in its `mod resolution`
+  covering resolution and field decoding one unit at a time. Between them: a
+  reordered result set, two same-typed adjacent columns not swapping, the bool
+  refusal, join ambiguity, and a missing column failing identically on empty and
+  populated result sets. Separately proven end-to-end against a real SQLite through
+  a 42-line rusqlite adapter, which `adapter-gate.sh` now compiles in CI (`D-109`).
+- **Those 17 were in `src/from_row.rs` until 2026-09-29, and the split was not a
+  design.** This line read "17 unit tests in `src/from_row.rs` and 14 in
+  `tests/from_row.rs`", which made the placement look deliberate. `#[cfg(test)] mod
+  tests` inside a source file earns its place when the tests need **private** items,
+  and these needed none: the file declares one private item and the module
+  referenced it zero times, while every name the tests do use is `pub` and
+  re-exported from `lib.rs`. It was also the only file in either crate doing it, and
+  it made 212 of 852 lines — 24% — test code.
+
+  Moved verbatim, and checked by **name** rather than by count, because a silently
+  dropped test is the failure this repo keeps finding: all 17 leaf names and all 14
+  original names are present afterwards, `--lib` reports zero `from_row` tests, and
+  the workspace total is unchanged at 331. The module keeps `Cols` and `WANT` scoped
+  so they cannot collide with the `Mock` helper above them. The compiler caught two
+  import errors in the move — a missing `Float` and an unused `RowSource` — which is
+  the argument for explicit imports over inheriting `use super::*`.
 - **Closed by `D-030`:** `to_sql()` emitted `SELECT *` when this was written; it now names the entity's columns, so a result set this crate generated arrives in declared order and resolution is provably the identity. By-name reading still covers what the crate does *not* control — a hand-written query, a join, a view, a driver that reorders. Originally filed here as "still open, and next". By-name reading makes
   that *safe*, not *good* — naming the columns moves order from the database's
   control to the query's and is the precondition for `.select()` projection. It
