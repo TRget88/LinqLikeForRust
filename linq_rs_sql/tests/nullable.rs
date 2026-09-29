@@ -1,9 +1,17 @@
-//! Nullable columns and three-valued logic. Every expectation here was read
-//! off real SQLite first (see `sqlite_truth.py` / `differential.py` in the
-//! spike); nothing is asserted from memory.
+//! Nullable columns and three-valued logic. Every expectation here was read off
+//! real SQLite first; nothing is asserted from memory.
+//!
+//! The provenance note used to cite `sqlite_truth.py` / `differential.py` "in the
+//! spike". Neither file has ever existed in this repository, so the expectations
+//! had no re-derivable provenance -- unlike `LIKE`, whose 43-case corpus is
+//! re-derived in CI by `.github/scripts/like-differential.py`. The truth-table
+//! cells below were re-confirmed against python3's built-in `sqlite3` on
+//! 2026-09-29 (`SELECT NULL AND 0` -> 0, `SELECT NULL AND 1` -> NULL,
+//! `SELECT NULL OR 1` -> 1, `SELECT NULL OR 0` -> NULL). Generalizing the
+//! differential to cover them is recorded as open in `D-034`.
 
 use linq_rs_sql::prelude::*;
-use linq_rs_sql::rows::query;
+use linq_rs_sql::rows::{query, Logic3};
 use linq_rs_sql::{not, SqlValue};
 
 table! {
@@ -295,19 +303,17 @@ fn nullable_text_column_reads_as_option_str_without_allocating() {
 fn the_kleene_truth_table_matches_sqlite_cell_by_cell() {
     // `None` is UNKNOWN; `Some(b)` is a known value. This is the whole
     // representation -- there is no separate `Tri` type.
+    //
+    // These call THE LIBRARY's Kleene operators. Until 2026-09-29 this test
+    // defined its own `and3`/`or3` here by pattern-matching and asserted those,
+    // so it never named `linq_rs_sql` at all and would have passed with the crate
+    // deleted -- a test shaped exactly like coverage, providing none. The
+    // expectations below are unchanged; only what they are asserted against is.
     fn and3(a: Option<bool>, b: Option<bool>) -> Option<bool> {
-        match (a, b) {
-            (Some(false), _) | (_, Some(false)) => Some(false), // absorbing
-            (Some(true), Some(true)) => Some(true),
-            _ => None,
-        }
+        <Nullable<Boolean> as Logic3<Nullable<Boolean>>>::and3(a, || b)
     }
     fn or3(a: Option<bool>, b: Option<bool>) -> Option<bool> {
-        match (a, b) {
-            (Some(true), _) | (_, Some(true)) => Some(true), // absorbing
-            (Some(false), Some(false)) => Some(false),
-            _ => None,
-        }
+        <Nullable<Boolean> as Logic3<Nullable<Boolean>>>::or3(a, || b)
     }
     let t = Some(true);
     let f = Some(false);

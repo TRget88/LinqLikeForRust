@@ -79,27 +79,45 @@ failed to select a version for the requirement `linq_rs = "^0.2"`
 `linq_rs 0.2.1` and `linq_rs_sql 0.2.0`. Everything below is un-run. Order does
 not matter (see above) and nothing is published until you say so.
 
-**Before anything:** the work is spread across a stack of branches, none merged.
-Publishing from an unmerged branch leaves `.cargo_vcs_info.json` pointing at a
-commit that may be deleted — that was one of the original `0.1.0` defects. Land it
-first.
+**Before anything:** publishing from an unmerged branch leaves
+`.cargo_vcs_info.json` pointing at a commit that may be deleted — that was one of
+the original `0.1.0` defects. Land the work first.
 
-### 1. Land the stack on `main`
+### 1. Land the remaining work on `main`
 
-Bottom-up, so each merge is a fast-forward. Yours to run; I do not merge.
+**One** PR is open: `#2`, `docs/readme-refresh` → `main`. Yours to merge; I do not
+merge. Verified against the live remote on 2026-09-29 — check it again rather than
+trusting this paragraph, and check `origin/main`, not a stale local ref:
 
 ```bash
-gh pr view 2
+git fetch origin --prune && gh pr list --state open && git log --oneline -1 origin/main
 ```
+
+This section said *"the work is spread across a stack of branches, none merged"*
+and *"bottom-up, so each merge is a fast-forward"* until 2026-09-29. Both were
+false: `origin/main` is a two-parent merge commit (PR #1 landed merged, not
+fast-forwarded), so `origin/main` is **not** an ancestor of the remaining branch
+and no further merge can be a fast-forward. A local `main` several commits behind
+reproduces the stale picture exactly, which is how the paragraph survived.
 
 ### 2. Run every gate on `main`
 
 ```bash
-./.github/scripts/test-count-floor.sh && ./.github/scripts/packaging-gate.sh && ./.github/scripts/msrv-tarball.sh && ./.github/scripts/release-gate.sh && python3 .github/scripts/gen-docs.py --check && python3 .github/scripts/like-differential.py
+./.github/scripts/test-count-floor.sh && ./.github/scripts/packaging-gate.sh && ./.github/scripts/msrv-tarball.sh && ./.github/scripts/release-gate.sh && python3 .github/scripts/gen-docs.py --check && python3 .github/scripts/like-differential.py && python3 .github/scripts/link-check.py && ./.github/scripts/itertools-interop.sh
 ```
 
 `msrv-tarball.sh` is the one that matters: a green repo does not imply a green
 tarball (`D-023`).
+
+That is **all eight** scripts in `.github/scripts/`, which is what the heading
+claims. It listed six until 2026-09-29 — `link-check.py` was created in the commit
+directly after this runbook's last edit and never added here, and
+`itertools-interop.sh` was never listed. The last two both need network:
+`link-check.py` resolves external URLs (pass `--no-network` to skip that third of
+it) and `itertools-interop.sh` builds a throwaway crate against the real
+`itertools`. If you add a script to `.github/scripts/`, add it here in the same
+commit, or this list becomes the thing it was meant to prevent — a gate list that
+looks complete and is not.
 
 ### 3. Authenticate
 

@@ -32,6 +32,13 @@ exclude = [
     "/AUDIT.md",
     "/QUESTIONS.md",
     "/PUBLISHING.md",
+    # Same class as AUDIT.md and QUESTIONS.md above: a self-audit deliverable, not
+    # consumer documentation. Nothing in the crate cites it, so excluding it
+    # breaks no link (D-023's rule is that a published crate must not cite a file
+    # it does not ship -- it does not require shipping files nobody cites).
+    # `docs/DRIVER_ADAPTER.md` is NOT excluded: it is user-facing guidance and
+    # both DECISIONS.md and the sibling README point at it.
+    "/docs/DOC_TRUTH_PASS.md",
     "/CLAUDE.md",
 ]
 

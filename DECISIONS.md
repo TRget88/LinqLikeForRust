@@ -981,7 +981,7 @@ both are legal today.
   and a missing column failing identically on empty and populated result sets.
   Separately proven end-to-end against a real SQLite through a 42-line rusqlite
   adapter.
-- **Still open, and next:** `to_sql()` emits `SELECT *`. By-name reading makes
+- **Closed by `D-030`:** `to_sql()` emitted `SELECT *` when this was written; it now names the entity's columns, so a result set this crate generated arrives in declared order and resolution is provably the identity. By-name reading still covers what the crate does *not* control — a hand-written query, a join, a view, a driver that reorders. Originally filed here as "still open, and next". By-name reading makes
   that *safe*, not *good* — naming the columns moves order from the database's
   control to the query's and is the precondition for `.select()` projection. It
   costs a behavioural break and re-opens the dialect question, because a
@@ -1452,15 +1452,15 @@ panics in every profile.
 
 # API stability — must be closed before any 1.0
 
-All `OPEN`. Each is free now and a breaking change later.
+All eight are now **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10); this line read "All `OPEN`" until 2026-09-29. Each was free then and a breaking change after 1.0, which is why the gate sits at the tag.
 
 **Shared gate for this whole section — IMPLEMENTED (`W-19`).** None of
 `D-101`…`D-108` can carry a code gate while it is OPEN: they are decisions, not
 code, so there is nothing in `src/` to check against an undecided ruling. The
 gate is therefore at the release boundary.
-`.github/scripts/release-gate.sh`, wired into CI on `refs/tags/v1.*`, parses
+`.github/scripts/release-gate.sh`, wired into CI on a 1.0 tag in this repo's **per-crate** form (`linq_rs-v1.0.0`), parses
 this file and **fails the release while any `D-1xx` reads `Status: OPEN`**.
-Verified in both directions: it currently refuses (7 open), and passes when the
+Verified in both directions on a scratch copy: it refuses a ledger with an OPEN entry, and passes when the
 statuses are settled. `v0.x` tags are unaffected, so pre-1.0 releases can ship
 while these remain open — which is exactly the intended latitude.
 
@@ -1512,11 +1512,30 @@ while these remain open — which is exactly the intended latitude.
   every call site with `error: implementation of 'FnMut' is not general enough`,
   and `for<'a>` does not fix it. v2 adds `where_expr`; it never re-bounds
   `where_`.
-- **Enforced by:** **IMPLEMENTED** (`W-20`) — `linq_rs_sql::rows` is the seam,
-  and `Rows<Row, P, O>` deliberately does **not** implement `LinqExt`. A
-  differential doctest pair pins the boundary: the negative half is
-  `compile_fail` on `query::<Employee>().select_many(..)`, and the positive half
-  is the byte-identical expression after `.to_memory(&people)`.
+- **Enforced by:** `linq_rs_sql::rows` is the seam, and `Rows<Row, P, O>`
+  deliberately does **not** implement `LinqExt`. The differential doctest pair
+  that pins the boundary lives in **`seam-tests/src/lib.rs`** — the negative half
+  is `compile_fail` on `query::<Person>().select_many(..)`, the positive half is
+  the same expression after `.to_memory(&rows)`, and it must compile *and run*.
+  The positive half is what makes the negative half trustworthy: `compile_fail`
+  does not check *which* error it got, so without a passing twin using identical
+  imports, a doctest failing on a missing import would satisfy the gate. Picked up
+  by the existing `cargo test --workspace --doc` in `test-count-floor.sh`; no new
+  CI job.
+- **This entry claimed that pair existed for two weeks and it did not (fixed
+  2026-09-29).** The words above were authored in `64ac43d` — the same commit that
+  added `rows.rs`'s note saying, in the future tense, that the gate *"cannot live
+  here"* and *"belongs in a consumer test crate that depends on both"*. So the
+  ledger asserted an implemented mechanism while the source beside it described
+  the mechanism as unbuilt. `git log --all -S compile_fail -- seam-tests/` was
+  empty on every ref. The **ruling** was never wrong — `select_many` on `Rows` is
+  a hard compile error — only the enforcement sentence was, which is the more
+  dangerous half to get wrong: a false `Enforced by` retires a question that is
+  still open.
+- **The error is `E0277`, not `E0599`.** Measured on the exact expression: "the
+  trait bound `Rows<Person, AlwaysTrue, Unordered>: CallToMemoryFirst` is not
+  satisfied". `Rows` carries a `select_many` stub behind a bound that is never
+  implemented, so the method resolves and its bound does not.
 
 ## D-103 — Three-valued logic: promise a stability class, not identity
 - **Status:** **SETTLED (2026-09-10).**

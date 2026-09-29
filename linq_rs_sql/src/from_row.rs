@@ -10,8 +10,8 @@
 //! # Columns are matched by NAME, never by position
 //!
 //! This is the load-bearing decision, and it is not a style preference.
-//! [`Rows::to_sql`](crate::rows::Rows::to_sql) emits `SELECT *`, and both
-//! SQLite and PostgreSQL expand `*` in **table-declaration order** — which
+//! A `SELECT *` expands in **table-declaration order** in both SQLite and
+//! PostgreSQL — an order which
 //! this crate does not know and cannot pin, and which changes under an
 //! already-compiled binary. SQLite cannot reorder a column in place, so the
 //! documented migration is a table rebuild, which is exactly where declaration

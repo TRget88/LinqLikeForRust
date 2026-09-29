@@ -22,8 +22,12 @@
 //! [`Rows`] is not an `Iterator` and does not implement `LinqExt`. It exposes
 //! `filter`, `order_by`, `order_by_desc`, `limit`, `offset`, `to_sql` and
 //! `to_memory`, and nothing else. Reaching for `select_many`, `group_by_key`
-//! or any other non-translatable operator is `E0599` at the call site.
-//! `to_memory` is the single visible token that crosses the boundary.
+//! or any other non-translatable operator is a compile error at the call site —
+//! `E0277`, not `E0599`: `Rows` carries a `select_many` stub behind a
+//! `CallToMemoryFirst` bound that is never implemented, so the method resolves
+//! and its bound does not. `to_memory` is the single visible token that crosses
+//! the boundary. The differential pair pinning this is in `seam-tests/src/lib.rs`
+//! (`D-102`).
 
 use crate::column::Column;
 use crate::expr::{And, Eq, Expr, Gt, GtEq, IsNotNull, IsNull, Like, Lt, LtEq, Not, NotEq, Or};
@@ -869,10 +873,13 @@ pub struct Rows<Row: Entity, P, O> {
 /// half fails with `E0432: unresolved import 'linq_rs'` while the negative
 /// half passes for the wrong reason.
 ///
-/// The gate belongs in a consumer test crate that depends on both, run in CI —
-/// the shape `.github/scripts/itertools-interop.sh` already established. There
-/// the two halves are a differential pair: the same expression must fail
-/// before `.to_memory()` and compile after it.
+/// The gate belongs in a consumer test crate that depends on both, run in CI.
+/// **It now exists**, in `seam-tests/src/lib.rs`: that crate is `publish = false`
+/// and dev-depends on both, so its doctests can import `linq_rs`. The two halves
+/// are a differential pair — the same expression must fail before `.to_memory()`
+/// and compile after it — and the passing half is what rules out the negative
+/// half succeeding on a missing import. `D-102` claimed this pair existed well
+/// before it did.
 pub fn query<Row: Entity>() -> Rows<Row, AlwaysTrue, Unordered> {
     Rows {
         pred: AlwaysTrue,

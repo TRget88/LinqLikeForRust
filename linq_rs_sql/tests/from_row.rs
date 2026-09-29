@@ -294,7 +294,15 @@ fn extra_columns_in_the_result_set_are_ignored() {
 }
 
 /// A layout is tied to the shape it was resolved for, so it cannot be handed to
-/// a different one. The `compile_fail` case below is the important half.
+/// a different one — `Layout<R>` holds `PhantomData<fn() -> R>`, so the type
+/// system refuses the mix-up.
+///
+/// This comment used to promise "the `compile_fail` case below is the important
+/// half". There was no such case below, and there could not be: doctests in
+/// `tests/` are never compiled or run by cargo, so a `compile_fail` block here
+/// would be inert text. The enforced cases live in `src/` — see the five
+/// `compile_fail` doctests there, and `seam-tests/src/lib.rs` for the `D-102`
+/// pair.
 #[test]
 fn a_layout_reports_its_arity() {
     let row = Mock {

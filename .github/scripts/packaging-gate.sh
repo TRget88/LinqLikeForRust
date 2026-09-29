@@ -92,10 +92,12 @@ if [ -f "$sib" ]; then
   [ "$sl" = "MIT OR Apache-2.0" ] || err "linq_rs_sql license must match the workspace ('MIT OR Apache-2.0'), got '${sl}'"
   [ -n "$sr" ] || err "linq_rs_sql has no repository field"
   # It must stay dependency-free for the same reason its sibling does.
-  # Normal deps only. `linq_rs` is a DEV-dependency so the seam's tests can
-  # prove `.to_memory()` hands back something LinqExt works on; dev-deps never
-  # enter a consumer's graph, so D-020's "neither depends on the other" holds
-  # for anyone actually using either crate.
+  # Normal deps AND dev-deps: this crate must have neither. `linq_rs` used to be
+  # a dev-dependency here, and D-024 moved those two files to `seam-tests` to
+  # remove it -- because `cargo publish` strips a dev-dep's `path` but keeps its
+  # `version`, which made `linq_rs_sql` unpublishable until `linq_rs 0.2.0` was
+  # live. The comment here still described that dev-dependency as present until
+  # 2026-09-29.
   # D-032, the owner's rule, stated verbatim:
   #   linq_rs     -- no dependencies.
   #   linq_rs_sql -- only linq_rs.
