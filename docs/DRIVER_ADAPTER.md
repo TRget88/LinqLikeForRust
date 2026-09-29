@@ -6,8 +6,7 @@ depend on a driver, and **neither it nor `linq_rs` will ever take a third-party
 dependency**: `linq_rs` has none, and `linq_rs_sql` may depend only on `linq_rs`.
 See `DECISIONS.md` `D-032`.
 
-So the driver glue is yours to write. It is small — the version below is about 36
-lines of real code and was verified end-to-end against a real in-memory SQLite
+So the driver glue is yours to write. It is small — the version below is 42 lines, 30 of them code and was verified end-to-end against a real in-memory SQLite
 before being moved here from a crate that has since been deleted for taking a
 dependency.
 

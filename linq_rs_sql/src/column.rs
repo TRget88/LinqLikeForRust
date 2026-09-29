@@ -271,6 +271,46 @@ where
         }
     }
     /// `self LIKE pattern` — SQL `%`/`_` glob match.
+    ///
+    /// **ASCII case is folded** (`D-034`), matching SQLite's default `LIKE` and
+    /// MySQL's default collation. Non-ASCII is not folded, because SQLite does not
+    /// fold it either. PostgreSQL's `LIKE` is case-sensitive, so `D-103` classes
+    /// this operator **provider-defined**.
+    ///
+    /// The property that matters is that both interpreters agree:
+    ///
+    /// ```rust
+    /// use linq_rs_sql::prelude::*;
+    /// use linq_rs_sql::rows::query;
+    ///
+    /// linq_rs_sql::table! { staff (id) { id -> Integer, name -> Text } }
+    /// struct Person { id: i64, name: String }
+    /// linq_rs_sql::entity! { Person => staff { id: Integer = id, name: Text = name } }
+    ///
+    /// let rows = vec![
+    ///     Person { id: 1, name: "Eve".into() },
+    ///     Person { id: 2, name: "\u{c9}".into() },   // E-acute, uppercase
+    /// ];
+    ///
+    /// // The rendered SQL hands `LIKE` to the database unchanged.
+    /// assert_eq!(
+    ///     query::<Person>().filter(staff::name.like("eve")).to_sql().sql,
+    ///     "SELECT id, name FROM staff WHERE (name LIKE ?)",
+    /// );
+    ///
+    /// // ASCII folds: the lowercase pattern matches the row spelled `Eve`.
+    /// assert_eq!(
+    ///     query::<Person>().filter(staff::name.like("eve"))
+    ///         .to_memory(&rows).map(|p| p.id).collect::<Vec<_>>(),
+    ///     [1],
+    /// );
+    ///
+    /// // Non-ASCII does not fold, which is what SQLite does.
+    /// assert!(
+    ///     query::<Person>().filter(staff::name.like("\u{e9}"))
+    ///         .to_memory(&rows).next().is_none(),
+    /// );
+    /// ```
     fn like<R>(self, pattern: R) -> Like<Self, R>
     where
         R: Expr,

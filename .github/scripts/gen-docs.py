@@ -319,8 +319,130 @@ def check_docs_for_removed_methods():
     return errors
 
 
+def _brace_body(text, from_at):
+    """The `{...}` block that opens at or after `from_at`, brace-matched.
+
+    The first version of this started matching at the regex end with depth
+    already 1 -- before consuming the opening brace -- so it ran past the impl
+    and swept the NEXT one's contents in. That made the generator claim `Where`
+    and `SelectMany` override `size_hint`, which they do not. A derived number is
+    only as good as its derivation, so this is factored out and checked against a
+    `grep -c` ground truth in `_iterator_traits`.
+    """
+    i = text.find("{", from_at)
+    if i < 0:
+        return ""
+    depth, j = 1, i + 1
+    while j < len(text) and depth:
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+        j += 1
+    return text[i:j]
+
+
+def _iterator_traits():
+    """Which adaptors implement each iterator refinement, derived from src/.
+
+    D-016 exists because hand-written counts here have been wrong. This block was
+    added because they were wrong AGAIN: the README named nine types as
+    propagating `size_hint`, six of which (`Concat`, `Zip`, `Reverse`, `Chunk`,
+    `DefaultIfEmpty`, `SkipLast`) had been deleted by the `D-019` cut, and it
+    named two deleted types as the `FusedIterator` exceptions.
+
+    Two impl sources must both be counted or the totals are wrong by 13: impls
+    written out in full, and impls produced by the two eager macros. Those also
+    carry the conditional/unconditional distinction -- an eager newtype owns a
+    `Vec`, so its refinements hold unconditionally, while a lazy adaptor's hold
+    only if the source's do.
+    """
+    src = ""
+    for name in sorted(os.listdir(os.path.join(ROOT, "src"))):
+        if name.endswith(".rs"):
+            src += open(os.path.join(ROOT, "src", name), encoding="utf-8").read() + "\n"
+
+    traits = ("ExactSizeIterator", "DoubleEndedIterator", "FusedIterator")
+
+    # Macro bodies first, and remove them so the explicit scan cannot see the
+    # generated impls twice (once as a template, once per invocation).
+    macro = {t: 0 for t in traits}
+    macro_sizehint = 0
+    eager_newtypes = 0
+    stripped = src
+    for mm in re.finditer(r"macro_rules!\s+(\w+)\s*\{", src):
+        name = mm.group(1)
+        body = _brace_body(src, mm.start())
+        calls = len(re.findall(r"^\s*" + name + r"!", src, re.M))
+        if not calls:
+            continue
+        eager_newtypes += calls
+        for t in traits:
+            if re.search(r"impl[^\n]*\b" + t + r"\b[^\n]*for", body):
+                macro[t] += calls
+        if "fn size_hint" in body:
+            macro_sizehint += calls
+        stripped = stripped.replace(body, "")
+
+    explicit = {t: sorted({m.group(1) for m in
+                re.finditer(r"impl[^\n]*\b" + t + r"\s+for\s+([A-Za-z0-9_]+)", stripped)})
+                for t in traits}
+
+    sizehint = set()
+    for mm in re.finditer(r"impl\b[^{;]*?\bIterator\s+for\s+([A-Za-z0-9_]+)", stripped):
+        if "fn size_hint" in _brace_body(stripped, mm.end()):
+            sizehint.add(mm.group(1))
+
+    # Ground truth: every `fn size_hint` in src/ is either in a macro body or in
+    # exactly one impl we attributed. If these disagree the derivation is broken,
+    # and a broken derivation is worse than the hand-written prose it replaced.
+    outside_macros = len(re.findall(r"fn size_hint", stripped))
+    in_macros = len(re.findall(r"fn size_hint", src)) - outside_macros
+    if len(sizehint) != outside_macros:
+        die("gen-docs.py: the size_hint derivation is inconsistent",
+            [f"attributed {len(sizehint)} impl(s) but found {outside_macros} "
+             f"`fn size_hint` outside macro bodies -- the brace matcher is "
+             f"mis-attributing, which is how this block shipped a wrong number once"])
+    return explicit, macro, sizehint, macro_sizehint, eager_newtypes, in_macros
+
+
+def render_iterator_traits(mapping, csharp=None):
+    explicit, macro, sizehint, macro_sizehint, eager, _ = _iterator_traits()
+    lines = [
+        "Derived from `src/` by `gen-docs.py`, not written by hand -- the "
+        "hand-written version of this passage named six adaptors that the `D-019` "
+        "cut had already deleted, and named two of them as the `FusedIterator` "
+        "exceptions. Totals count impls written out in full **and** impls the two "
+        f"eager macros generate across their {eager} invocations; omitting the "
+        "second source understates every row.",
+        "",
+        "| refinement | total | written out | generated |",
+        "|---|---|---|---|",
+    ]
+    for t in ("ExactSizeIterator", "DoubleEndedIterator", "FusedIterator"):
+        ex = explicit[t]
+        lines.append(f"| `{t}` | **{len(ex) + macro[t]}** | "
+                     + ", ".join(f"`{n}`" for n in ex)
+                     + f" | {macro[t]} eager newtypes |")
+    lines += [
+        f"| `size_hint` override | **{len(sizehint) + macro_sizehint}** | "
+        + ", ".join(f"`{n}`" for n in sorted(sizehint))
+        + f" | {macro_sizehint} eager newtypes |",
+        "",
+        "The distinction that matters: for the **lazy** adaptors these hold "
+        "*conditionally on the source*, because they forward to it. For the "
+        f"**{eager} eager newtypes** they hold *unconditionally* -- the newtype "
+        "owns a `Vec`, so its length is already known. The set-like families "
+        "(`Distinct`, `Except`, `Intersect`, `Union` and their `_by` / "
+        "`_partial_eq` forms) give `size_hint` an honest upper bound of the "
+        "source's with a lower bound of 0; they are not left at the default.",
+    ]
+    return "\n".join(lines)
+
+
 BLOCKS = {"coverage": render_coverage, "std-overlap": render_std_overlap,
-          "laziness": render_laziness}
+          "laziness": render_laziness,
+          "iterator-traits": render_iterator_traits}
 
 
 def splice(text, name, body):

@@ -315,7 +315,7 @@ pub trait ColumnSet {
 /// **One required method.** An earlier shape had five typed accessors and
 /// measured 101 lines per adapter, because each adapter re-implemented type
 /// checking and worded its own mismatch message. Collapsing to `value_at` took
-/// it to ~36 and means a new SQL type no longer breaks every adapter.
+/// it to 42 and means a new SQL type no longer breaks every adapter.
 pub trait RowSource<'a>: ColumnSet {
     /// The value at `at`. `column` is passed only so a driver failure can name
     /// the column it was reading.

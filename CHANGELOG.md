@@ -293,7 +293,8 @@ call site changed: all 184 pre-existing tests passed untouched.
 
 ### Fixed — three silent wrong answers in the published crates (D-025)
 
-`linq_rs 0.2.1` and `linq_rs_sql 0.1.1`. All three shipped; all three produced a
+`linq_rs 0.2.1` and `linq_rs_sql 0.2.0`. All three of the *broken* releases
+shipped; all three produced a
 plausible wrong result with no warning.
 
 - **`entity!` made the two interpreters disagree.** It generated

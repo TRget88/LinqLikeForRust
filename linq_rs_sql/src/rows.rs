@@ -579,10 +579,23 @@ where
     <L::SqlType as CompareWith<R::SqlType>>::Out: Repr<'r>,
     Self: Expr<SqlType = <L::SqlType as CompareWith<R::SqlType>>::Out>,
 {
-    /// Stability class (`D-103`): **provider-defined**. This evaluates
-    /// case-sensitively with `%` and `_` wildcards, which matches PostgreSQL
-    /// `LIKE` and SQLite with `PRAGMA case_sensitive_like=ON`; MySQL's default
-    /// collation and SQLite's default are case-insensitive for ASCII.
+    /// Stability class (`D-103`): **provider-defined**. This folds **ASCII** case
+    /// with `%` and `_` wildcards (`D-034`), which matches SQLite's default `LIKE`
+    /// and MySQL's default collation. It differs from PostgreSQL, and from SQLite
+    /// under `PRAGMA case_sensitive_like=ON`, both of which are case-sensitive —
+    /// which is exactly why `D-103` classes the operator provider-defined instead
+    /// of claiming agreement flatly.
+    ///
+    /// Non-ASCII is deliberately **not** folded: SQLite folds `EVE`/`eve` and does
+    /// not fold `É`/`é`, so folding Unicode here would trade one divergence for
+    /// another. The matcher is `like_match` below (private), and the 43-case
+    /// corpus in `tests/like.rs` pins it — every expected value there is derived
+    /// by asking SQLite, and `.github/scripts/like-differential.py` re-derives
+    /// them in CI so the table cannot drift from the database.
+    ///
+    /// This comment said "evaluates case-sensitively ... which matches
+    /// PostgreSQL" until 2026-09-29 — the pre-`D-034` behaviour, left behind when
+    /// the matcher 30 lines below was fixed.
     fn eval(&'r self, row: &'r Row) -> Rust<'r, Self::SqlType> {
         <L::SqlType as Like3<'r, R::SqlType>>::like3(self.left.eval(row), self.right.eval(row))
     }

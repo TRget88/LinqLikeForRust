@@ -710,12 +710,22 @@ Measured, not asserted: a counting source records how many elements each operato
 - **Naming** — methods that would shadow a `std::iter::Iterator` method or a
   Rust keyword carry a trailing `_` (`where_`, `take_`, `skip_`, `any_`). Where
   familiarity to C# and idiomatic Rust conflict, idiom wins.
-- **`size_hint` / `ExactSizeIterator` / `DoubleEndedIterator`** — propagated
-  through the lazy adaptors where they can be given honestly (`Select`, `Skip`,
-  `Take`, `Concat`, `Zip`, `Reverse`, `Chunk`, `DefaultIfEmpty`, `SkipLast`).
-  The unpredictable ones are left at the default rather than lying.
-- **`FusedIterator`** — implemented on fourteen adaptors, conditionally on the
-  source except `Reverse` and `Chunk`, which are unconditional.
+- **Iterator refinements** — `size_hint`, `ExactSizeIterator`,
+  `DoubleEndedIterator` and `FusedIterator` are propagated wherever they can be
+  given honestly. The table below is generated from `src/`:
+
+<!-- BEGIN GENERATED: iterator-traits -->
+Derived from `src/` by `gen-docs.py`, not written by hand -- the hand-written version of this passage named six adaptors that the `D-019` cut had already deleted, and named two of them as the `FusedIterator` exceptions. Totals count impls written out in full **and** impls the two eager macros generate across their 13 invocations; omitting the second source understates every row.
+
+| refinement | total | written out | generated |
+|---|---|---|---|
+| `ExactSizeIterator` | **18** | `CountBy`, `OrderedQueryable`, `Select`, `Skip`, `Take` | 13 eager newtypes |
+| `DoubleEndedIterator` | **14** | `OrderedQueryable`, `Select` | 12 eager newtypes |
+| `FusedIterator` | **30** | `CountBy`, `Distinct`, `DistinctBy`, `DistinctByPartialEq`, `DistinctPartialEq`, `Except`, `ExceptBy`, `ExceptPartialEq`, `Intersect`, `IntersectBy`, `IntersectPartialEq`, `OrderedQueryable`, `Select`, `Skip`, `Take`, `Union`, `Where` | 13 eager newtypes |
+| `size_hint` override | **27** | `CountBy`, `Distinct`, `DistinctBy`, `Except`, `ExceptBy`, `ExceptPartialEq`, `Intersect`, `IntersectBy`, `IntersectPartialEq`, `OrderedQueryable`, `Select`, `Skip`, `Take`, `Union` | 13 eager newtypes |
+
+The distinction that matters: for the **lazy** adaptors these hold *conditionally on the source*, because they forward to it. For the **13 eager newtypes** they hold *unconditionally* -- the newtype owns a `Vec`, so its length is already known. The set-like families (`Distinct`, `Except`, `Intersect`, `Union` and their `_by` / `_partial_eq` forms) give `size_hint` an honest upper bound of the source's with a lower bound of 0; they are not left at the default.
+<!-- END GENERATED: iterator-traits -->
 
 ## License
 

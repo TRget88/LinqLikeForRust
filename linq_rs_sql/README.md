@@ -131,8 +131,8 @@ let layout = Employee::resolve(&statement)?;   // once per statement
 let e = Employee::from_row(&row, &layout)?;    // per row
 ```
 
-A driver adapter implements `ColumnSet` and one method of `RowSource` — about 36
-lines. Opt out of generation with `entity! { … } no_from_row` when a struct has a
+A driver adapter implements `ColumnSet` and one method of `RowSource` — 42 lines,
+30 of them code. Opt out of generation with `entity! { … } no_from_row` when a struct has a
 borrowed field or a field that is not a column.
 
 A complete rusqlite adapter, and the `fetch` loop that uses it, is in

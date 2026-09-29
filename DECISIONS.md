@@ -949,7 +949,7 @@ whether rows happened to exist. Found by building it, not by inspection.
 ### One required driver method
 `value_at(at, column) -> SqlValueRef<'a>`, and nothing else. The five-typed-
 accessor shape measured 101 lines per adapter because each re-implemented type
-checking and worded its own mismatch message; collapsing to one took it to ~36,
+checking and worded its own mismatch message; collapsing to one took it to 42,
 and a new SQL type no longer breaks every adapter. **Name matching, ambiguity
 detection, type checking, NULL rules and every message live in the crate** — an
 earlier version delegated matching, and rusqlite's ASCII case folding then gave
