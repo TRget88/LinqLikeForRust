@@ -119,6 +119,40 @@ and resolve the collision with `_`.
 For operators that take a value instead of a closure where C# overloads on
 type, suffix with `_where` (e.g. `first_where`, `last_where`).
 
+## Documentation changes in the same commit as the behaviour
+
+**A commit that changes documented behaviour updates its documentation in the same
+commit.** Not a follow-up, not a TODO, not "I'll sweep the docs after."
+
+This is prose, not a gate, and it is stated because the alternative was measured.
+A documentation truth pass over this repo extracted **1,788 atomic claims** and
+verified 284 by execution: **46 were false and 49 were true only under unstated
+conditions**, with 22 of those dangerous enough that believing them would make a
+user write incorrect code. Almost none of it was old rot. It was confident summary
+prose written alongside a more conditional reality, days or hours earlier, by
+someone who had just verified the conditional version and then compressed it.
+
+What is actually enforced, and what is not:
+
+| Claim type | Gate |
+|---|---|
+| Code examples | `#![doc = include_str!("../README.md")]` — every README fence is a doctest |
+| Counts, coverage, operator tables | `gen-docs.py`, derived from `.github/data/` and cross-checked both ways |
+| Links, anchors, paths, external URLs | `link-check.py` |
+| `LIKE` semantics vs a real database | `like-differential.py` |
+| What ships in the tarball | `packaging-gate.sh`, `msrv-tarball.sh` |
+| **Prose about behaviour** | **nothing** |
+
+That last row is why this rule exists. 590 BEHAVIOR claims and 73 TRANSLATION
+claims have no mechanical check, and **every dangerous claim the pass found was one
+of those two**. A doctest proves an example runs; it says nothing about a sentence
+describing an edge case.
+
+So when you change behaviour: find the sentences that described the old behaviour
+and change them too, in the same commit. `grep` for the method name, the type name
+and the claim. If a number is involved, generate it instead of writing it
+(`D-016`).
+
 ## Lazy vs eager semantics
 
 **Do not restate the classification here.** It is measured with a counting

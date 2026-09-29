@@ -97,6 +97,11 @@ jobs:
       # D-034: the in-memory LIKE matcher must answer what SQLite answers. The
       # oracle is python3's built-in sqlite3, because D-032 permits no Rust
       # dependency anywhere -- including a dev-dep of a publish = false crate.
+      # D-036: anchors, repo paths and external URLs. A GitHub `blob/main/...`
+      # 404 for a path that exists locally is reported, not failed -- it is
+      # correct after merge.
+      - name: Link check
+        run: python3 .github/scripts/link-check.py
       - name: LIKE differential vs a real SQLite
         run: python3 .github/scripts/like-differential.py
       - name: Packaging and licence gate

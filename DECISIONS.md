@@ -477,6 +477,55 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-036 — link integrity is gated; behaviour prose still is not
+- **Status:** SETTLED (2026-09-14) — implemented. Closes the last of the four gate
+  gaps the documentation truth pass reported.
+
+### `link-check.py`
+Anchors, repo-relative paths and external URLs, across every markdown file and
+every rustdoc comment. Three checks kept separate because they fail differently:
+- **Anchors** (`](#x)`) must resolve to a heading in the same file. Deterministic,
+  fatal. I broke one *by hand during the truth pass* and caught it only because I
+  happened to re-run an ad-hoc check.
+- **Repo paths** must exist. Markdown only: a non-URL target in a `.rs` file is a
+  rustdoc **intra-doc** link (`Self::except`), which rustdoc resolves itself under
+  `-D warnings`. Treating those as paths produced **97 false positives** on the
+  first run.
+- **External URLs** must resolve, with two carve-outs that are checked rather than
+  assumed:
+  - Hosts that lie to non-browser clients are listed **with a reason**. Only
+    `crates.io`, which 404s a `curl` even for `linq_rs 0.2.0`, which is live.
+  - A GitHub `blob/main/<path>` 404 is **reported, not failed, when `<path>` exists
+    in the working tree** — it is correct after merge, and a `main` link is right
+    for a reader of the published crate. If the path exists nowhere, it is fatal
+    and the message says so. Without that distinction the gate is unusable on a
+    feature branch, and an allowlist would have hidden real breakage instead.
+- Verified failing on all three modes: a bad anchor, a missing path, and a
+  `blob/main` URL whose path exists nowhere.
+- **It flagged its own documentation on the first full run**, and that was a real
+  parsing bug rather than a nuisance: the entry above writes `` `](#x)` `` inside
+  backticks as an *example* of anchor syntax, and markdown does not create a link
+  inside a code span. Inline code is now stripped before links are extracted.
+
+### The lockstep rule, stated as prose because that is all it can be
+`CLAUDE.md` now says a commit changing documented behaviour updates the
+documentation in the same commit, and — more usefully — tabulates which claim
+types are gated and which are not.
+- **Why prose.** A mechanical version would have to decide whether a source change
+  altered *documented* behaviour, which is the judgement the rule exists to
+  compel. A heuristic ("touched `src/` but no `.md`") fires on every internal
+  refactor and gets ignored, which is worse than an unenforced rule.
+- **The measurement that justifies it.** 1,788 claims extracted, 284 verified: 46
+  FALSE, 49 PARTIAL, 22 dangerous. **Every dangerous claim was a BEHAVIOR or
+  TRANSLATION claim** — the two of ten types with no gate, 663 claims between them.
+  Almost none was old rot; it was confident summary prose written hours after the
+  conditional version had been verified.
+- **Honest residue:** those 663 claims remain unguarded and will drift again. What
+  changed is that the shape of the risk is written down, so the next pass knows
+  where to look first.
+- **Enforced by:** `link-check.py` in CI for links; nothing for behaviour prose,
+  stated plainly rather than implied by a gate list that looks complete.
+
 ## D-035 — release hygiene: a changelog with releases in it, and `deny(missing_docs)`
 - **Status:** SETTLED (2026-09-14) — implemented.
 - Three gaps that blocked a release without being bugs.
