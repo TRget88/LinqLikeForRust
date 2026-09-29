@@ -1792,6 +1792,26 @@ while these remain open — which is exactly the intended latitude.
 - **`FLOOR_D1XX` stays at 9.** It floors the *count* of `D-1xx` entries, not the
   open ones; settling this entry takes `open_count` to 0 and `release-gate.sh` back
   to allowing a 1.0 tag.
+- **The ruling broke the crate's own documented adapter, and nothing would have
+  said so.** `docs/DRIVER_ADAPTER.md`'s `bind` helper matched all five `SqlValue`
+  variants with no wildcard arm — exactly the shape `#[non_exhaustive]` now
+  rejects — so the guidance the README points a user at stopped compiling the
+  moment the attribute landed. Fixed by giving `bind` a `Result` return (its only
+  caller, `fetch`, already returns one) and a `_` arm that names the unhandled
+  value, which is the guidance this entry gives rather than a `panic!` or a silent
+  `NULL` bind. The first fenced block is untouched, so the "42 lines, 30 of them
+  code" figure still holds; the helper block grew from 29 lines to 39.
+- **The gap worth naming: that file is prose nothing compiles.** `D-032` deleted
+  `linq_rs_sqlite` and preserved the adapter as documentation, and since then no
+  gate, test or doctest has built it — it cannot be a doctest, because compiling it
+  needs `rusqlite` and `D-032` permits no dependency anywhere in the workspace. So
+  the crate's central "you write this glue" promise is the one piece of code in the
+  project with no mechanical check at all, and an upstream change silently
+  invalidating it is exactly what just happened. I verified my edit by extracting
+  `bind` and compiling it against a hand-written stub for the one `rusqlite` trait
+  it touches (all five variants bound, in a scratchpad crate, not committed) — which
+  is also the shape a real gate would take: a stub thin enough to need no
+  dependency. Not built; recorded here and in `D-036`'s class.
 
 # DO-NOT-BUILD
 

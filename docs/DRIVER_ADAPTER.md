@@ -66,13 +66,23 @@ impl<'a, 's> RowSource<'a> for Row<'a, 's> {
 Binding the parameters, and the fetch loop:
 
 ```rust
-fn bind(params: &[SqlValue]) -> Vec<Box<dyn rusqlite::ToSql>> {
-    params.iter().map(|p| match p {
-        SqlValue::Integer(v) => Box::new(*v) as Box<dyn rusqlite::ToSql>,
-        SqlValue::Text(v)    => Box::new(v.clone()),
-        SqlValue::Boolean(v) => Box::new(*v),
-        SqlValue::Float(v)   => Box::new(*v),
-        SqlValue::Null       => Box::new(Option::<i64>::None),
+type Dyn = Box<dyn std::error::Error>;
+
+fn bind(params: &[SqlValue]) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Dyn> {
+    params.iter().map(|p| -> Result<Box<dyn rusqlite::ToSql>, Dyn> {
+        Ok(match p {
+            SqlValue::Integer(v) => Box::new(*v) as Box<dyn rusqlite::ToSql>,
+            SqlValue::Text(v)    => Box::new(v.clone()),
+            SqlValue::Boolean(v) => Box::new(*v),
+            SqlValue::Float(v)   => Box::new(*v),
+            SqlValue::Null       => Box::new(Option::<i64>::None),
+            // `SqlValue` is `#[non_exhaustive]` (`D-109`), so this arm is required
+            // and it is the interesting one. A variant added upstream must become a
+            // NAMED failure here, never a silent `NULL` bind -- that would send the
+            // database a different query than the one you wrote. `unreachable!()`
+            // would be the same bug wearing a panic.
+            other => return Err(format!("adapter cannot bind {other:?} yet").into()),
+        })
     }).collect()
 }
 
@@ -84,7 +94,7 @@ fn fetch<E: linq_rs_sql::FromRow>(
     // Resolve ONCE, off the prepared statement, before any row is read.
     let layout = { let cols = Cols(&stmt); E::resolve(&cols)? };
     let n = stmt.column_count();
-    let bound = bind(&q.params);
+    let bound = bind(&q.params)?;
     let refs: Vec<&dyn rusqlite::ToSql> = bound.iter().map(|b| &**b).collect();
     let mut rows = stmt.query(refs.as_slice())?;
     let mut out = Vec::new();
