@@ -607,10 +607,29 @@ The deleted provider crate was the only one that had it, so removing it under
   possibly `Nullable<Boolean>`.
 - That is the argument for the lint over a convention: a misplaced doc comment
   looks correct in the source and is invisible in the output.
+- **The ruling was inert in `linq_rs`, and this entry did not know it (found
+  2026-09-29).** `src/lib.rs` carried `#![deny(missing_docs)]` on line 17 and
+  `#![warn(missing_docs)]` on line 18 — leftover from the pre-`D-035` state, which
+  `CHANGELOG.md` still records as `warn`. A later lint attribute at the same level
+  **overrides** an earlier one, so the effective level was `warn`, and the comment
+  directly above both lines asserted the opposite. Measured rather than reasoned:
+  with an undocumented `pub struct` appended to the packaged tarball, the crate as
+  shipped emitted *"warning: missing documentation for a struct"* and **built
+  successfully (exit 0)**; with line 18 deleted, the same source gave *"error:
+  missing documentation"* and **exit 101**. Line 18 is now deleted, and activating
+  the `deny` for real surfaced nothing — every public item was in fact documented,
+  because the workflow's `RUSTFLAGS: -D warnings` had been carrying the guarantee
+  the lint was credited with.
+- **This is the class with no gate.** A comment and the code beneath it disagreed,
+  the disagreement was invisible in every passing build, and the `Enforced by` line
+  below named a mechanism that did nothing. Nothing mechanical catches an
+  overridden lint. Running the case caught it.
 - **Enforced by:** `#![deny(missing_docs)]` in `src/lib.rs` and
-  `linq_rs_sql/src/lib.rs`; `gen-docs.py --check` for the changelog's generated
-  neighbours; nothing mechanical for the release headings, which need a human to
-  say when a release happened.
+  `linq_rs_sql/src/lib.rs` — **and** `RUSTFLAGS: -D warnings` in the workflow,
+  named explicitly because it is what actually held while the `deny` above it was
+  overridden. `gen-docs.py --check` for the changelog's generated neighbours;
+  nothing mechanical for the release headings, which need a human to say when a
+  release happened.
 
 ## D-034 — in-memory `LIKE` folds ASCII case, matching SQLite
 - **Status:** SETTLED (2026-09-14) — implemented. Closes the code finding filed by

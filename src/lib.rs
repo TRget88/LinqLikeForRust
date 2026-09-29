@@ -15,7 +15,6 @@
 // Every public item carries docs. The deleted provider crate was the only one
 // that enforced this; both published crates do now.
 #![deny(missing_docs)]
-#![warn(missing_docs)]
 
 pub mod adaptors;
 pub mod error;
