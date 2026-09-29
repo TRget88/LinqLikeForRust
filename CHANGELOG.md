@@ -66,17 +66,27 @@ takes no third-party dependency, not that the core two stay clean.
 **Nothing structural is lost.** `ColumnSet`, `RowSource`, `FromRow`, `LoadOpt` and
 `LoadField` are all in `linq_rs_sql` with no dependencies — the deleted crate was
 only the rusqlite glue, which is what a user was always going to write. It is
-preserved verbatim in `docs/DRIVER_ADAPTER.md`, about 36 lines, along with
+preserved verbatim in `docs/DRIVER_ADAPTER.md`, 42 lines, along with
 everything it was verified to do against a real SQLite.
 
 The packaging gate now enforces the rule on the **resolved** dependency graph
 rather than the manifests, because a transitive dependency is still a dependency.
 
-### Added — `linq_rs_sqlite 0.1.0`, the SQLite provider (D-031)
+### Added — `linq_rs_sqlite 0.1.0`, the SQLite provider (D-031) — **never shipped**
+
+> **Read the Removed entry above first.** This crate was added and deleted inside
+> this same unreleased section: `D-032` retired it before any of it was published,
+> so **nothing here ships and the example below will not compile** — there is no
+> `linq_rs_sqlite` to import. It is kept rather than deleted for the same reason
+> `D-031` is kept as SUPERSEDED: the driver-seam findings underneath it are still
+> correct and still in force, and `docs/DRIVER_ADAPTER.md` holds the working code
+> as something a caller writes. Deleting the entry would leave `D-031` citing a
+> changelog entry that no longer exists.
 
 Queries now execute. A third crate, so the other two stay dependency-free.
 
 ```rust
+// Does not compile: `linq_rs_sqlite` was deleted before release (D-032).
 use linq_rs_sqlite::Sqlite;
 
 let db = Sqlite::new(&conn);
@@ -149,7 +159,7 @@ let emp = Emp::from_row(&Row(row, n), &layout)?;
 ```
 
 The crate still executes nothing. A driver adapter implements `ColumnSet` and
-one method of `RowSource` — measured at 36 lines for rusqlite.
+one method of `RowSource` — 42 lines for rusqlite.
 
 - **Columns are matched by NAME, never by position.** `SELECT *` expands in
   table-declaration order, which this crate cannot pin and which a migration

@@ -66,21 +66,30 @@ settled before any 1.0 · `D-2xx` DO-NOT-BUILD.
 
 ---
 
-# Open contradictions — fix these first
+# Contradiction register — **all five resolved**
 
-`AUDIT.md` §1 finding **A-1**. Until these are reconciled, nothing downstream can
-be sequenced.
+Raised as `AUDIT.md` §1 finding **A-1**, when the heading read *"Open
+contradictions — fix these first"* and the note said nothing downstream could be
+sequenced. That was true of `X-1`..`X-5` and is no longer true of any of them:
+the last, `X-5`, was fixed 2026-09-11 and confirmed 2026-09-29. Kept as a record,
+because each row names a document that asserted scope on its own authority, which
+is the failure this register exists to make visible.
 
 **Resolution rule:** each document must *cite the relevant `D-NNN`* rather than
 restate a scope claim of its own.
+
+Two rows were left stale after their fix landed — `X-5` still said `OPEN`, and
+`X-4` still described README numbers that `D-016` had since replaced. A register
+whose rows outlive their own resolution reports a blocked project; re-read it
+whenever a `D-NNN` it cites changes.
 
 | # | Document | Was | Status |
 |---|---|---|---|
 | X-1 | `CLAUDE.md` Non-goals | "We are not building an `IQueryable`/expression-tree analogue… We do not target databases" | **RESOLVED** 2026-09-09 — replaced with a scope-by-reference list citing `D-001`…`D-205`; the non-goal is struck, `D-002` stands |
 | X-2 | `ROADMAP.md` *Rejected* | "`IQueryable` / expression trees — out of scope. We target in-memory iterators only." | **RESOLVED** 2026-09-09 — entry now reads "no longer rejected", cites `D-002`, and records that the SQL builder was committed as "ORM Phase 1" against a roadmap with no ORM phase |
 | X-3 | `CLAUDE.md` Mission | "familiar to C# devs **and** idiomatic to Rust devs at the same time" | **RESOLVED** 2026-09-09 — now states that idiom wins, citing `D-005` |
-| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | **RESOLVED** 2026-09-09, then **re-fixed the same day.** The first fix replaced the claim with a hand-written count ("45 of C#'s 75 operator names") that was measured on `main` and wrong by ~20 names for this tree — written, with no irony intended, in the same sentence as a `D-016` citation saying counts must be generated. The README now states the C# denominators (75 names, 234 overloads, 44 comparer overloads — verified against learn.microsoft.com), states that this crate covers neither set completely, and **refuses to give a coverage figure** until `W-18` derives one |
-| X-5 | `Cargo.toml` | `license = "MIT"` | **OPEN** — `W-17`. Must be `MIT OR Apache-2.0` with both licence files before the next publish |
+| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | **RESOLVED** 2026-09-09, then **re-fixed the same day.** The first fix replaced the claim with a hand-written count ("45 of C#'s 75 operator names") that was measured on `main` and wrong by ~20 names for this tree — written, with no irony intended, in the same sentence as a `D-016` citation saying counts must be generated. The README now states the C# denominators (75 names, 234 overloads, 44 comparer overloads — verified against learn.microsoft.com), states that this crate covers neither set completely, and **refuses to give a coverage figure** until `W-18` derives one. **Superseded twice since:** `W-18` landed, so the README now *does* give a coverage figure — and `D-016` then found that 75 / 234 / 44 is itself the **.NET 11 preview** superset, because the docs page filters versions client-side and a row count returns the newest. The figures are now generated per version and pinned to `TARGET_DOTNET` (net-10: 74 / 228 / 38, 45 of 74 names implemented, 0 of 38 comparer overloads). No count in the README is hand-written |
+| X-5 | `Cargo.toml` | `license = "MIT"` | **RESOLVED** 2026-09-11 — `license = "MIT OR Apache-2.0"` on both crates, `LICENSE-MIT` and `LICENSE-APACHE` both present and both shipped. Verified resolved 2026-09-29; the row had been left OPEN after the fix landed. Gated: `packaging-gate.sh` asserts the exact licence string and both files **in the packaged tarball**, because the yanked `linq_rs 0.1.0` shipped MIT-only and a working-tree check would not have caught it (`D-023`) |
 
 The thesis ruling that closed X-1..X-3 (2026-09-09): **keep the SQL thesis.**
 `D-002` is the crate's reason to exist; `src/sql/` is held rather than merged
@@ -531,7 +540,7 @@ types are gated and which are not.
 - Three gaps that blocked a release without being bugs.
 
 ### `CHANGELOG.md` had no released-version headings
-966 lines, everything under one `## [Unreleased]` — **including what actually
+966 lines at `f260931`, everything under one `## [Unreleased]` — **including what actually
 shipped as `linq_rs 0.2.0` and `linq_rs_sql 0.1.0`**. Found as `RR-028` by the
 documentation truth pass and disclosed rather than fixed, because fixing it needed
 a decision about where the release boundary falls.
@@ -668,7 +677,7 @@ The deleted provider crate was the only one that had it, so removing it under
   and `LoadField` all live in `linq_rs_sql` and have no dependencies (`D-029`).
   The deleted crate was only the rusqlite glue, and that glue is what a user was
   always going to write. It is preserved verbatim, with everything it was verified
-  to do, in `docs/DRIVER_ADAPTER.md` — about 36 lines.
+  to do, in `docs/DRIVER_ADAPTER.md` — 42 lines, 30 of them code.
 - **`linq_rs_sql` may depend on `linq_rs`; it does not.** The permission is
   recorded because it changes what is possible: `seam-tests` exists (`D-024`) only
   to hold cross-crate tests without that dependency, so it could now be collapsed.
@@ -685,6 +694,18 @@ The deleted provider crate was the only one that had it, so removing it under
   `printf` of an empty string emits zero lines and `grep` needs one. A rule whose
   check rejects the compliant state is worse than no check. It is a shell string
   comparison now.
+- **Swept `ROADMAP.md` for the same violation, rather than waiting to be caught
+  again (2026-09-29).** Four items proposed a third-party dependency as future or
+  deferred work: `itertools` (Phase 5.5, *"deferred, not rejected"*), and a
+  `rayon` / `serde` / `futures` feature trio (Phase 6). Phase 6's preamble carried
+  the reasoning this entry exists to close, in so many words — *"Each of these
+  would ship behind a cargo feature flag (no impact on the default zero-dep
+  build)."* All four are now marked rejected, each with the shape that satisfies
+  the rule instead: for `async`, that shape is `D-029`'s — define the trait here,
+  let the caller supply the glue. **The gate already forbade all four**; it was
+  only the roadmap that disagreed with it, which is the failure mode worth naming.
+  A gate constrains the code, and nothing constrains a document that proposes
+  future work — so a rule stated once still needs the roadmap read against it.
 
 ## D-031 — the provider is its own crate, not a feature flag
 - **Status:** **SUPERSEDED by `D-032`** (2026-09-11). The crate it created,
@@ -875,11 +896,11 @@ both are legal today.
 - **Forbids:** positional decoding; treating non-zero as `true`; `as` casts in
   decoding; resolving a name to the first of several matches; delegating name
   matching or error wording to an adapter.
-- **Enforced by:** 17 unit tests in `linq_rs_sql/src/from_row.rs` and 12 in
+- **Enforced by:** 17 unit tests in `linq_rs_sql/src/from_row.rs` and 14 in
   `linq_rs_sql/tests/from_row.rs`, including a reordered result set, two
   same-typed adjacent columns not swapping, the bool refusal, join ambiguity,
   and a missing column failing identically on empty and populated result sets.
-  Separately proven end-to-end against a real SQLite through a 36-line rusqlite
+  Separately proven end-to-end against a real SQLite through a 42-line rusqlite
   adapter.
 - **Still open, and next:** `to_sql()` emits `SELECT *`. By-name reading makes
   that *safe*, not *good* — naming the columns moves order from the database's

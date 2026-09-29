@@ -7,7 +7,7 @@ lazily over a `Vec` in a unit test — and the two agree.
 Zero dependencies. No driver, no connection, no runtime — this crate builds SQL
 and hands you the string plus its bound parameters. Running it is your driver's
 job; [`docs/DRIVER_ADAPTER.md`](https://github.com/TRget88/LinqLikeForRust/blob/main/docs/DRIVER_ADAPTER.md)
-has a complete ~36-line rusqlite adapter, verified end-to-end.
+has a complete 42-line rusqlite adapter, verified end-to-end.
 
 ```rust
 use linq_rs_sql::prelude::*;

@@ -196,9 +196,14 @@ operators were O(n²) where O(n) is achievable.
 ## Phase 5 — Release & distribution
 
 - [x] **Publish to crates.io** — `linq_rs` is owned by the user; no rename needed. Actual `cargo publish` is the user's call.
-- [x] **Fill in `Cargo.toml` metadata** — `homepage`, `documentation`, `categories`, `keywords`, `readme`, `license`, `rust-version`, `description` all set. `repository` left unset (no public source repo to point to — fill in when one exists).
+- [x] **Fill in `Cargo.toml` metadata** — `homepage`, `documentation`, `categories`, `keywords`, `readme`, `license`, `rust-version`, `description` all set. `repository` is set on both crates and `packaging-gate.sh` asserts it against the packaged manifest — it was missing from the yanked `linq_rs` 0.1.0, which is why the gate checks the tarball rather than the working tree (`D-023`).
 - [x] **Semver policy** — documented in `README.md` under "Versioning". Headline: adding a `LinqExt` method is a minor bump, not breaking; tightening trait bounds is breaking; pre-1.0 anything can break on a minor.
-- [ ] **First tagged release (`v0.1.0`)** — ready to tag. Run `git tag v0.1.0 && cargo publish` when you're ready. CI must be green first (use the workflow's first run as the gate).
+- [x] **First release** — done 2026-09-10: `linq_rs 0.2.0` and `linq_rs_sql 0.1.0` are
+  live on crates.io. `linq_rs 0.1.0` is **yanked** (published without `repository` and
+  MIT-only; see `D-023`), so it is not a version to tag or re-publish. This box used to
+  read "ready to tag, run `git tag v0.1.0 && cargo publish`" — stale by two releases and
+  naming a yanked version. The runbook for the *next* release is `PUBLISHING.md`; what
+  the next version number may be is `D-033` (a version counts releases, not branches).
 - [ ] **`v1.0.0`** — after the API has marinated through at least one real user.
 
 ---
@@ -281,8 +286,12 @@ at compile time (`D-026`, `D-028`, `D-029`). Drift is the one that is not.
 
 Decided-for-now, with a named reason to look again. See `DECISIONS.md`.
 
-- [ ] **`itertools` as a dev-dependency for interop testing** — *deferred, not
-  rejected* (`D-005`). Today the real-crate check runs as a CI-only job
+- [x] **`itertools` as a dev-dependency for interop testing** — **rejected** under
+  `D-032`, superseding the *deferred, not rejected* of `D-005`. The rule is "`linq_rs`
+  no dependencies, `linq_rs_sql` only `linq_rs`, nothing else" and it covers
+  dev-dependencies: they appear in the resolved graph, which is what
+  `packaging-gate.sh` checks. The practice below already complies — it is only this
+  box's status that was wrong. Today the real-crate check runs as a CI-only job
   (`.github/scripts/itertools-interop.sh`) that builds a throwaway crate
   depending on both, so `itertools` never enters `Cargo.toml`, never ships in the
   published manifest, and a bare checkout still tests offline. The always-on
@@ -299,16 +308,37 @@ Decided-for-now, with a named reason to look again. See `DECISIONS.md`.
   another reason (benchmarks under `D-207` would be the likeliest trigger, since
   a `criterion` dev-dependency raises the same question).
 
-## Phase 6 — Optional / opt-in features
+## Phase 6 — Optional / opt-in features: **rejected**
 
-Each of these would ship behind a cargo feature flag (no impact on the
-default zero-dep build).
+This section proposed three cargo features, each carrying a third-party dependency
+(`rayon`, `serde`, `futures`), and justified them with: *"Each of these would ship
+behind a cargo feature flag (no impact on the default zero-dep build)."*
 
-- [ ] **`parallel` feature** — `rayon` integration. Expose `par_where_`, `par_select`, etc. on `ParallelIterator`.
-- [ ] **`serde` feature** — `Serialize` / `Deserialize` impls for `Grouping` and `Lookup`.
-- [ ] **`async` feature** — equivalent extension trait for `futures::Stream`.
+That sentence is the exact reasoning `D-032` closes. An optional dependency is still a
+dependency: it is in the manifest, it reaches the lockfile of everyone who wanted none,
+and it ends the claim as written. `packaging-gate.sh` asserts an empty **resolved**
+graph, so any of these would fail CI rather than ship — the fence is already in place
+and it was this document that disagreed with it.
 
-These are speculative — defer until someone actually asks for them.
+Kept here rather than deleted, because each has a shape that satisfies the rule, and
+the shape is the useful part:
+
+- [x] **`parallel`** — needs nothing from this crate. `rayon` parallelizes anything
+  that is `IntoParallelIterator`, so a caller writes
+  `xs.where_(p).collect::<Vec<_>>().into_par_iter()`. The composition already works at
+  the call site; a `par_where_` here would only move the dependency from the user's
+  manifest to ours.
+- [x] **`serde`** — `Grouping` and `Lookup` already expose their data (`key()` plus an
+  iterator), which is everything a caller needs to serialize them with their own
+  `serde`. Impls belong on the caller's type, where the dependency already exists.
+- [x] **`async`** — the compliant shape is the one `D-029` already proved: define the
+  trait here with no dependency and let the caller supply the glue. That is exactly how
+  `ColumnSet` / `RowSource` / `FromRow` support rusqlite without depending on it
+  (`docs/DRIVER_ADAPTER.md`). A `Stream` adaptor would follow the same pattern; it is
+  unbuilt because nobody has asked, not because it is forbidden.
+
+Marked `[x]` to mean **settled**, not shipped: the question is closed, and re-opening
+any of the first two needs `D-032` overturned by the owner, not a feature flag.
 
 ---
 
