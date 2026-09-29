@@ -1452,7 +1452,7 @@ panics in every profile.
 
 # API stability — must be closed before any 1.0
 
-`D-101`..`D-108` are all **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10); this line read "All `OPEN`" until 2026-09-29. **`D-109` is OPEN** — raised 2026-09-29, `SqlValue` exhaustiveness — so `release-gate.sh` currently refuses a 1.0 tag. It does not affect a `v0.x` release. Each of these is free now and a breaking change after 1.0, which is why the gate sits at the tag.
+`D-101`..`D-108` are all **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10); this line read "All `OPEN`" until 2026-09-29. `D-109` was raised **and settled** on 2026-09-29 (`SqlValue` is `#[non_exhaustive]`), so all nine are settled and `release-gate.sh` allows a 1.0 tag again. It never gated a `v0.x` release. Each of these is free now and a breaking change after 1.0, which is why the gate sits at the tag.
 
 **Shared gate for this whole section — IMPLEMENTED (`W-19`).** None of
 `D-101`…`D-108` can carry a code gate while it is OPEN: they are decisions, not
@@ -1721,9 +1721,9 @@ while these remain open — which is exactly the intended latitude.
 - **Enforced by:** the compiler for `#[must_use]`; naming is a review matter,
   and the surface is now consistent.
 
-## D-109 — `SqlValue` exhaustiveness: **OPEN**, and it blocks 1.0
-- **Status:** **OPEN** (raised 2026-09-29). The owner's call; I have not changed
-  the API.
+## D-109 — `SqlValue` is `#[non_exhaustive]`
+- **Status:** **SETTLED (2026-09-29)** — implemented. Raised and settled the same
+  day; the owner chose option (a).
 - **The question.** `linq_rs_sql::SqlValue` is a `pub enum` with five variants and
   **no** `#[non_exhaustive]`, and its own rustdoc says *"Phase 1 keeps this small
   (the five SQL types we expose at the type level). **Add new variants alongside
@@ -1744,21 +1744,54 @@ while these remain open — which is exactly the intended latitude.
   are exhaustive *by nature* — a sequence has none, one, or more than one, and SQL
   has two sort directions. `#[non_exhaustive]` there would cost callers a
   wildcard arm and buy nothing. This entry is about `SqlValue` only.
-- **Options.** (a) `#[non_exhaustive]` now, and drop the "add new variants" line
-  as a plan in favour of it as a permission. (b) Leave it exhaustive and commit to
-  never adding a variant, which means the dialect work must not need one. (c)
-  Leave it exhaustive and accept a major bump when it changes. (a) is the cheap
-  one; (b) is a real constraint on unbuilt work; (c) is what happens by default if
-  nobody decides.
+- **Options as raised.** (a) `#[non_exhaustive]` now, turning the "add new
+  variants" line from a plan into a permission. (b) Leave it exhaustive and commit
+  to never adding a variant, which would constrain the unbuilt dialect work. (c)
+  Leave it exhaustive and accept a major bump when it changes — what happens by
+  default if nobody decides.
+- **Ruling: (a).** `SqlValue` carries `#[non_exhaustive]`. A new SQL type is now an
+  additive change rather than a breaking one, and the rustdoc says what that costs
+  a caller instead of promising growth it could not deliver.
+- **What it does and does not change, measured from a separate downstream crate
+  rather than reasoned about:**
+
+  | from another crate | before | after |
+  |---|---|---|
+  | exhaustive `match` over all five variants | compiles | **`E0004`: non-exhaustive patterns, `_` not covered** |
+  | same `match` plus a `_ =>` arm | compiles | compiles |
+  | `SqlValue::Integer(7)` and the other four constructors | compiles | compiles |
+  | `PartialEq` comparison against a constructed value | compiles | compiles |
+
+  Construction is unaffected because the attribute is on the **enum**, not on its
+  variants — which matters, because constructing values is exactly what a driver
+  adapter does (`docs/DRIVER_ADAPTER.md`), and blocking that would have made the
+  ruling unusable. Nothing in the workspace needed changing: all 331 tests pass
+  untouched, because every use outside `src/` is a construction or a `PartialEq`,
+  not a `match`. The integration tests under `linq_rs_sql/tests/` are separate
+  crates, so they were a genuine downstream check, not a formality.
+- **Guidance given in the rustdoc, not just the attribute.** A `_ =>` arm should
+  return an error naming the unhandled value rather than `unreachable!()`, which
+  would become a panic on the day a variant is added — the failure the attribute
+  exists to prevent, relocated.
+- **Enforced by:** `packaging-gate.sh`. Deleting the attribute is **silent** — the
+  crate compiles, every test passes, and the breakage surfaces in a downstream
+  `match` at the next release — so the gate asserts it rather than trusting it.
+  Two failure modes verified: the attribute removed (FAIL), and the attribute
+  present elsewhere in the same file but not on `SqlValue` (FAIL, which a
+  `grep -q non_exhaustive` would have passed). The check reads the repo source but
+  only after the tarball **listing** confirms `src/value.rs` ships: cargo
+  normalizes manifests and generates lockfiles, which is why `D-023` forbids
+  checking those against the repo, but it copies `.rs` verbatim. If that ever
+  changes, the check must extract the tarball.
 - **How this went unrecorded.** Every other `D-1xx` was raised by `W-19`'s API
   sweep, which covered bounds, naming, return types and sealing but not enum
   exhaustiveness. `release-gate.sh` reported "8 decisions; 0 still OPEN — a 1.0 tag
   is allowed" while this question had never been asked. With this entry the gate
   correctly refuses a 1.0 tag until it is settled; `FLOOR_D1XX` raised to 9 in the
   same commit.
-- **Enforced by:** nothing mechanical — this is a ruling, not code. Once settled,
-  `#[non_exhaustive]`'s presence or absence is the artifact, and
-  `packaging-gate.sh` could assert it on the shipped source if the ruling is (a).
+- **`FLOOR_D1XX` stays at 9.** It floors the *count* of `D-1xx` entries, not the
+  open ones; settling this entry takes `open_count` to 0 and `release-gate.sh` back
+  to allowing a 1.0 tag.
 
 # DO-NOT-BUILD
 

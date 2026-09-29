@@ -281,6 +281,51 @@ else
 fi
 
 echo
+echo "=== D-109: SqlValue must stay #[non_exhaustive] ==="
+# Settled as option (a): new variants are additive. That promise is carried by one
+# attribute, and deleting it is silent -- the crate keeps compiling, every test
+# keeps passing, and the breakage lands in a downstream `match` at the next
+# release. So assert the attribute rather than trusting it.
+#
+# Read from the repo source, but only after the LISTING confirms the file ships.
+# That split is deliberate: cargo NORMALIZES Cargo.toml and GENERATES its own
+# Cargo.lock, which is why D-023 forbids checking those against the repo -- but it
+# copies `.rs` files verbatim, so for a source-level assertion the repo copy and
+# the shipped copy are the same bytes. If cargo ever rewrites source on package,
+# this check has to extract the tarball instead.
+val_rel="src/value.rs"
+printf '%s\n' "$sib_listing" | grep -qxF "$val_rel" \
+  || err "linq_rs_sql's tarball does not ship ${val_rel}; the D-109 check cannot see it"
+if [ -f "$ROOT/linq_rs_sql/$val_rel" ]; then
+  # The attribute must be on SqlValue SPECIFICALLY, not merely present in the file.
+  #
+  # Implementation: take the lines above `pub enum SqlValue {` up to the nearest
+  # preceding blank line -- in rustfmt'd source that span is the item's own
+  # attribute/doc block -- and require the attribute in it. Simple enough to read
+  # in one pass, which a gate has to be. The first version of this check needed
+  # careful tracing to trust and would have false-FAILED on a doc comment sitting
+  # between the attribute and the enum.
+  #
+  # Four cases measured against this version:
+  #   attribute on SqlValue                     -> PASS
+  #   attribute deleted                          -> FAIL
+  #   attribute present but on another item here -> FAIL  (`grep -q` says PASS)
+  #   doc comment between attribute and enum     -> PASS  (old version FAILED)
+  if sed -n '/^pub enum SqlValue {/q;p' "$ROOT/linq_rs_sql/$val_rel" \
+       | tac | sed -n '/^[[:space:]]*$/q;p' | grep -q '^#\[non_exhaustive\]$'; then
+    echo "SqlValue is #[non_exhaustive] (D-109)"
+  else
+    err "SqlValue has lost #[non_exhaustive]. D-109 settled that new variants are
+      ADDITIVE, and that promise is this attribute. Removing it is a major bump:
+      every downstream \`match\` on SqlValue silently becomes exhaustive again, and
+      the next new variant breaks all of them. If the ruling is being reversed, change
+      D-109 in DECISIONS.md and this check in the same commit."
+  fi
+else
+  err "$ROOT/linq_rs_sql/$val_rel is missing -- the D-109 check cannot have run"
+fi
+
+echo
 echo "=== source invariants (D-001, D-003, D-004) ==="
 # D-001: v1.0 is LINQ-to-objects only, and the crate advertises zero
 # dependencies. Assert it rather than trusting it.

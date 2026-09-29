@@ -15,6 +15,48 @@ number. Every entry states which crate it concerns.
 Targets **`linq_rs 0.2.1`** and **`linq_rs_sql 0.2.0`**. Nothing in this section is
 published; `linq_rs 0.2.0` and `linq_rs_sql 0.1.0` are the live versions.
 
+### Changed — **breaking:** `SqlValue` is now `#[non_exhaustive]` (D-109)
+
+Matching `SqlValue` exhaustively from outside `linq_rs_sql` no longer compiles;
+add a `_ =>` arm. Constructing variants is unchanged, which is what a driver
+adapter does.
+
+```rust
+// Before: compiled. After: error[E0004] — non-exhaustive patterns, `_` not covered.
+match v {
+    SqlValue::Integer(_) => …, SqlValue::Text(_) => …, SqlValue::Boolean(_) => …,
+    SqlValue::Float(_)   => …, SqlValue::Null    => …,
+}
+```
+
+**Why now, and why it is breaking on purpose.** The variant list is one per SQL
+type the crate exposes, and a new SQL type means a new variant — the dialect layer
+will need at least one. Without the attribute, each addition would break every
+downstream `match`. The attribute is what makes future additions *additive*, and
+adding it is itself breaking, so it was free before 1.0 and impossible after.
+`linq_rs_sql 0.1.0` shipped `SqlValue` exhaustive and this release is already the
+breaking bump, which made it the last cheap moment.
+
+The enum's own rustdoc had said *"Add new variants alongside new `SqlType` markers
+when extending"* — a documented plan to break people. That sentence is now a
+permission the attribute actually backs.
+
+- **Construction still works** from any crate: the attribute is on the enum, not
+  its variants. Verified from a separate downstream crate, along with `PartialEq`.
+- **Nothing in the workspace needed changing.** All 331 tests pass untouched: every
+  use outside `src/` is a construction or an equality assertion, never a `match`.
+  The integration tests under `linq_rs_sql/tests/` are separate crates, so that was
+  a real downstream check.
+- **Prefer an honest `_` arm** — return an error naming the unhandled value rather
+  than `unreachable!()`, which becomes a panic the day a variant lands.
+- `SqlValueRef` and `RowError` already carried the attribute. `Direction` and
+  `linq_rs`'s `SingleError` deliberately do **not**: SQL has two sort directions,
+  and a sequence yields none, one, or more than one, so a wildcard arm there would
+  cost callers something and buy nothing.
+- Asserted by `packaging-gate.sh`, because deleting the attribute is silent — the
+  crate compiles, every test passes, and the breakage lands in someone else's
+  `match` at the next release.
+
 ### Fixed — in-memory `LIKE` disagreed with SQLite on every case-varying pattern (D-034)
 
 The seam's central promise is that one query value gives one answer. It did not,

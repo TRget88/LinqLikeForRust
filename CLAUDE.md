@@ -35,11 +35,12 @@ generator.
 - `D-101`..`D-108` are all **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10).
   This line read "**OPEN** and must close before any 1.0" until 2026-09-29, while
   this same file already described `D-106` as settled and CI-enforced.
-- **`D-109` is OPEN** and does block 1.0: whether `SqlValue` should be
-  `#[non_exhaustive]`. `release-gate.sh` refuses a 1.0 tag until it is settled,
-  and correctly does not affect a `v0.x` release. Raised 2026-09-29 because the
-  question had never been asked — `W-19`'s API sweep covered bounds, naming,
-  return types and sealing, not enum exhaustiveness.
+- `D-109` is **SETTLED** (2026-09-29): `SqlValue` is `#[non_exhaustive]`, so a new
+  SQL type is additive rather than breaking. Raised and settled the same day
+  because the question had never been asked — `W-19`'s API sweep covered bounds,
+  naming, return types and sealing, but not enum exhaustiveness. Asserted by
+  `packaging-gate.sh`, because deleting the attribute compiles and passes every
+  test. `Direction` and `SingleError` stay exhaustive on purpose.
 
 ## Hard constraints
 
