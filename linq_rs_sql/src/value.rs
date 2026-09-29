@@ -16,7 +16,16 @@ pub enum SqlValue {
     Boolean(bool),
     /// A SQL `REAL` / `DOUBLE` value.
     Float(f64),
-    /// SQL `NULL`. Reserved — Phase 1 does not yet emit this; future
-    /// nullability support will.
+    /// SQL `NULL`.
+    ///
+    /// Emitted by `<Option<T> as Expr>::write_to` (`expr.rs`): `None::<i64>`
+    /// binds one `?` with this value. `IS NULL` / `IS NOT NULL` bind no parameter
+    /// at all, so this variant appears only for a `None` *literal*.
+    ///
+    /// Read `expr.rs`'s note on what that makes possible: `nick.eq(None::<&str>)`
+    /// renders `(nick = ?)` bound to `NULL`, which is never true in SQL and is
+    /// never true in `to_memory` either. It is deliberately **not** rewritten to
+    /// `IS NULL` — that would be a different query. Verified against SQLite: both
+    /// interpreters return no rows.
     Null,
 }

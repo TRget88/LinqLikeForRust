@@ -678,6 +678,36 @@ The deleted provider crate was the only one that had it, so removing it under
   resolved graph `packaging-gate.sh` checks. The differential crossing a language
   boundary is a feature here, not a workaround: the oracle shares no code with the
   implementation.
+- **The obvious next question, now answered: does anything *else* diverge?
+  (2026-09-29)** `LIKE` was found by accident. The conditions that hid it —
+  every test being `to_sql`-string-only or `to_memory`-only — were never specific
+  to `LIKE`, so the same hole could have hidden a second divergence in any
+  operator. Measured the same way `D-034` was: build each query once, render it to
+  SQL *and* evaluate it over the same five rows, then let a real SQLite adjudicate
+  which row ids each returns. **24 operators, zero disagreements.**
+
+  | family | cases | result |
+  |---|---|---|
+  | comparisons `= != > >= < <=` on `Integer` | 6 | agree |
+  | comparisons on `Text`, `Boolean` (both polarities) | 4 | agree |
+  | `AND`, `OR` | 2 | agree |
+  | `IS NULL`, `IS NOT NULL` | 2 | agree |
+  | `LIKE` — prefix, ASCII case, `_` | 3 | agree |
+  | `Nullable<Text>` compared to a non-null literal | 2 | agree |
+  | three-valued logic: `= NULL`, `NULL AND false`, `NULL OR true` | 3 | agree |
+  | `LIMIT`, `LIMIT`+`OFFSET` | 2 | agree |
+
+  The three-valued-logic rows are the ones worth noting: `nick.eq(None)` returns
+  nothing in **both** interpreters (not "matches the NULL rows"), `NULL AND false`
+  is false in both, and `NULL OR true` is true in both. Those are the cases where a
+  hand-written matcher most plausibly drifts from SQL, and `D-027`'s type-level
+  design holds.
+- **This is a measurement, not a gate.** It was run once, by hand, from a probe
+  outside the workspace; nothing re-runs it. The generalization of
+  `like-differential.py` from one operator to all of them is not built. Given that
+  the seam is this crate's reason to exist (`D-002`) and has already failed once in
+  exactly this way, it is the single highest-value gate still missing — recorded
+  here rather than silently left off the roadmap.
 
 ## D-033 — a version number counts releases, not branches
 - **Status:** SETTLED (2026-09-11) — corrected.
