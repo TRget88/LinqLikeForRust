@@ -73,7 +73,7 @@ echo
 # So the count is the gate, not the exit status -- the rule test-count-floor.sh
 # states. FLOOR lives in this file and nowhere else; raise it in the same commit
 # that adds a D-1xx entry.
-FLOOR_D1XX=8
+FLOOR_D1XX=9
 
 if [ "$total" -lt "$FLOOR_D1XX" ]; then
   echo "FAIL: found ${total} D-1xx heading(s); floor is ${FLOOR_D1XX}."

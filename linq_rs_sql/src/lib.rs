@@ -13,6 +13,11 @@
 #![doc = include_str!("../README.md")]
 // Every public item carries docs. The deleted provider crate was the only one
 // that enforced this; both published crates do now.
+// Symmetric with `linq_rs`, which has had this since its first commit. Absent
+// here until 2026-09-29, while `ROADMAP.md` checked it off as applied "on the
+// crate root" -- the same asymmetry as the `missing_docs` override (`D-035`), in
+// the same two files.
+#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 #[macro_use]

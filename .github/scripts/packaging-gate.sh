@@ -270,11 +270,21 @@ fi
 # D-003 / D-004: no interior mutability in the library. This is currently true
 # by accident; the gate makes it true on purpose, so a later contributor cannot
 # quietly reintroduce the Rc<RefCell<_>> identity map those decisions forbid.
-if hits="$(grep -rnE 'Rc<|RefCell|Arc<|Mutex<|RwLock<' src/ 2>/dev/null)"; then
+# Both crates' src/, not just the root's. This scanned `src/` alone until
+# 2026-09-29, so `linq_rs_sql` -- which holds the whole seam -- was never checked
+# for the identity map D-003/D-004 forbid.
+# Comment lines are excluded, or the gate fires on prose. `rows.rs` documents
+# which types a field may deref to and legitimately names `Rc<str>` and
+# `Arc<str>` in a doc comment; neither is interior mutability and neither is code.
+# A real `Rc<RefCell<_>>` is never on a `//` line, so this filter cannot hide one.
+# Verified by injecting `let _x: Rc<RefCell<u8>>;` into each crate and confirming
+# the gate still fails.
+if hits="$(grep -rnE 'Rc<|RefCell|Arc<|Mutex<|RwLock<' src/ linq_rs_sql/src/ 2>/dev/null \
+            | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//')"; then
   err "interior mutability found in src/ — D-003 and D-004 forbid it:"
   printf '%s\n' "$hits"
 else
-  echo "no Rc/RefCell/Arc/Mutex/RwLock in src/ (D-003, D-004)"
+  echo "no Rc/RefCell/Arc/Mutex/RwLock in src/ or linq_rs_sql/src/ (D-003, D-004)"
 fi
 
 echo

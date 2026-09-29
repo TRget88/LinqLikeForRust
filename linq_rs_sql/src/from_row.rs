@@ -347,6 +347,13 @@ pub struct Layout<R: ?Sized> {
 
 impl<R: ?Sized> Layout<R> {
     /// The resolved position of the `i`th declared column.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `i` is not a valid declared-column index, i.e. `i >= self.len()`.
+    /// Generated `FromRow` impls only ever pass indices they derived from the same
+    /// `ALL_COLUMNS` this layout was resolved against, so this is unreachable from
+    /// the macro path; it is reachable from hand-written calls.
     #[inline]
     pub fn position(&self, i: usize) -> usize {
         self.at[i]

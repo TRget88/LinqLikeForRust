@@ -33,10 +33,13 @@ generator.
   this crate is forbidden even when it works — that is why `src/sql/` is held on
   `feature/v0.1.0-and-sql-builder` rather than merged.
 - `D-101`..`D-108` are all **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10).
-  `release-gate.sh` reports "8 API-stability decisions; 0 still OPEN" and exits 0,
-  so a `v1.*` tag is not blocked by them. This line read "**OPEN** and must close
-  before any 1.0" until 2026-09-29, while line 184 of this same file already
-  described `D-106` as settled and CI-enforced.
+  This line read "**OPEN** and must close before any 1.0" until 2026-09-29, while
+  this same file already described `D-106` as settled and CI-enforced.
+- **`D-109` is OPEN** and does block 1.0: whether `SqlValue` should be
+  `#[non_exhaustive]`. `release-gate.sh` refuses a 1.0 tag until it is settled,
+  and correctly does not affect a `v0.x` release. Raised 2026-09-29 because the
+  question had never been asked — `W-19`'s API sweep covered bounds, naming,
+  return types and sealing, not enum exhaustiveness.
 
 ## Hard constraints
 

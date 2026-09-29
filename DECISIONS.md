@@ -1452,7 +1452,7 @@ panics in every profile.
 
 # API stability — must be closed before any 1.0
 
-All eight are now **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10); this line read "All `OPEN`" until 2026-09-29. Each was free then and a breaking change after 1.0, which is why the gate sits at the tag.
+`D-101`..`D-108` are all **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10); this line read "All `OPEN`" until 2026-09-29. **`D-109` is OPEN** — raised 2026-09-29, `SqlValue` exhaustiveness — so `release-gate.sh` currently refuses a 1.0 tag. It does not affect a `v0.x` release. Each of these is free now and a breaking change after 1.0, which is why the gate sits at the tag.
 
 **Shared gate for this whole section — IMPLEMENTED (`W-19`).** None of
 `D-101`…`D-108` can carry a code gate while it is OPEN: they are decisions, not
@@ -1694,6 +1694,45 @@ while these remain open — which is exactly the intended latitude.
   11 discarded results → 11 warnings, with side-effect methods correctly exempt.
 - **Enforced by:** the compiler for `#[must_use]`; naming is a review matter,
   and the surface is now consistent.
+
+## D-109 — `SqlValue` exhaustiveness: **OPEN**, and it blocks 1.0
+- **Status:** **OPEN** (raised 2026-09-29). The owner's call; I have not changed
+  the API.
+- **The question.** `linq_rs_sql::SqlValue` is a `pub enum` with five variants and
+  **no** `#[non_exhaustive]`, and its own rustdoc says *"Phase 1 keeps this small
+  (the five SQL types we expose at the type level). **Add new variants alongside
+  new `SqlType` markers when extending.**"* That is a documented plan to make a
+  breaking change: adding a variant to an exhaustive public enum breaks every
+  downstream `match`. The dialect layer and any new SQL type both imply exactly
+  that addition.
+- **Why it is a 1.0 question and not a later one.** Adding `#[non_exhaustive]` is
+  itself breaking (it forces downstream matches to add a wildcard arm), so it is
+  free before 1.0 and impossible after. `linq_rs_sql 0.1.0` shipped `SqlValue`
+  exhaustive, and the unreleased `0.2.0` is already the breaking bump — so this is
+  the last cheap moment.
+- **The crate is inconsistent about it, which is the tell.** `SqlValueRef` and
+  `RowError` (`from_row.rs`) are both `#[non_exhaustive]`, each with the reason
+  written down. `SqlValue` got neither the attribute nor a ruling.
+- **Two public enums are deliberately left exhaustive, and should stay so.**
+  `SingleError` (`Empty` / `MoreThanOne`) and `query::Direction` (`Asc` / `Desc`)
+  are exhaustive *by nature* — a sequence has none, one, or more than one, and SQL
+  has two sort directions. `#[non_exhaustive]` there would cost callers a
+  wildcard arm and buy nothing. This entry is about `SqlValue` only.
+- **Options.** (a) `#[non_exhaustive]` now, and drop the "add new variants" line
+  as a plan in favour of it as a permission. (b) Leave it exhaustive and commit to
+  never adding a variant, which means the dialect work must not need one. (c)
+  Leave it exhaustive and accept a major bump when it changes. (a) is the cheap
+  one; (b) is a real constraint on unbuilt work; (c) is what happens by default if
+  nobody decides.
+- **How this went unrecorded.** Every other `D-1xx` was raised by `W-19`'s API
+  sweep, which covered bounds, naming, return types and sealing but not enum
+  exhaustiveness. `release-gate.sh` reported "8 decisions; 0 still OPEN — a 1.0 tag
+  is allowed" while this question had never been asked. With this entry the gate
+  correctly refuses a 1.0 tag until it is settled; `FLOOR_D1XX` raised to 9 in the
+  same commit.
+- **Enforced by:** nothing mechanical — this is a ruling, not code. Once settled,
+  `#[non_exhaustive]`'s presence or absence is the artifact, and
+  `packaging-gate.sh` could assert it on the shipped source if the ruling is (a).
 
 # DO-NOT-BUILD
 

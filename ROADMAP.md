@@ -182,7 +182,7 @@ operators were O(n²) where O(n) is achievable.
 - [x] **`examples/`** — three runnable examples: `basic_pipeline`, `join`, `group_aggregate`.
 - [x] **CI** — `.github/workflows/ci.yml` runs build, test, clippy `-D warnings`, fmt `--check`, doc on Linux + Windows. Separate `msrv` job pinned to Rust 1.65 (see `D-010`).
 - [x] **`#![deny(missing_docs)]`** — on both published crate roots. Caught two undocumented public fields on `Grouping<K, V>` (now documented), and `DynPred`'s doc comment being attached to a private `mod sealed` so it rendered nowhere (`D-035`). Recorded as `warn` here until 2026-09-29, which is also what `src/lib.rs` still said on the line *below* the `deny` — see `D-035` for how long that made the ruling inert.
-- [x] **`#![forbid(unsafe_code)]`** — applied on the crate root.
+- [x] **`#![forbid(unsafe_code)]`** — on **both** published crate roots. `linq_rs` has had it since its first commit; `linq_rs_sql` did not get it until 2026-09-29, while this line already read "applied on the crate root".
 - [x] **`CHANGELOG.md`** — Keep-a-Changelog format with the Phase 1–4 work documented.
 - [x] **`rust-version` / MSRV** — pinned to `1.65`. It was `1.75`, forced by 23 return-position-`impl Trait`-in-trait sites; `D-106` converted those to named types for unrelated reasons and the floor dropped ten releases.
 - [~] **`rustdoc` polish** — partial. The crate-level doc comment already shows a quick-start; a fuller side-by-side cheatsheet inside the rustdoc is deferred (it would duplicate the README).
