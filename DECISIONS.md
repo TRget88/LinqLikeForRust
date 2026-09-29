@@ -1536,6 +1536,32 @@ while these remain open — which is exactly the intended latitude.
   trait bound `Rows<Person, AlwaysTrue, Unordered>: CallToMemoryFirst` is not
   satisfied". `Rows` carries a `select_many` stub behind a bound that is never
   implemented, so the method resolves and its bound does not.
+- **The "`compile_fail` does not check *which* error" objection, discharged
+  (2026-09-29).** That objection is the reason the `D-102` pair needs a passing
+  twin, and it applies equally to the crate's five pre-existing `compile_fail`
+  blocks — placement had been verified, rejection *reason* never had. Measured by
+  extracting each block, wrapping it in `fn main()` as rustdoc does, and compiling
+  it against both crates to read the actual diagnostic:
+
+  | block | documented intent | actual diagnostic |
+  |---|---|---|
+  | `pred.rs` (arithmetic) | outside the `pred!` grammar | `error: no rules expected '*'` — no matching macro arm |
+  | `pred.rs` (types) | `Text` column vs an integer | `E0271: <Integer as Family>::Base == Text` |
+  | `expr.rs` (`Rows`) | cross-table filter rejected | `E0277: budget: BelongsTo<employees::Marker>` |
+  | `expr.rs` (`Query`) | same on the SQL-only builder | `E0277: budget: BelongsTo<employees::Marker>` |
+  | `rows.rs` (`entity!`) | lossy field type is an error | `E0277: i64: From<f64>` |
+
+  All five reject for the documented reason. None fails on a missing import, a
+  syntax error, or an unrelated trivial error — which is the failure mode that
+  would make a `compile_fail` block look like a gate while enforcing nothing. Note
+  the first is a *macro* error rather than a type error, and that is correct: the
+  grammar boundary is enforced by `pred!` having no arm for arithmetic, not by a
+  bound.
+
+  **Not a gate either.** Like the seam differential in `D-034`, this was run once
+  by hand from a probe outside the workspace. Nothing re-runs it, so a future edit
+  could turn one of these into a trivially-failing block without anything
+  noticing.
 
 ## D-103 — Three-valued logic: promise a stability class, not identity
 - **Status:** **SETTLED (2026-09-10).**
