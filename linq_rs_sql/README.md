@@ -170,6 +170,15 @@ rejects** (it wants `$1`, `$2`). Identifiers are emitted unquoted, so a column
 named `order` is a parse error. There is no dialect layer yet; this is a
 SQLite/MySQL builder.
 
+**`LIKE` is the one operator whose meaning is the database's, not ours.** The
+in-memory evaluator folds **ASCII** case, matching SQLite's default `LIKE` and
+MySQL's default collation — so `name.like("eve")` matches a row spelled `Eve` in
+both interpreters. It does not fold non-ASCII, because SQLite does not either.
+PostgreSQL's `LIKE` is case-sensitive, so against PostgreSQL the two would disagree
+— which is why `D-103` classes this operator *provider-defined* rather than
+claiming agreement flatly. Every other supported operation agrees with the database
+exactly; this one agrees with the databases this builder can currently reach.
+
 ## Relationship to `linq_rs`
 
 Siblings in one repository, and **neither depends on the other**.
