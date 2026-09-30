@@ -86,6 +86,17 @@ impl<'a, T> OrderedQueryable<'a, T> {
     /// Further sorts by an ascending secondary key, applied only where the
     /// existing keys compare equal.
     ///
+    /// # Panics
+    ///
+    /// Panics **in every profile**, including release, if called after iteration
+    /// of this `OrderedQueryable` has begun. Once the first element is pulled the
+    /// buffer is already sorted, so a comparator added afterwards would be
+    /// silently ignored and the caller would get a plausible, wrongly-ordered
+    /// answer. `D-025` made this an `assert!` rather than a `debug_assert!` for
+    /// exactly that reason: a wrong order in release is harder to find than a
+    /// panic. There is no correct answer to return instead, so it is not an
+    /// `Err`.
+    ///
     /// ```rust
     /// use linq_rs::LinqExt;
     /// let v: Vec<_> = vec![("b", 2), ("a", 2), ("c", 1)]
@@ -105,6 +116,18 @@ impl<'a, T> OrderedQueryable<'a, T> {
     }
 
     /// Further sorts by a descending secondary key.
+    ///
+    /// # Panics
+    ///
+    /// Panics **in every profile**, including release, if called after iteration
+    /// of this `OrderedQueryable` has begun. Once the first element is pulled the
+    /// buffer is already sorted, so a comparator added afterwards would be
+    /// silently ignored and the caller would get a plausible, wrongly-ordered
+    /// answer. `D-025` made this an `assert!` rather than a `debug_assert!` for
+    /// exactly that reason: a wrong order in release is harder to find than a
+    /// panic. There is no correct answer to return instead, so it is not an
+    /// `Err`.
+    ///
     pub fn then_by_descending<K, F>(self, key_fn: F) -> Self
     where
         K: Ord,
@@ -116,6 +139,17 @@ impl<'a, T> OrderedQueryable<'a, T> {
 
     /// Further sorts with an explicit comparator, for keys that are `PartialOrd`
     /// but not `Ord` — floats, most often.
+    ///
+    /// # Panics
+    ///
+    /// Panics **in every profile**, including release, if called after iteration
+    /// of this `OrderedQueryable` has begun. Once the first element is pulled the
+    /// buffer is already sorted, so a comparator added afterwards would be
+    /// silently ignored and the caller would get a plausible, wrongly-ordered
+    /// answer. `D-025` made this an `assert!` rather than a `debug_assert!` for
+    /// exactly that reason: a wrong order in release is harder to find than a
+    /// panic. There is no correct answer to return instead, so it is not an
+    /// `Err`.
     ///
     /// ```rust
     /// use linq_rs::LinqExt;

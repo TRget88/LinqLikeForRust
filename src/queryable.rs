@@ -15,9 +15,13 @@ use crate::ordered::OrderedQueryable;
 /// delegate to `std::iter`, and where `std` and C# disagree, `std` wins
 /// (`D-005`). The normative list of divergences — empty sequences, tie-breaking,
 /// overflow, string collation, duplicate keys, evaluation timing — is the
-/// *Differences from C# LINQ* section of the crate documentation. Three
-/// operators (`element_at_or`, `zip3`) name C# methods or overloads
-/// that **do not exist**; they are marked below.
+/// *Differences from C# LINQ* section of the crate documentation.
+///
+/// No operator here names a C# method that does not exist. Three once did —
+/// `for_each_`, `element_at_or` and `zip3` — and all three were cut by `D-019`;
+/// `.github/data/removed.tsv` records them and a gate fails if any doc names
+/// them again. Derived, not asserted: every surviving operator's `csharp` column
+/// resolves against `csharp-operators.tsv`.
 ///
 /// Import this trait to unlock all methods:
 ///

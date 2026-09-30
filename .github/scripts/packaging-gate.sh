@@ -92,27 +92,59 @@ if [ -f "$sib" ]; then
   [ "$sl" = "MIT OR Apache-2.0" ] || err "linq_rs_sql license must match the workspace ('MIT OR Apache-2.0'), got '${sl}'"
   [ -n "$sr" ] || err "linq_rs_sql has no repository field"
   # It must stay dependency-free for the same reason its sibling does.
-  # Normal deps only. `linq_rs` is a DEV-dependency so the seam's tests can
-  # prove `.to_memory()` hands back something LinqExt works on; dev-deps never
-  # enter a consumer's graph, so D-020's "neither depends on the other" holds
-  # for anyone actually using either crate.
-  # D-024: zero dependencies of EVERY kind, dev included. A dev-dependency does
-  # not reach consumers, but `cargo package` strips its `path` and keeps its
-  # `version`, which makes it a hard registry requirement at publish time and
-  # forces a publish order. It also makes the "no dependencies" claim false as
-  # written. Both published crates are checked; `seam-tests` is publish = false
-  # and is exempt by construction.
+  # Normal deps AND dev-deps: this crate must have neither. `linq_rs` used to be
+  # a dev-dependency here, and D-024 moved those two files to `seam-tests` to
+  # remove it -- because `cargo publish` strips a dev-dep's `path` but keeps its
+  # `version`, which made `linq_rs_sql` unpublishable until `linq_rs 0.2.0` was
+  # live. The comment here still described that dev-dependency as present until
+  # 2026-09-29.
+  # D-032, the owner's rule, stated verbatim:
+  #   linq_rs     -- no dependencies.
+  #   linq_rs_sql -- only linq_rs.
+  #   nothing else is acceptable.
+  #
+  # So the whole dependency graph must contain no third-party crate at all, of
+  # any kind, including dev. This is stricter than D-024 (which only demanded the
+  # two core crates be clean) and it is what retired linq_rs_sqlite: one driver
+  # dependency pulled 24 crates into the graph via rusqlite -> libsqlite3-sys.
+  #
+  # Checked on the RESOLVED graph, not the manifests: a manifest lists direct
+  # dependencies, and a transitive one is still a dependency.
+  third="$(cargo metadata --format-version 1 2>/dev/null \
+    | python3 -c "
+import json,sys
+own={'linq_rs','linq_rs_sql','seam-tests'}
+names={p['name'] for p in json.load(sys.stdin)['packages']} - own
+print(','.join(sorted(names)))")"
+  if [ -n "$third" ]; then
+    err "third-party crates in the dependency graph: ${third}"
+  fi
+  echo "dependency graph contains no third-party crate"
+
+  # And per-package, so a violation names the package that introduced it.
+  # `linq_rs_sql` MAY depend on `linq_rs`; it is permitted, not required, and it
+  # currently has none, which is stricter and fine. Anything else fails.
   for pkg in linq_rs linq_rs_sql; do
-    sd="$(cargo metadata --no-deps --format-version 1 \
-      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${pkg}'][0]; print(','.join(sorted(d['name']+'('+(d['kind'] or 'normal')+')' for d in p['dependencies'])))")"
-    if [ -z "$sd" ]; then echo "${pkg} dependencies (all kinds): none"; else err "${pkg} gained a dependency: ${sd}"; fi
+    got="$(cargo metadata --no-deps --format-version 1 \
+      | python3 -c "import json,sys; p=[x for x in json.load(sys.stdin)['packages'] if x['name']=='${pkg}'][0]; print(','.join(sorted(set(d['name'] for d in p['dependencies']))))")"
+    # Plain string comparison, not grep: the ALLOWED value is the empty string,
+    # and `printf '%s' "" | grep -qE '^$'` fails because grep sees zero lines.
+    ok=no
+    case "${pkg}:${got}" in
+      linq_rs:)                ok=yes ;;
+      linq_rs_sql:|linq_rs_sql:linq_rs) ok=yes ;;
+    esac
+    if [ "$ok" != yes ]; then
+      err "${pkg} may depend only on $( [ "$pkg" = linq_rs_sql ] && echo 'linq_rs' || echo 'nothing' ); got '${got:-<none>}'"
+    fi
+    echo "${pkg} dependencies: ${got:-none}"
   done
-  # And nothing that is publish = false may ever be published.
+
   np="$(cargo metadata --no-deps --format-version 1 \
-    | python3 -c "import json,sys; print(','.join(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('publish') != []))")"
-  [ "$np" = "linq_rs,linq_rs_sql" ] || [ "$np" = "linq_rs_sql,linq_rs" ] \
-    || err "publishable packages changed: expected exactly linq_rs + linq_rs_sql, got: ${np}"
-  echo "publishable packages: linq_rs, linq_rs_sql (seam-tests is publish = false)"
+    | python3 -c "import json,sys; print(','.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('publish') != [])))")"
+  [ "$np" = "linq_rs,linq_rs_sql" ] \
+    || err "publishable packages changed: expected linq_rs + linq_rs_sql, got: ${np}"
+  echo "publishable packages: ${np} (seam-tests is publish = false)"
 else
   err "linq_rs_sql/Cargo.toml is missing — D-020 split the SQL builder into it"
 fi
@@ -205,18 +237,93 @@ echo "=== a published crate must not cite a file it does not ship (D-023) ==="
 # linq_rs_sql referenced `DECISIONS.md` in three shipped files and shipped it
 # zero times -- it lives at the workspace root, which no member tarball can
 # reach. A bare filename gives the reader nothing to follow; a URL does.
-sib_files="$(cd "$ROOT/linq_rs_sql" && git ls-files 'src/*' README.md 2>/dev/null)"
+# Take the file list from the TARBALL, not from git. `git ls-files` cannot see a
+# newly-added file until it is staged, so a fresh source file citing a
+# repo-root doc passed this check locally and failed on CI -- the gate was
+# reading the repo when its entire subject is what ships. (D-023's own lesson,
+# reappearing inside D-023's gate.)
+# Generalized 2026-09-29. This checked ONE crate (linq_rs_sql) against ONE
+# filename (DECISIONS.md), so the identical defect was live and unguarded in the
+# ROOT crate: src/lookup.rs bare-cited `AUDIT.md` in a rendered `//!` doc on
+# `pub mod lookup`, and AUDIT.md is in the root crate's `exclude`. "The same check
+# for the sibling" was assumed and had never been true. Now: every published
+# crate, every repo-root doc, derived rather than hardcoded.
 bare=0
-for f in $sib_files; do
-  # A mention is fine if the same line, or the file, also carries the URL.
-  if grep -q 'DECISIONS\.md' "$ROOT/linq_rs_sql/$f" \
-     && ! grep -q 'LinqLikeForRust/blob/main/DECISIONS\.md' "$ROOT/linq_rs_sql/$f"; then
-    echo "  linq_rs_sql/${f} cites DECISIONS.md with no URL, and the tarball does not ship it"
-    bare=1
+for pkg in linq_rs linq_rs_sql; do
+  if [ "$pkg" = "linq_rs" ]; then
+    pkg_dir="$ROOT"; pkg_listing="$listing"
+  else
+    pkg_dir="$ROOT/linq_rs_sql"; pkg_listing="$sib_listing"
   fi
+  pkg_files="$(printf '%s\n' "$pkg_listing" | grep -E '^(src/.*\.rs|README\.md)$' || true)"
+  for doc in $(cd "$ROOT" && ls *.md docs/*.md 2>/dev/null); do
+    # Shipped by THIS tarball? Then a bare mention is followable. Compare against
+    # the tarball listing, never the repo -- that is D-023's whole point.
+    if printf '%s\n' "$pkg_listing" | grep -qxF "$doc"; then continue; fi
+    docbase="${doc##*/}"
+    esc="$(printf '%s' "$docbase" | sed 's/\./\\./g')"
+    for f in $pkg_files; do
+      [ -f "$pkg_dir/$f" ] || continue
+      if grep -q "$esc" "$pkg_dir/$f" \
+         && ! grep -q "LinqLikeForRust/blob/main/[^ )]*${esc}" "$pkg_dir/$f"; then
+        echo "  ${pkg}/${f} cites ${docbase} with no URL, and ${pkg}'s tarball does not ship it"
+        bare=1
+      fi
+    done
+  done
 done
-[ "$bare" -eq 0 ] || err "linq_rs_sql cites DECISIONS.md without a URL; its tarball has no path to that file"
-echo "linq_rs_sql's citations of DECISIONS.md all carry a URL"
+if [ "$bare" -eq 0 ]; then
+  echo "every citation of an unshipped doc carries a URL (both crates, all root docs)"
+else
+  # `err` accumulates rather than exits, so an unconditional success echo here
+  # would print directly under its own FAIL line.
+  err "a published crate cites a doc it does not ship, without a URL"
+fi
+
+echo
+echo "=== D-109: SqlValue must stay #[non_exhaustive] ==="
+# Settled as option (a): new variants are additive. That promise is carried by one
+# attribute, and deleting it is silent -- the crate keeps compiling, every test
+# keeps passing, and the breakage lands in a downstream `match` at the next
+# release. So assert the attribute rather than trusting it.
+#
+# Read from the repo source, but only after the LISTING confirms the file ships.
+# That split is deliberate: cargo NORMALIZES Cargo.toml and GENERATES its own
+# Cargo.lock, which is why D-023 forbids checking those against the repo -- but it
+# copies `.rs` files verbatim, so for a source-level assertion the repo copy and
+# the shipped copy are the same bytes. If cargo ever rewrites source on package,
+# this check has to extract the tarball instead.
+val_rel="src/value.rs"
+printf '%s\n' "$sib_listing" | grep -qxF "$val_rel" \
+  || err "linq_rs_sql's tarball does not ship ${val_rel}; the D-109 check cannot see it"
+if [ -f "$ROOT/linq_rs_sql/$val_rel" ]; then
+  # The attribute must be on SqlValue SPECIFICALLY, not merely present in the file.
+  #
+  # Implementation: take the lines above `pub enum SqlValue {` up to the nearest
+  # preceding blank line -- in rustfmt'd source that span is the item's own
+  # attribute/doc block -- and require the attribute in it. Simple enough to read
+  # in one pass, which a gate has to be. The first version of this check needed
+  # careful tracing to trust and would have false-FAILED on a doc comment sitting
+  # between the attribute and the enum.
+  #
+  # Four cases measured against this version:
+  #   attribute on SqlValue                     -> PASS
+  #   attribute deleted                          -> FAIL
+  #   attribute present but on another item here -> FAIL  (`grep -q` says PASS)
+  #   doc comment between attribute and enum     -> PASS  (old version FAILED)
+  if sed -n '/^pub enum SqlValue {/q;p' "$ROOT/linq_rs_sql/$val_rel" \
+       | tac | sed -n '/^[[:space:]]*$/q;p' | grep -q '^#\[non_exhaustive\]$'; then
+    echo "SqlValue is #[non_exhaustive] (D-109)"
+  else
+    err "SqlValue has lost #[non_exhaustive]. D-109 settled that new variants are
+      ADDITIVE, and that promise is this attribute. Removing it is a major bump:
+      every downstream \`match\` on SqlValue silently becomes exhaustive again, and
+      the next new variant breaks all of them. If the ruling is being reversed, change
+      D-109 in DECISIONS.md and this check in the same commit."
+  fi
+else
+  err "$ROOT/linq_rs_sql/$val_rel is missing -- the D-109 check cannot have run"
+fi
 
 echo
 echo "=== source invariants (D-001, D-003, D-004) ==="
@@ -233,11 +340,27 @@ fi
 # D-003 / D-004: no interior mutability in the library. This is currently true
 # by accident; the gate makes it true on purpose, so a later contributor cannot
 # quietly reintroduce the Rc<RefCell<_>> identity map those decisions forbid.
-if hits="$(grep -rnE 'Rc<|RefCell|Arc<|Mutex<|RwLock<' src/ 2>/dev/null)"; then
+# Both crates' src/, not just the root's. This scanned `src/` alone until
+# 2026-09-29, so `linq_rs_sql` -- which holds the whole seam -- was never checked
+# for the identity map D-003/D-004 forbid.
+# Comment lines are excluded, or the gate fires on prose. `rows.rs` documents
+# which types a field may deref to and legitimately names `Rc<str>` and
+# `Arc<str>` in a doc comment; neither is interior mutability and neither is code.
+# A real `Rc<RefCell<_>>` is never on a `//` line, so this filter cannot hide one.
+# Verified by injecting `let _x: Rc<RefCell<u8>>;` into each crate and confirming
+# the gate still fails.
+# "Looked and found nothing" was byte-identical to "could not look": with `src/`
+# absent the grep finds nothing, the `if` is false, and the gate printed success.
+# Assert the directories exist before trusting a clean result.
+for d in src linq_rs_sql/src; do
+  [ -d "$ROOT/$d" ] || err "$d does not exist -- this scan cannot have looked at it"
+done
+if hits="$(grep -rnE 'Rc<|RefCell|Arc<|Mutex<|RwLock<' src/ linq_rs_sql/src/ 2>/dev/null \
+            | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//')"; then
   err "interior mutability found in src/ — D-003 and D-004 forbid it:"
   printf '%s\n' "$hits"
 else
-  echo "no Rc/RefCell/Arc/Mutex/RwLock in src/ (D-003, D-004)"
+  echo "no Rc/RefCell/Arc/Mutex/RwLock in src/ or linq_rs_sql/src/ (D-003, D-004)"
 fi
 
 echo

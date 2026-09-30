@@ -29,21 +29,21 @@ max_	linqext	Max		max		terminal
 min_by_key_	linqext	MinBy	min_	min_by_key	Body: self.min_by_key(key_fn)	terminal
 max_by_key_	linqext	MaxBy	max_	max_by_key	Body: self.max_by_key(key_fn)	terminal
 average	linqext	Average			Selector-only; no no-arg form. No std equivalent	terminal
-first	linqext	First		next	Panics on empty	terminal
+first	linqext	First		next().expect(..)	Panics on empty	terminal
 first_or_default	linqext	FirstOrDefault	first	next	Body: self.next()	terminal
 first_where	linqext	FirstOrDefault	first	find	C# FirstOrDefault(predicate) overload	terminal
-last_	linqext	Last		last	Panics on empty	terminal
+last_	linqext	Last		last().expect(..)	Panics on empty	terminal
 last_or_default	linqext	LastOrDefault	last_	last	Implemented as fold(None,..), not Iterator::last	terminal
 last_where	linqext	LastOrDefault	last_	filter().last()	C# LastOrDefault(predicate) overload	terminal
 single	linqext	Single			Panics on 0 or 2+	terminal
 try_single	linqext	Single	single		Result-returning form of Single; C# throws, this returns SingleError so Empty and MoreThanOne are distinguishable	terminal
 single_or_default	linqext	SingleOrDefault	single		Returns None on 0 OR 2+	terminal
-first_or	linqext	FirstOrDefault	first	next	C# FirstOrDefault(defaultValue), .NET 6+ (overload confirmed present)	terminal
-last_or	linqext	LastOrDefault	last_	last	C# LastOrDefault(defaultValue), .NET 6+ (overload confirmed present)	terminal
+first_or	linqext	FirstOrDefault	first	next().unwrap_or(d)	C# FirstOrDefault(defaultValue), .NET 6+ (overload confirmed present)	terminal
+last_or	linqext	LastOrDefault	last_	last().unwrap_or(d)	C# LastOrDefault(defaultValue), .NET 6+ (overload confirmed present)	terminal
 single_or	linqext	SingleOrDefault	single		C# SingleOrDefault(defaultValue), .NET 6+; still panics on 2+	terminal
 any_	linqext	Any		any		terminal
 all_	linqext	All		all		terminal
-contains_	linqext	Contains		any()	Body: self.any(|x| x == *value)	terminal
+contains_	linqext	Contains		any(\|x\| x == *v)	Body: self.any(|x| x == *value)	terminal
 inner_join_partial_eq	linqext	Join	inner_join		Escape hatch, O(n*m); supports asymmetric PartialEq keys. Renamed from join_ in W-12	clause
 inner_join	linqext	Join			Hash-indexed default; eager (collects results into a Vec). Renamed from join in W-12	clause
 group_join_partial_eq	linqext	GroupJoin	group_join		Escape hatch, O(n*m)	clause
@@ -76,6 +76,6 @@ Lookup::groups	type_method				First-appearance order	n/a
 Lookup::into_groups	type_method			into_iter		n/a
 OrderedQueryable::then_by_with	type_method				Comparator form of then_by, for PartialOrd-only keys (W-13)	n/a
 Grouping::into_parts	type_method				Takes key and elements out at once; the fields are private (W-15)	n/a
-order_by_with	linqext	OrderBy	order_by	sort_by	Comparator form; C# OrderBy accepts double, order_by binds K: Ord (W-13)	clause
+order_by_with	linqext	OrderBy	order_by	collect() + sort_by	Comparator form; C# OrderBy accepts double, order_by binds K: Ord (W-13)	clause
 min_by_	linqext	Min	min_	min_by	Comparator form for PartialOrd-only keys (W-13)	terminal
 max_by_	linqext	Max	max_	max_by	Comparator form; ties keep the LAST maximum, unlike C# MaxBy (W-13)	terminal

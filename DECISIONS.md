@@ -66,21 +66,30 @@ settled before any 1.0 · `D-2xx` DO-NOT-BUILD.
 
 ---
 
-# Open contradictions — fix these first
+# Contradiction register — **all five resolved**
 
-`AUDIT.md` §1 finding **A-1**. Until these are reconciled, nothing downstream can
-be sequenced.
+Raised as `AUDIT.md` §1 finding **A-1**, when the heading read *"Open
+contradictions — fix these first"* and the note said nothing downstream could be
+sequenced. That was true of `X-1`..`X-5` and is no longer true of any of them:
+the last, `X-5`, was fixed 2026-09-11 and confirmed 2026-09-29. Kept as a record,
+because each row names a document that asserted scope on its own authority, which
+is the failure this register exists to make visible.
 
 **Resolution rule:** each document must *cite the relevant `D-NNN`* rather than
 restate a scope claim of its own.
+
+Two rows were left stale after their fix landed — `X-5` still said `OPEN`, and
+`X-4` still described README numbers that `D-016` had since replaced. A register
+whose rows outlive their own resolution reports a blocked project; re-read it
+whenever a `D-NNN` it cites changes.
 
 | # | Document | Was | Status |
 |---|---|---|---|
 | X-1 | `CLAUDE.md` Non-goals | "We are not building an `IQueryable`/expression-tree analogue… We do not target databases" | **RESOLVED** 2026-09-09 — replaced with a scope-by-reference list citing `D-001`…`D-205`; the non-goal is struck, `D-002` stands |
 | X-2 | `ROADMAP.md` *Rejected* | "`IQueryable` / expression trees — out of scope. We target in-memory iterators only." | **RESOLVED** 2026-09-09 — entry now reads "no longer rejected", cites `D-002`, and records that the SQL builder was committed as "ORM Phase 1" against a roadmap with no ORM phase |
 | X-3 | `CLAUDE.md` Mission | "familiar to C# devs **and** idiomatic to Rust devs at the same time" | **RESOLVED** 2026-09-09 — now states that idiom wins, citing `D-005` |
-| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | **RESOLVED** 2026-09-09, then **re-fixed the same day.** The first fix replaced the claim with a hand-written count ("45 of C#'s 75 operator names") that was measured on `main` and wrong by ~20 names for this tree — written, with no irony intended, in the same sentence as a `D-016` citation saying counts must be generated. The README now states the C# denominators (75 names, 234 overloads, 44 comparer overloads — verified against learn.microsoft.com), states that this crate covers neither set completely, and **refuses to give a coverage figure** until `W-18` derives one |
-| X-5 | `Cargo.toml` | `license = "MIT"` | **OPEN** — `W-17`. Must be `MIT OR Apache-2.0` with both licence files before the next publish |
+| X-4 | `README.md:5` | "Brings the full power of C# LINQ" | **RESOLVED** 2026-09-09, then **re-fixed the same day.** The first fix replaced the claim with a hand-written count ("45 of C#'s 75 operator names") that was measured on `main` and wrong by ~20 names for this tree — written, with no irony intended, in the same sentence as a `D-016` citation saying counts must be generated. The README now states the C# denominators (75 names, 234 overloads, 44 comparer overloads — verified against learn.microsoft.com), states that this crate covers neither set completely, and **refuses to give a coverage figure** until `W-18` derives one. **Superseded twice since:** `W-18` landed, so the README now *does* give a coverage figure — and `D-016` then found that 75 / 234 / 44 is itself the **.NET 11 preview** superset, because the docs page filters versions client-side and a row count returns the newest. The figures are now generated per version and pinned to `TARGET_DOTNET` (net-10: 74 / 228 / 38, 45 of 74 names implemented, 0 of 38 comparer overloads). No count in the README is hand-written |
+| X-5 | `Cargo.toml` | `license = "MIT"` | **RESOLVED** 2026-09-11 — `license = "MIT OR Apache-2.0"` on both crates, `LICENSE-MIT` and `LICENSE-APACHE` both present and both shipped. Verified resolved 2026-09-29; the row had been left OPEN after the fix landed. Gated: `packaging-gate.sh` asserts the exact licence string and both files **in the packaged tarball**, because the yanked `linq_rs 0.1.0` shipped MIT-only and a working-tree check would not have caught it (`D-023`) |
 
 The thesis ruling that closed X-1..X-3 (2026-09-09): **keep the SQL thesis.**
 `D-002` is the crate's reason to exist; `src/sql/` is held rather than merged
@@ -314,6 +323,33 @@ seam, not the seam.
 - **Lowered from 1.75 by `D-106` (2026-09-10).** The floor was never a
   considered choice — it was wherever the 23 RPITIT sites happened to put it.
   Converting them to named types for unrelated reasons dropped it ten releases.
+- **The floor is now measured, not inherited (2026-09-29).** The bullet above is
+  honest that 1.65 was an accident of the RPITIT conversion rather than a decision,
+  which left open whether it is *too high* — a needlessly high MSRV excludes users,
+  and lowering one later is not a breaking change. Measured by stripping
+  `rust-version` from the packaged tarball and running the suite downward:
+
+  | toolchain | `cargo build --lib` | `cargo test` |
+  |---|---|---|
+  | 1.65 (declared) | builds | passes |
+  | 1.64 | builds | **passes** (186) |
+  | 1.63 | builds | **FAILS** |
+  | 1.60 | builds | **FAILS** |
+
+  So the real floor is **1.64** and the declared 1.65 carries exactly one release
+  of headroom — conservative, but not arbitrary. The failing test is
+  `skip_matches_std_on_a_non_fused_source` (`tests/adaptor_contracts.rs:46`):
+  `std::iter::Skip`'s behaviour on a **non-fused** source changed in 1.64, so on
+  1.63 `std` yields `[None, Some(40), …]` where `skip_` yields
+  `[Some(40), Some(50), Some(60), None, None, None]`. `skip_`'s contract is that it
+  agrees with `Iterator::skip`; below 1.64 it cannot.
+- **Note the shape of that result: it builds five releases lower and is wrong
+  there.** `msrv-tarball.sh` runs `cargo build --lib`, so a build-only MSRV gate
+  would have accepted `rust-version = "1.60"` without complaint. The floor is a
+  *behavioural* bound, and only the test suite can see it. Nothing currently fails
+  if someone lowers the declared MSRV below 1.64 — the gate would need to run the
+  suite one release *under* the declared floor and require it to fail. Not built;
+  recorded as the known hole (`D-036`'s class: a real claim with no gate).
 - **Why:** Eight return-position-`impl Trait`-in-trait sites pin the floor at
   exactly 1.75 with zero headroom. The branch declares it, but its MSRV job runs
   `cargo test --all-targets`, which **excludes doctests** — and the job never ran
@@ -330,10 +366,13 @@ seam, not the seam.
   `rustc --version` first) and runs `test-count-floor.sh`, which covers both
   `--all-targets` and `--doc`; the latter is the bucket a bare
   `cargo test --all-targets` would have skipped. `msrv-tarball.sh` additionally
-  builds the packaged tarballs — verified on a genuine 1.65.0 toolchain. The CI job now also asserts `rustc --version` is 1.75.x
-  before trusting the run — during this remediation two local verifications used
-  a `PATH` that silently fell through to stable, which produces a confident and
-  false MSRV claim.
+  builds the packaged tarballs — verified on a genuine 1.65.0 toolchain. The CI
+  job also asserts `rustc --version` matches **1.65** before trusting the run —
+  during this remediation two local verifications used a `PATH` that silently fell
+  through to stable, which produces a confident and false MSRV claim. (This
+  sentence read *"asserts `rustc --version` is 1.75.x"* until 2026-09-29: residue
+  from the pre-`D-106` floor, inside the one block a reader consults to find out
+  what is enforced. The workflow has always asserted `1.65.`)
 
 ## D-011 — `std` only, `alloc` door left open
 - **Status:** PROVISIONAL (2026-09-09)
@@ -477,6 +516,667 @@ seam, not the seam.
   that package's own tarball. Every check verified to fail when the defect is
   reintroduced, not just to pass today.
 
+## D-036 — link integrity is gated; behaviour prose still is not
+- **Status:** SETTLED (2026-09-14) — implemented. Closes the last of the four gate
+  gaps the documentation truth pass reported.
+
+### `link-check.py`
+Anchors, repo-relative paths and external URLs, across every markdown file and
+every rustdoc comment. Three checks kept separate because they fail differently:
+- **Anchors** (`](#x)`) must resolve to a heading in the same file. Deterministic,
+  fatal. I broke one *by hand during the truth pass* and caught it only because I
+  happened to re-run an ad-hoc check.
+- **Repo paths** must exist. Markdown only: a non-URL target in a `.rs` file is a
+  rustdoc **intra-doc** link (`Self::except`), which rustdoc resolves itself under
+  `-D warnings`. Treating those as paths produced **97 false positives** on the
+  first run.
+- **External URLs** must resolve, with two carve-outs that are checked rather than
+  assumed:
+  - Hosts that lie to non-browser clients are listed **with a reason**. Only
+    `crates.io`, which 404s a `curl` even for `linq_rs 0.2.0`, which is live.
+  - A GitHub `blob/main/<path>` 404 is **reported, not failed, when `<path>` exists
+    in the working tree** — it is correct after merge, and a `main` link is right
+    for a reader of the published crate. If the path exists nowhere, it is fatal
+    and the message says so. Without that distinction the gate is unusable on a
+    feature branch, and an allowlist would have hidden real breakage instead.
+- Verified failing on all three modes: a bad anchor, a missing path, and a
+  `blob/main` URL whose path exists nowhere.
+- **It flagged its own documentation on the first full run**, and that was a real
+  parsing bug rather than a nuisance: the entry above writes `` `](#x)` `` inside
+  backticks as an *example* of anchor syntax, and markdown does not create a link
+  inside a code span. Inline code is now stripped before links are extracted.
+
+### The lockstep rule, stated as prose because that is all it can be
+`CLAUDE.md` now says a commit changing documented behaviour updates the
+documentation in the same commit, and — more usefully — tabulates which claim
+types are gated and which are not.
+- **Why prose.** A mechanical version would have to decide whether a source change
+  altered *documented* behaviour, which is the judgement the rule exists to
+  compel. A heuristic ("touched `src/` but no `.md`") fires on every internal
+  refactor and gets ignored, which is worse than an unenforced rule.
+- **The measurement that justifies it.** 1,788 claims extracted, 284 verified: 46
+  FALSE, 49 PARTIAL, 22 dangerous. **Every dangerous claim was a BEHAVIOR or
+  TRANSLATION claim** — the two of ten types with no gate, 663 claims between them.
+  Almost none was old rot; it was confident summary prose written hours after the
+  conditional version had been verified.
+- **Honest residue:** those 663 claims remain unguarded and will drift again. What
+  changed is that the shape of the risk is written down, so the next pass knows
+  where to look first.
+- **Three of them have since been converted, and the pattern is worth naming
+  (2026-09-29).** Each took a different route out of the residue:
+  - `README.md`'s adaptor/refinement counts: **derived**. They were prose naming six
+    types the `D-019` cut had deleted; now a generated `gen-docs.py` block.
+  - `TextOps::like`'s case-folding semantics: **doctested**. A behaviour claim became
+    six lines that assert it, at the public method a user actually reads.
+  - `docs/DRIVER_ADAPTER.md`: **compiled**. An entire page of guidance went from
+    unchecked prose to a CI gate (`adapter-gate.sh`, `D-109`).
+
+  So the three exits are *derive it*, *assert it*, or *compile it* — and the choice
+  follows the claim's shape rather than taste. A count derives. A behaviour asserts.
+  A code sample compiles. What cannot take any of the three is a summary judgement
+  about the whole system, which is exactly the kind that produced the 22 dangerous
+  claims, and the honest move there is a smaller claim rather than a bigger gate.
+- **Enforced by:** `link-check.py` in CI for links; `gen-docs.py`, the doctests and
+  `adapter-gate.sh` for the three converted above; nothing for the rest of the
+  behaviour prose, stated plainly rather than implied by a gate list that looks
+  complete.
+
+## D-035 — release hygiene: a changelog with releases in it, and `deny(missing_docs)`
+- **Status:** SETTLED (2026-09-14) — implemented.
+- Three gaps that blocked a release without being bugs.
+
+### `CHANGELOG.md` had no released-version headings
+966 lines at `f260931`, everything under one `## [Unreleased]` — **including what actually
+shipped as `linq_rs 0.2.0` and `linq_rs_sql 0.1.0`**. Found as `RR-028` by the
+documentation truth pass and disclosed rather than fixed, because fixing it needed
+a decision about where the release boundary falls.
+- **Ruling:** dated release headings naming the versions that shipped together,
+  because the two crates version independently and a single version number in the
+  heading would be a lie about one of them. `[Unreleased]` states which versions it
+  targets, so nothing in it can read as shipped.
+- **The boundary is derived, not guessed.** Both crates were published from
+  `fae7a35`; every section that existed in `CHANGELOG.md` at that commit is
+  released, everything added after is not. Verified mechanically: all **33**
+  sections below the release heading are present in `git show fae7a35:CHANGELOG.md`,
+  and none above it is.
+- The header also claimed to document "changes to `linq_rs`" while documenting both
+  crates. Corrected.
+
+### `PUBLISHING.md` was a completed checklist, not a runbook
+Seven of its eleven steps were marked `DONE 2026-09-10`. Anyone following it for
+the next release would have been reading someone else's finished work.
+- **Ruling:** a runbook for the **next** release (all steps un-run), with the
+  finished run demoted to a dated record at the end, keeping the two things that
+  release taught. Also corrected: the token section demanded `publish-new`, which
+  is unnecessary now that both names exist, and the dependency note cited `D-024`
+  where `D-032` is binding.
+
+### `deny(missing_docs)` was on zero published crates
+The deleted provider crate was the only one that had it, so removing it under
+`D-032` silently removed the guarantee from the workspace.
+- **Ruling:** both published crates deny it.
+- **It found a real defect immediately.** `DynPred`'s doc comment was attached to
+  the private `mod sealed` sitting above it, not to the trait — so the
+  documentation for a public trait **rendered nowhere at all**. Confirmed by
+  reading the generated HTML before and after. The prose was also stale: it said
+  `Expr` of SQL type `Boolean`, from before `D-027` made a predicate's type
+  possibly `Nullable<Boolean>`.
+- That is the argument for the lint over a convention: a misplaced doc comment
+  looks correct in the source and is invisible in the output.
+- **The ruling was inert in `linq_rs`, and this entry did not know it (found
+  2026-09-29).** `src/lib.rs` carried `#![deny(missing_docs)]` on line 17 and
+  `#![warn(missing_docs)]` on line 18 — leftover from the pre-`D-035` state, which
+  `CHANGELOG.md` still records as `warn`. A later lint attribute at the same level
+  **overrides** an earlier one, so the effective level was `warn`, and the comment
+  directly above both lines asserted the opposite. Measured rather than reasoned:
+  with an undocumented `pub struct` appended to the packaged tarball, the crate as
+  shipped emitted *"warning: missing documentation for a struct"* and **built
+  successfully (exit 0)**; with line 18 deleted, the same source gave *"error:
+  missing documentation"* and **exit 101**. Line 18 is now deleted, and activating
+  the `deny` for real surfaced nothing — every public item was in fact documented,
+  because the workflow's `RUSTFLAGS: -D warnings` had been carrying the guarantee
+  the lint was credited with.
+- **This is the class with no gate.** A comment and the code beneath it disagreed,
+  the disagreement was invisible in every passing build, and the `Enforced by` line
+  below named a mechanism that did nothing. Nothing mechanical catches an
+  overridden lint. Running the case caught it.
+- **Enforced by:** `#![deny(missing_docs)]` in `src/lib.rs` and
+  `linq_rs_sql/src/lib.rs` — **and** `RUSTFLAGS: -D warnings` in the workflow,
+  named explicitly because it is what actually held while the `deny` above it was
+  overridden. `gen-docs.py --check` for the changelog's generated neighbours;
+  nothing mechanical for the release headings, which need a human to say when a
+  release happened.
+
+## D-034 — in-memory `LIKE` folds ASCII case, matching SQLite
+- **Status:** SETTLED (2026-09-14) — implemented. Closes the code finding filed by
+  the documentation truth pass.
+- **The defect.** `to_sql()` and `to_memory()` disagreed on `LIKE`. SQLite's
+  default `LIKE` folds ASCII case; the matcher compared characters literally. Six
+  of six patterns disagreed:
+  ```text
+  LIKE 'eve'    SQLite [1, 2, 3]   in-memory [2]
+  LIKE '%PL%'   SQLite [4, 5]      in-memory [5]
+  ```
+  A `to_memory` unit test passed while the database returned different rows — the
+  seam's central promise, broken by a character comparison.
+- **Why no test caught it.** Every `.like()` test was `to_sql`-string-only or
+  `to_memory`-only, over fixtures where case never varied. Nothing ran `LIKE`
+  through both interpreters against a real database.
+- **Ruling:** fold **ASCII** case. That makes the in-memory answer agree with
+  every dialect this crate can currently reach — SQLite's default and MySQL's
+  default collation both fold ASCII, and `?` placeholders already rule PostgreSQL
+  out, whose `LIKE` is case-sensitive.
+- **ASCII-only, deliberately.** SQLite folds `EVE`/`eve` and does **not** fold
+  `É`/`é`. Folding Unicode would trade one divergence for another, so
+  `char::eq_ignore_ascii_case` is exactly the right primitive and the non-ASCII
+  cases are pinned by test.
+- **Rejected: a per-column case-sensitivity flag.** It invents configuration
+  before a second dialect exists to configure for. When the dialect layer arrives
+  (still open, `D-025`), case sensitivity becomes a dialect property alongside
+  placeholder style and identifier quoting — which is where it belongs.
+- **Rejected: documenting `LIKE` as SQL-only.** That surrenders the seam for one
+  operator when agreement was available.
+- **`D-103` still governs.** The promise is a documented per-operator stability
+  class, not identity across providers, and `LIKE`'s class remains
+  provider-defined. The README says which dialects agree rather than claiming
+  agreement flatly — the unqualified claim is what `D-103` forbids.
+- **Enforced by:** `linq_rs_sql/tests/like.rs` — a 43-case corpus whose every
+  expected value was **derived by asking SQLite**, plus
+  `.github/scripts/like-differential.py`, which re-derives them in CI and fails if
+  SQLite and the table ever disagree. That script is what stops the expectations
+  being self-referential: nothing in the corpus is checked against the
+  implementation that produced it. Verified failing in both directions — a
+  corrupted expectation is caught by the script, a regressed matcher by the test
+  (12 of 43 cases).
+- **The oracle is python3's built-in `sqlite3`, not a Rust crate.** `D-032`
+  permits no third-party dependency anywhere in this workspace, and that includes
+  a dev-dependency of a `publish = false` test crate — it would still appear in the
+  resolved graph `packaging-gate.sh` checks. The differential crossing a language
+  boundary is a feature here, not a workaround: the oracle shares no code with the
+  implementation.
+- **The obvious next question, now answered: does anything *else* diverge?
+  (2026-09-29)** `LIKE` was found by accident. The conditions that hid it —
+  every test being `to_sql`-string-only or `to_memory`-only — were never specific
+  to `LIKE`, so the same hole could have hidden a second divergence in any
+  operator. Measured the same way `D-034` was: build each query once, render it to
+  SQL *and* evaluate it over the same five rows, then let a real SQLite adjudicate
+  which row ids each returns. **24 operators, zero disagreements.**
+
+  | family | cases | result |
+  |---|---|---|
+  | comparisons `= != > >= < <=` on `Integer` | 6 | agree |
+  | comparisons on `Text`, `Boolean` (both polarities) | 4 | agree |
+  | `AND`, `OR` | 2 | agree |
+  | `IS NULL`, `IS NOT NULL` | 2 | agree |
+  | `LIKE` — prefix, ASCII case, `_` | 3 | agree |
+  | `Nullable<Text>` compared to a non-null literal | 2 | agree |
+  | three-valued logic: `= NULL`, `NULL AND false`, `NULL OR true` | 3 | agree |
+  | `LIMIT`, `LIMIT`+`OFFSET` | 2 | agree |
+
+  The three-valued-logic rows are the ones worth noting: `nick.eq(None)` returns
+  nothing in **both** interpreters (not "matches the NULL rows"), `NULL AND false`
+  is false in both, and `NULL OR true` is true in both. Those are the cases where a
+  hand-written matcher most plausibly drifts from SQL, and `D-027`'s type-level
+  design holds.
+- **This is a measurement, not a gate.** It was run once, by hand, from a probe
+  outside the workspace; nothing re-runs it. The generalization of
+  `like-differential.py` from one operator to all of them is not built. Given that
+  the seam is this crate's reason to exist (`D-002`) and has already failed once in
+  exactly this way, it is the single highest-value gate still missing — recorded
+  here rather than silently left off the roadmap.
+
+## D-033 — a version number counts releases, not branches
+- **Status:** SETTLED (2026-09-11) — corrected.
+- **The mistake.** `linq_rs_sql` was bumped three times across three unmerged
+  branches — `0.1.0 → 0.1.1 → 0.2.0 → 0.3.0` — as though each branch were a
+  release. **None of `0.1.1`, `0.2.0` or `0.3.0` was ever published**; `0.1.0` is
+  still the only version on crates.io. The owner caught it by asking why the
+  number was 0.3.0.
+- **Ruling:** the version in a manifest names the **next release**, not the count
+  of breaking changes since the last one. Accumulated unreleased work collapses
+  into one version bump. Under `0.x`, a minor bump already signals breaking, so
+  everything from `D-025` through `D-032` is one release: **`linq_rs_sql 0.2.0`**.
+- **Why it matters beyond tidiness.** A version that has never been published is
+  not a fact about anything — it cannot be depended on, yanked or diffed. Three
+  of them in sequence implied a release history that does not exist, and any doc
+  citing `0.3.0` was asserting a version no user could ever have seen.
+- **`linq_rs` is not affected.** Published `0.2.0` predates the `D-025` merge, so
+  `main` is `0.2.0` plus correctness fixes and `0.2.1` is the right next number —
+  one unreleased release, patch-level. Verified: nothing under `src/` has changed
+  since `main`.
+- **The earlier symptom.** The owner had already pushed back on release framing
+  mid-session ("why are you already concerned with publishing"). I agreed that a
+  manifest version is not a release, and then kept bumping once per branch anyway.
+  Recording that here because the correction did not stick the first time.
+- **Forbids:** bumping a version because a branch contains a breaking change.
+  Bump when deciding to release, or state the target once and leave it.
+- **Enforced by:** nothing mechanical, honestly. A gate would need to know the
+  published version and the intended release, and the second is a decision, not a
+  fact. `PUBLISHING.md` records the live versions so the delta is checkable by
+  hand.
+
+## D-032 — the dependency rule, stated by the owner
+- **Status:** SETTLED (2026-09-11) — implemented; **supersedes `D-031`**.
+- **Ruling, verbatim from the owner:**
+  - `linq_rs` — **no dependencies.**
+  - `linq_rs_sql` — **only `linq_rs`.**
+  - **Nothing else is acceptable.**
+- **This retires `linq_rs_sqlite`.** `D-031` reasoned that a provider in its own
+  crate was acceptable because it kept the two core crates clean, and cited EF
+  Core's core-plus-provider split as precedent. That reasoning answered a question
+  the owner had not asked. The rule is not "the core crates stay clean" — it is
+  that **the project takes no third-party dependency at all**, and one driver
+  dependency pulled **24 crates** into the resolved graph:
+  `rusqlite → libsqlite3-sys → cc, pkg-config, vcpkg, syn, quote, proc-macro2, …`.
+- **Nothing structural was lost.** `ColumnSet`, `RowSource`, `FromRow`, `LoadOpt`
+  and `LoadField` all live in `linq_rs_sql` and have no dependencies (`D-029`).
+  The deleted crate was only the rusqlite glue, and that glue is what a user was
+  always going to write. It is preserved verbatim, with everything it was verified
+  to do, in `docs/DRIVER_ADAPTER.md` — 42 lines, 30 of them code. **Compiled in CI
+  since 2026-09-29** by `adapter-gate.sh`, against a hand-written `rusqlite`
+  stand-in, so deleting the crate cost the glue its test coverage for eighteen days
+  and no longer does. See `D-109`, which found out the hard way.
+- **`linq_rs_sql` may depend on `linq_rs`; it does not.** The permission is
+  recorded because it changes what is possible: `seam-tests` exists (`D-024`) only
+  to hold cross-crate tests without that dependency, so it could now be collapsed.
+  Not done here — a permission is not an instruction.
+- **Enforced by:** `packaging-gate.sh`, on the **resolved** graph rather than the
+  manifests, because a manifest lists direct dependencies and a transitive one is
+  still a dependency. It asserts the graph contains no crate outside
+  `{linq_rs, linq_rs_sql, seam-tests}`, and per-package that `linq_rs` has none and
+  `linq_rs_sql` has at most `linq_rs`. Verified failing on a third-party
+  dependency (`libc`), and on an inverted layering (`linq_rs` depending on
+  `linq_rs_sql`).
+- **Note on the check itself:** the first version compared with
+  `printf '%s' "$got" | grep -qE '^$'`, which fails for the ALLOWED empty value —
+  `printf` of an empty string emits zero lines and `grep` needs one. A rule whose
+  check rejects the compliant state is worse than no check. It is a shell string
+  comparison now.
+- **Swept `ROADMAP.md` for the same violation, rather than waiting to be caught
+  again (2026-09-29).** Four items proposed a third-party dependency as future or
+  deferred work: `itertools` (Phase 5.5, *"deferred, not rejected"*), and a
+  `rayon` / `serde` / `futures` feature trio (Phase 6). Phase 6's preamble carried
+  the reasoning this entry exists to close, in so many words — *"Each of these
+  would ship behind a cargo feature flag (no impact on the default zero-dep
+  build)."* All four are now marked rejected, each with the shape that satisfies
+  the rule instead: for `async`, that shape is `D-029`'s — define the trait here,
+  let the caller supply the glue. **The gate already forbade all four**; it was
+  only the roadmap that disagreed with it, which is the failure mode worth naming.
+  A gate constrains the code, and nothing constrains a document that proposes
+  future work — so a rule stated once still needs the roadmap read against it.
+
+## D-031 — the provider is its own crate, not a feature flag
+- **Status:** **SUPERSEDED by `D-032`** (2026-09-11). The crate it created,
+  `linq_rs_sqlite`, has been deleted: it took a third-party dependency, which the
+  owner's rule does not permit anywhere in this project. The entry is kept because
+  the driver-seam findings inside it are still correct and still in force.
+- **Ruling:** executing queries lives in a **third crate** that depends on
+  `linq_rs_sql` and one driver. `linq_rs` and `linq_rs_sql` keep zero
+  dependencies of any kind.
+- **Why not a `rusqlite` feature on `linq_rs_sql`.** An optional dependency is
+  still a dependency: it appears in the manifest, it ends the "zero dependencies"
+  claim as written, and it lands in the lockfile of everyone who only wanted to
+  build SQL strings. Splitting is what *lets* `D-024` stay true.
+- **It also happens to be EF's own architecture** — EF Core plus a separate
+  provider package per database. That was not the reason, but it is a good sign
+  the shape is right.
+- **Surface: `fetch`, `fetch_one`, `count`.** Deliberately small, and it does not
+  hide SQLite. No connection pool, no transaction wrapper, no `DbContext`: the
+  caller owns the `rusqlite::Connection` and `Sqlite<'c>` borrows it. Anything
+  rusqlite does better stays rusqlite's job.
+- **`count` wraps rather than rewrites:** `SELECT COUNT(*) FROM (<sql>)`. A naive
+  `SELECT COUNT(*)` rewrite drops `LIMIT` and over-reports. Tested.
+- **This is the first place the dialect assumption is written down.**
+  `linq_rs_sql` emits `?` placeholders for every literal, which SQLite and MySQL
+  accept and **PostgreSQL rejects** — it wants `$1`, `$2`. So the crate has been
+  a SQLite/MySQL dialect with no way to say so. A real dialect layer belongs in
+  `linq_rs_sql` and is still open; building one provider first is how its shape
+  gets discovered instead of guessed, which is the same reason `D-026` came
+  before `D-027`.
+- **The gate had to be loosened, so it was also tightened.** `packaging-gate.sh`
+  now permits dependencies for the provider and nothing else, and additionally
+  asserts: the publishable set is exactly the three crates; the provider depends
+  on exactly `linq_rs_sql` + `rusqlite`; and **no core crate depends on the
+  provider**, because an inverted layering would make the split pointless. All
+  three verified failing when violated.
+- **Found while writing the MSRV gate, and worth recording separately:**
+  `cargo package` **normalises** the manifest, so a dependency is emitted as
+  `[dependencies.name]` and never as `[dependencies]` + `name = …`. My detection
+  matched the repo's shape, so it silently never fired and the provider's tarball
+  went unbuilt while the gate reported PASS. That is the third instance this
+  session of grading the repo's shape instead of the artifact's — `D-023`'s
+  lesson is apparently easy to re-learn. The gate now patches the unpublished
+  sibling to its extracted tarball and resolves the driver from the registry,
+  and says so in its output rather than skipping silently.
+- **A count in this entry was wrong when written.** It said "four sites"; it is
+  nine. I took it from a `grep | head -4`, which is the truncation trap that has
+  its own note in this ledger. Counts are now omitted here rather than corrected
+  — a number in prose drifts, and `D-016` is the rule that numbers which matter
+  get generated.
+- **Forbids:** a driver dependency or feature on `linq_rs` or `linq_rs_sql`; a
+  core crate depending on the provider; a second driver in this crate.
+- **Enforced by:** *nothing — the named target is deleted.* This said
+  `linq_rs_sqlite/tests/roundtrip.rs`, which went with the crate under `D-032`.
+  What those 12 tests proved is recorded in `docs/DRIVER_ADAPTER.md`; the
+  `linq_rs_sql`-side behaviour they exercised is still covered by
+  `linq_rs_sql/tests/{from_row,nullable,boxed}.rs`. Left visible rather than
+  quietly deleted, because an `Enforced by` line pointing at nothing is precisely
+  what the field exists to prevent. Historically it was:
+  `linq_rs_sqlite/tests/roundtrip.rs` — 12 tests against a real
+  in-memory SQLite, including the database and the in-memory interpreter
+  agreeing on one query value, three-valued logic matching the database,
+  conditional composition, hostile input staying in `params`, `count` respecting
+  `LIMIT`, a NULL in a non-nullable column naming column and row, the `D-029`
+  bool refusal, join ambiguity, and a missing column failing identically on
+  empty and populated data. Plus the packaging and MSRV gates above.
+
+## D-030 — `to_sql()` names the columns
+- **Status:** SETTLED (2026-09-11) — implemented. The emitted SQL changes, so it
+  lands in the next `linq_rs_sql` minor (`0.2.0`, the first release after the
+  published `0.1.0` — see `D-033`).
+- **Ruling:** `Rows::to_sql` and `BoxedRows::to_sql` emit the entity's declared
+  columns instead of `*`. `Entity` gains `ALL_COLUMNS`, supplied by `entity!` on
+  both arms.
+- **Why, given `D-029` already made `*` safe.** Two reasons, and the first is the
+  one that matters:
+  1. **It is the precondition for projection.** A query cannot select a subset of
+     columns while its SELECT list is a wildcard. `.select()` — LINQ's
+     `Select`/`new { … }` — is unreachable without this.
+  2. Defence in depth. Naming the columns moves order from the *database's*
+     control to the *query's*, and resolution then provably returns the identity
+     permutation. By-name reading still earns its place for what the crate does
+     not control: a hand-written query, a join, a view, a driver that reorders.
+- **`ALL_COLUMNS` is required with no default.** A default of `&[]` would make
+  `to_sql` silently fall back to `SELECT *` for an entity that forgot it — a
+  silent wrong default in place of a compile error, which is the `D-025`
+  category. Breaking for hand-written `Entity` impls, deliberately.
+- **Named `ALL_COLUMNS`, not `COLUMNS`.** `FromRow::COLUMNS` already exists, both
+  would be in scope on the same type, and `Emp::COLUMNS` was `E0034` — verified
+  while writing this. That is precisely the defect that disqualified
+  `linq_rs 0.1.0`, where `LinqExt::skip` shadowed `Iterator::skip`. They are also
+  not the same concept: one is what to SELECT, the other what to READ, and a
+  future tuple projection will have the second without the first.
+- **The lower-level `Query` builder still emits `*`, on purpose.** It has no
+  `Entity`, so there is no declared list for it to name; a caller who wants one
+  passes `.select(...)`. So `employees::table()` gives `SELECT *` while
+  `query::<Employee>()` gives the named list. Pinned by a test so the asymmetry
+  is deliberate rather than discovered.
+- **Identifiers are emitted unquoted, unchanged.** A generated column list needs
+  quoting for a column named `order`, and there is no spelling valid on SQLite,
+  PostgreSQL and MySQL alike (`"order"` fails MySQL's default mode, backticks
+  fail PostgreSQL). But this is **not a new problem and not this decision's to
+  solve**: the crate already emits `WHERE (order > ?)` unquoted, which real
+  SQLite already rejects — verified. `*` was merely immune. Quoting wants one
+  ruling covering every emission site, alongside the dialect layer `D-025`
+  deferred, not a special case here. The failure is loud (a parse error), which
+  `D-025`'s rule permits.
+- **Cost, measured:** 25 assertion updates across six test files plus two
+  doctests, applied by re-running the suite and taking the actual output rather
+  than by hand. One of them, `predicates_over_the_querys_own_table_...`, had to
+  be reverted by hand: it asserts all three builders, and two of them correctly
+  still emit `*`.
+- **Forbids:** giving `ALL_COLUMNS` a default; letting the typed and erased forms
+  emit different SELECT lists.
+- **Enforced by:** `tests/boxed.rs::erased_sql_is_byte_identical_to_typed_sql`
+  (which caught the erased form still emitting `*` during this change),
+  `tests/from_row.rs::a_query_this_crate_generated_resolves_to_the_identity`, and
+  `tests/from_row.rs::the_entity_free_query_builder_still_emits_star`.
+
+## D-029 — row materialization: by name, and a refused coercion
+- **Status:** SETTLED (2026-09-11) — implemented.
+- `entity!` knew every field, column and SQL type, and generated only struct →
+  column *readers*. A query result could never become a `Vec<Employee>`, so
+  nothing could ever execute a query usefully. This is the reverse direction.
+- **Three competing designs were prototyped, each proven against a real
+  in-memory SQLite. All three were killed by adversarial review.** The
+  architecture below is what survived; the trees did not.
+
+### Columns are matched by NAME, never by position
+`Rows::to_sql` emits `SELECT *`, and SQLite and PostgreSQL expand `*` in
+**table-declaration order** — which this crate does not know, cannot pin, and
+which changes under an already-compiled binary. SQLite cannot reorder a column
+in place, so the documented migration is a table rebuild, which is exactly where
+declaration order drifts. Verified against real SQLite:
+```
+v1 schema:  SELECT * -> Employee { id: 1, name: "ada",         dept: "engineering" }
+v2 schema:  SELECT * -> Employee { id: 1, name: "engineering", dept: "ada" }
+```
+Same code, same entity, same types, so **no error is possible**. Positional
+decoding converts the database's choice of column order into a plausible wrong
+value — the `D-025` category. Two of the three spikes reproduced it
+independently. By-name makes the class unreachable: a table physically ordered
+`dept, active, id, nick, salary, name` resolves to `[2,5,0,4,3,1]` and
+materializes correct values.
+- **The survey's rule:** the SELECT list may be `*` **iff** you read by name.
+  Nobody who decodes positionally emits it; Diesel makes `*` *unrepresentable*
+  in a data-returning select (`star` has `type SqlType = NotSelectable`).
+
+### Booleans accept only 0 and 1
+Every other SQLite binding treats non-zero as true. Doing so **breaks the
+seam**, measured: for `active INTEGER` holding `1, 0, -1, 2`, SQL
+`WHERE active = ?` bound `true` renders `active = 1` and keeps `[1]`, while a
+permissive reader calls `-1` and `2` true and keeps `[1, 3, 4]`. One query value,
+two answers. Refusing the coercion makes the row fail loudly instead.
+Narrowing is likewise checked, never `as`.
+
+### `ColumnSet` is separate from `RowSource`
+Resolution must work with no row in hand. Fold the traits together and the same
+query against the same schema returns `Ok(vec![])` on empty data and
+`Err(NoSuchColumn)` on populated data — two verdicts for one schema, decided by
+whether rows happened to exist. Found by building it, not by inspection.
+
+### One required driver method
+`value_at(at, column) -> SqlValueRef<'a>`, and nothing else. The five-typed-
+accessor shape measured 101 lines per adapter because each re-implemented type
+checking and worded its own mismatch message; collapsing to one took it to 42,
+and a new SQL type no longer breaks every adapter. **Name matching, ambiguity
+detection, type checking, NULL rules and every message live in the crate** — an
+earlier version delegated matching, and rusqlite's ASCII case folding then gave
+a different verdict from a strict adapter for the same schema.
+
+### A duplicated name is ambiguous, not first-wins
+`SELECT * FROM a JOIN b` yields two `id` columns. Taking the first makes the
+second table's data silently unreachable, and joins are the main reason anyone
+wants materialization at all. `AmbiguousColumn` names both positions.
+
+### `Layout<R>` is tied to its shape
+A layout resolved for one shape, fed to another of the same arity whose columns
+share types, produced `{ id: 42, n: 10 }` where the truth was `id: 10, n: 42`.
+The `PhantomData<fn() -> R>` parameter makes that a compile error.
+
+### `Nullable<S>` is one lift, and `FromRow` is opt-out
+`LoadOpt` is implemented only for base markers and keeps NULL as `None`;
+`LoadField` applies the NOT NULL rule in two blanket impls, so `Nullable<S>`
+needs no duplicate set. Generation is opt-out via `entity! { … } no_from_row`,
+because a borrowed field or a non-column field cannot have a generated impl and
+both are legal today.
+
+- **Forbids:** positional decoding; treating non-zero as `true`; `as` casts in
+  decoding; resolving a name to the first of several matches; delegating name
+  matching or error wording to an adapter.
+- **Enforced by:** **31 tests in `linq_rs_sql/tests/from_row.rs`** — 14 covering the
+  `entity!` macro path and the public properties, plus the 17 in its `mod resolution`
+  covering resolution and field decoding one unit at a time. Between them: a
+  reordered result set, two same-typed adjacent columns not swapping, the bool
+  refusal, join ambiguity, and a missing column failing identically on empty and
+  populated result sets. Separately proven end-to-end against a real SQLite through
+  a 42-line rusqlite adapter, which `adapter-gate.sh` now compiles in CI (`D-109`).
+- **Those 17 were in `src/from_row.rs` until 2026-09-29, and the split was not a
+  design.** This line read "17 unit tests in `src/from_row.rs` and 14 in
+  `tests/from_row.rs`", which made the placement look deliberate. `#[cfg(test)] mod
+  tests` inside a source file earns its place when the tests need **private** items,
+  and these needed none: the file declares one private item and the module
+  referenced it zero times, while every name the tests do use is `pub` and
+  re-exported from `lib.rs`. It was also the only file in either crate doing it, and
+  it made 212 of 852 lines — 24% — test code.
+
+  Moved verbatim, and checked by **name** rather than by count, because a silently
+  dropped test is the failure this repo keeps finding: all 17 leaf names and all 14
+  original names are present afterwards, `--lib` reports zero `from_row` tests, and
+  the workspace total is unchanged at 331. The module keeps `Cols` and `WANT` scoped
+  so they cannot collide with the `Mock` helper above them. The compiler caught two
+  import errors in the move — a missing `Float` and an unused `RowSource` — which is
+  the argument for explicit imports over inheriting `use super::*`.
+- **Closed by `D-030`:** `to_sql()` emitted `SELECT *` when this was written; it now names the entity's columns, so a result set this crate generated arrives in declared order and resolution is provably the identity. By-name reading still covers what the crate does *not* control — a hand-written query, a join, a view, a driver that reorders. Originally filed here as "still open, and next". By-name reading makes
+  that *safe*, not *good* — naming the columns moves order from the database's
+  control to the query's and is the precondition for `.select()` projection. It
+  costs a behavioural break and re-opens the dialect question, because a
+  generated column list must quote identifiers and `"order"` versus `` `order` ``
+  has no spelling valid on SQLite, PostgreSQL and MySQL alike.
+
+## D-028 — a predicate's columns must belong to the table being queried
+- **Status:** SETTLED (2026-09-10) — fixed and gated.
+- **The defect.** A query over one table could be filtered by another table's
+  column, and the SQL builder emitted it:
+  ```rust
+  query::<Employee>().filter(departments::budget.gt(100i64)).to_sql()
+  // SELECT * FROM employees WHERE (budget > ?)
+  ```
+  That SQL fails at runtime with *no such column* — or worse, silently matches
+  a same-named column that means something else. Present in **both** builders,
+  found while assessing the crate against EF rather than by any gate.
+- **It was backwards.** `to_memory()` always rejected it, because
+  `Eval<'_, Row>` is only implemented for the row's own columns. `to_sql()` did
+  not. The production path had the weaker guarantee.
+- **Ruling:** a marker trait, `BelongsTo<T>` — an expression every column of
+  which belongs to table `T`. `Query::filter`, `Rows::filter`, `Rows::to_sql`
+  and `BoxedRows::filter` all require it.
+  - **Literals belong to every table**, because they have no columns. That is
+    what keeps `salary.gt(100)` legal.
+  - Combinators belong to `T` exactly when every operand does.
+  - **Columns get their impl from the `table!` macro, not from a blanket impl
+    over `Column`.** A blanket `impl<C: Column> BelongsTo<C::Table> for C` would
+    overlap the literal impls, because Rust has no negative reasoning and cannot
+    prove `i64: !Column`. Generating per column sidesteps coherence entirely.
+  - `Fragment` and `Box<dyn DynPred<Row>>` accept any table: both are built from
+    a predicate that already passed the check, so the guarantee was established
+    upstream rather than discarded.
+- **The error names both tables**, which is most of the value:
+  ```
+  error[E0277]: the trait bound `budget: BelongsTo<employees::Marker>` is not satisfied
+  help: the trait `BelongsTo<employees::Marker>` is not implemented for `budget`
+        but trait `BelongsTo<departments::Marker>` is implemented for it
+  ```
+- **Known wart:** a foreign column reports twice on the seam — once at
+  `.filter()` and once at `.to_sql()`, since both carry the bound. The
+  `.filter()` span comes first and is the right one. Not worth relaxing
+  `to_sql`'s bound to silence.
+- **Forbids:** any new `filter`-shaped entry point that does not carry
+  `BelongsTo`.
+- **Enforced by:** two `compile_fail` doctests on `BelongsTo` (the seam and the
+  SQL-only builder) plus
+  `linq_rs_sql/tests/sql_phase1.rs::predicates_over_the_querys_own_table_still_compile_everywhere`,
+  which pins the side that must keep working across all three builders — own
+  columns, literals and combinators.
+
+## D-027 — type erasure for dynamic composition, sealed and three-valued
+- **Status:** SETTLED (2026-09-10) — implemented.
+- **The problem.** `Rows<Row, P, O>` parameterises the predicate by *type*, so
+  every `.filter()` returns a different type. That is the right default — it is
+  what makes a `Text` column compared to an integer a build error — but it makes
+  the way applications actually build queries impossible:
+  ```rust
+  let mut q = query::<Employee>();
+  if want_eng { q = q.filter(employees::dept.eq("eng")); }   // E0308
+  ```
+  No conditional filters, no query in a struct field, no query returned from a
+  function, no `Vec` of queries.
+- **Ruling:** Diesel's answer — keep the typed form as the default and add
+  `into_boxed()` / `boxed_query()`, an erased form whose type does not move as
+  clauses are added. Chosen over a runtime AST, which was prototyped and
+  measured at **2.3×–5.0× slower** in memory and which made a type-mismatched
+  comparison *representable* through public API again.
+- **The type check survives erasure completely**, and this is the load-bearing
+  fact: the check fires at the `.gt()` call, before the box. Erasure cannot lose
+  what was already proven.
+- **Erased ONCE, not twice.** The obvious erasure — a `Vec<Box<dyn Fn(&Row) ->
+  bool>>` for memory and a separate list for SQL — erases the query into two
+  independent structures that can silently disagree. `DynPred` carries *both*
+  halves behind one trait object, and its blanket impl is keyed on the identical
+  bounds `to_memory` already requires, so nothing can be boxed for one
+  interpreter and not the other.
+- **Sealed, and this is not optional.** The first prototype left `DynPred`
+  public and unsealed. A hand-written impl could then make SQL select every row
+  and memory select none, from the same value, through entirely safe API — a
+  fresh instance of `D-025`. `mod sealed` makes the supertrait unnameable
+  downstream; the seal costs legitimate users nothing because its blanket impl
+  is keyed on exactly the bounds `DynPred`'s own blanket impl uses. Verified: a
+  hostile impl fails with
+  `` error[E0277]: the trait bound `Evil: sealed::Sealed<T>` is not satisfied ``.
+- **Three-valued, because of `D-026`.** `eval_row` returns `Option<bool>`, not
+  `bool`. The collapse to two values distributes over `AND` and `OR` but **not**
+  over `NOT` — `is_true(NOT NULL)` is `false` while `!is_true(NULL)` is `true` —
+  and a boxed predicate is a first-class expression that can be fed back into
+  `not(..)`. Collapsing inside the box would therefore be wrong the moment the
+  erased form was negated. A boxed predicate has `SqlType = Nullable<Boolean>`
+  even when its contents cannot be null: widening is sound, and it keeps one
+  erased type so a `Vec<Box<dyn DynPred<_>>>` can hold both kinds.
+  **This is why `D-026` was built first** — building erasure on the
+  non-nullable shape would have meant rewriting `DynPred`'s signature.
+- **Clauses are kept flat**, not folded into a nested `And` tree: re-boxing per
+  `.filter()` makes the nested form a *dependent* chain of indirect calls per
+  row. Measured over 1M rows, flat is ~20% faster at three clauses and ~14%
+  slower at one.
+- **Ordering goes through one code path.** `order_part` was extracted from
+  `Rows::push_order` so the erased form builds order parts with the same
+  function; two copies would be two chances for the forms to sort differently.
+- **Forbids:** unsealing `DynPred`; erasing to `bool`; a second erasure path
+  that carries only one interpreter.
+- **Enforced by:** `linq_rs_sql/tests/boxed.rs` and
+  `linq_rs_sql/tests/boxed_adversarial.rs` — 35 tests, including erased SQL
+  being byte-identical to the typed form across multi-clause chains, nested
+  `OR`/`NOT`, multi-key `ORDER BY` and limit/offset combinations, and both
+  interpreters agreeing on identical data.
+
+## D-026 — nullable columns, and three-valued logic that agrees with SQL
+- **Status:** SETTLED (2026-09-10) — implemented.
+- **The problem.** There were four SQL type markers and none was nullable. An
+  `Option<String>` field gave `E0608: cannot index into a value of type
+  Option<String>` — a raw leak from `&row.$field[..]` that did not mention
+  nullability at all. Most real tables have nullable columns, so the crate could
+  not model most real schemas.
+- **The trap, which is why this came before the erasure work.** SQL is
+  three-valued and Rust's `Option` is not. In SQL `NULL = NULL` is `NULL`, and
+  `NULL > 5` is `NULL` — neither true nor false. In Rust `None == None` is
+  `true`. Implement the obvious thing and the two interpreters disagree on
+  exactly the rows where it matters, which is `D-025` all over again.
+- **Ruling:** `Nullable<T>` is a distinct SQL type marker, and nullability
+  propagates at the **type** level:
+  - `Repr<Nullable<T>>::Rust = Option<T::Rust>` — so `Option<bool>` *is* the
+    three-valued type and `None` is UNKNOWN. There is no separate `Tri`.
+  - `CompareWith<Rhs>::Out` is `Boolean` when neither side is nullable and
+    `Nullable<Boolean>` when either is. `LogicWith` and `Negate` do the same for
+    `AND`/`OR`/`NOT`. A comparison touching a nullable column therefore has a
+    *different type* from one that cannot be null, and both interpreters see it.
+  - `Family` maps `T` and `Nullable<T>` to the same base, so `IntOps`, `TextOps`
+    and friends apply to nullable columns without being duplicated.
+  - `WhereClause` is implemented for `Boolean` **and** `Nullable<Boolean>`, and
+    a `WHERE` keeps a row only when the predicate is TRUE. **The collapse from
+    three values to two happens there and nowhere else** — never inside the
+    expression tree. That is exactly where SQL puts it.
+- **The two cells that decide whether a design is right:** `NULL AND FALSE` is
+  **FALSE**, and `NULL OR TRUE` is **TRUE** — an absorbing operand beats the
+  unknown. A naive `Option` zip returns `None` for both. Verified against real
+  SQLite, along with `NULL = NULL`, `NULL > 5`, `NOT (NULL = 1)`, `NULL AND
+  TRUE` and `NULL OR FALSE`.
+- **A row-set assertion cannot catch this**, which is the subtle part: `WHERE`
+  drops FALSE and NULL alike, so a broken Kleene `AND` still selects the right
+  rows. The truth table is therefore asserted cell by cell on the raw
+  `Option<bool>`, not on surviving ids.
+- **`entity!` changed shape** from per-type `@col` arms matching `$ty:ident` to a
+  single generic arm over `$ty:ty`, because `Nullable<Text>` is a type and not a
+  matchable token. `$ty` then resolves in the caller's scope, so the expansion
+  wraps its impls in `const _: () = { use $crate::types::*; … }` — trait impls
+  register globally regardless of the block they are written in. **No call site
+  changed**, verified: all 184 pre-existing tests passed untouched.
+- **Forbids:** collapsing three values to two anywhere but `WHERE`; adding a
+  comparison whose `Out` is `Boolean` when either operand is nullable.
+- **Enforced by:** `linq_rs_sql/tests/nullable.rs` — 15 tests, including
+  `the_kleene_truth_table_matches_sqlite_cell_by_cell` (asserts the raw
+  three-valued result, the only thing that can catch a broken absorbing case)
+  and `row_sets_match_sqlite_on_the_same_four_rows` (six predicates whose
+  expected rows were read out of a real SQLite).
+
 ## D-025 — a wrong answer is worse than a compile error or a panic
 - **Status:** SETTLED (2026-09-10) — three defects fixed in published crates.
 - Found by probing the published surface with compiled code rather than reading
@@ -532,7 +1232,12 @@ panics in every profile.
   restating the output.
 
 ## D-024 — zero dependencies means zero, dev-dependencies included
-- **Status:** SETTLED (2026-09-10) — implemented.
+- **Status:** SETTLED (2026-09-10) — implemented. **Extended by `D-032`**, which
+  is the binding statement: this entry only required the two core crates to be
+  clean, and `D-032` forbids a third-party dependency *anywhere*. `D-032` also
+  **permits** `linq_rs_sql` to depend on `linq_rs`, which this entry treats as
+  forbidden — so the `seam-tests` rationale below survives only on its second
+  ground (publish order), not its first.
 - **Ruling:** `linq_rs` and `linq_rs_sql` each declare **no dependencies of any
   kind**. Cross-crate tests live in `seam-tests`, a workspace member with
   `publish = false` that is free to depend on both by path because nothing ever
@@ -783,15 +1488,15 @@ panics in every profile.
 
 # API stability — must be closed before any 1.0
 
-All `OPEN`. Each is free now and a breaking change later.
+`D-101`..`D-108` are all **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10); this line read "All `OPEN`" until 2026-09-29. `D-109` was raised **and settled** on 2026-09-29 (`SqlValue` is `#[non_exhaustive]`), so all nine are settled and `release-gate.sh` allows a 1.0 tag again. It never gated a `v0.x` release. Each of these is free now and a breaking change after 1.0, which is why the gate sits at the tag.
 
 **Shared gate for this whole section — IMPLEMENTED (`W-19`).** None of
 `D-101`…`D-108` can carry a code gate while it is OPEN: they are decisions, not
 code, so there is nothing in `src/` to check against an undecided ruling. The
 gate is therefore at the release boundary.
-`.github/scripts/release-gate.sh`, wired into CI on `refs/tags/v1.*`, parses
+`.github/scripts/release-gate.sh`, wired into CI on a 1.0 tag in this repo's **per-crate** form (`linq_rs-v1.0.0`), parses
 this file and **fails the release while any `D-1xx` reads `Status: OPEN`**.
-Verified in both directions: it currently refuses (7 open), and passes when the
+Verified in both directions on a scratch copy: it refuses a ledger with an OPEN entry, and passes when the
 statuses are settled. `v0.x` tags are unaffected, so pre-1.0 releases can ship
 while these remain open — which is exactly the intended latitude.
 
@@ -843,11 +1548,56 @@ while these remain open — which is exactly the intended latitude.
   every call site with `error: implementation of 'FnMut' is not general enough`,
   and `for<'a>` does not fix it. v2 adds `where_expr`; it never re-bounds
   `where_`.
-- **Enforced by:** **IMPLEMENTED** (`W-20`) — `linq_rs_sql::rows` is the seam,
-  and `Rows<Row, P, O>` deliberately does **not** implement `LinqExt`. A
-  differential doctest pair pins the boundary: the negative half is
-  `compile_fail` on `query::<Employee>().select_many(..)`, and the positive half
-  is the byte-identical expression after `.to_memory(&people)`.
+- **Enforced by:** `linq_rs_sql::rows` is the seam, and `Rows<Row, P, O>`
+  deliberately does **not** implement `LinqExt`. The differential doctest pair
+  that pins the boundary lives in **`seam-tests/src/lib.rs`** — the negative half
+  is `compile_fail` on `query::<Person>().select_many(..)`, the positive half is
+  the same expression after `.to_memory(&rows)`, and it must compile *and run*.
+  The positive half is what makes the negative half trustworthy: `compile_fail`
+  does not check *which* error it got, so without a passing twin using identical
+  imports, a doctest failing on a missing import would satisfy the gate. Picked up
+  by the existing `cargo test --workspace --doc` in `test-count-floor.sh`; no new
+  CI job.
+- **This entry claimed that pair existed for two weeks and it did not (fixed
+  2026-09-29).** The words above were authored in `64ac43d` — the same commit that
+  added `rows.rs`'s note saying, in the future tense, that the gate *"cannot live
+  here"* and *"belongs in a consumer test crate that depends on both"*. So the
+  ledger asserted an implemented mechanism while the source beside it described
+  the mechanism as unbuilt. `git log --all -S compile_fail -- seam-tests/` was
+  empty on every ref. The **ruling** was never wrong — `select_many` on `Rows` is
+  a hard compile error — only the enforcement sentence was, which is the more
+  dangerous half to get wrong: a false `Enforced by` retires a question that is
+  still open.
+- **The error is `E0277`, not `E0599`.** Measured on the exact expression: "the
+  trait bound `Rows<Person, AlwaysTrue, Unordered>: CallToMemoryFirst` is not
+  satisfied". `Rows` carries a `select_many` stub behind a bound that is never
+  implemented, so the method resolves and its bound does not.
+- **The "`compile_fail` does not check *which* error" objection, discharged
+  (2026-09-29).** That objection is the reason the `D-102` pair needs a passing
+  twin, and it applies equally to the crate's five pre-existing `compile_fail`
+  blocks — placement had been verified, rejection *reason* never had. Measured by
+  extracting each block, wrapping it in `fn main()` as rustdoc does, and compiling
+  it against both crates to read the actual diagnostic:
+
+  | block | documented intent | actual diagnostic |
+  |---|---|---|
+  | `pred.rs` (arithmetic) | outside the `pred!` grammar | `error: no rules expected '*'` — no matching macro arm |
+  | `pred.rs` (types) | `Text` column vs an integer | `E0271: <Integer as Family>::Base == Text` |
+  | `expr.rs` (`Rows`) | cross-table filter rejected | `E0277: budget: BelongsTo<employees::Marker>` |
+  | `expr.rs` (`Query`) | same on the SQL-only builder | `E0277: budget: BelongsTo<employees::Marker>` |
+  | `rows.rs` (`entity!`) | lossy field type is an error | `E0277: i64: From<f64>` |
+
+  All five reject for the documented reason. None fails on a missing import, a
+  syntax error, or an unrelated trivial error — which is the failure mode that
+  would make a `compile_fail` block look like a gate while enforcing nothing. Note
+  the first is a *macro* error rather than a type error, and that is correct: the
+  grammar boundary is enforced by `pred!` having no arm for arithmetic, not by a
+  bound.
+
+  **Not a gate either.** Like the seam differential in `D-034`, this was run once
+  by hand from a probe outside the workspace. Nothing re-runs it, so a future edit
+  could turn one of these into a trivially-failing block without anything
+  noticing.
 
 ## D-103 — Three-valued logic: promise a stability class, not identity
 - **Status:** **SETTLED (2026-09-10).**
@@ -1006,6 +1756,126 @@ while these remain open — which is exactly the intended latitude.
   11 discarded results → 11 warnings, with side-effect methods correctly exempt.
 - **Enforced by:** the compiler for `#[must_use]`; naming is a review matter,
   and the surface is now consistent.
+
+## D-109 — `SqlValue` is `#[non_exhaustive]`
+- **Status:** **SETTLED (2026-09-29)** — implemented. Raised and settled the same
+  day; the owner chose option (a).
+- **The question.** `linq_rs_sql::SqlValue` is a `pub enum` with five variants and
+  **no** `#[non_exhaustive]`, and its own rustdoc says *"Phase 1 keeps this small
+  (the five SQL types we expose at the type level). **Add new variants alongside
+  new `SqlType` markers when extending.**"* That is a documented plan to make a
+  breaking change: adding a variant to an exhaustive public enum breaks every
+  downstream `match`. The dialect layer and any new SQL type both imply exactly
+  that addition.
+- **Why it is a 1.0 question and not a later one.** Adding `#[non_exhaustive]` is
+  itself breaking (it forces downstream matches to add a wildcard arm), so it is
+  free before 1.0 and impossible after. `linq_rs_sql 0.1.0` shipped `SqlValue`
+  exhaustive, and the unreleased `0.2.0` is already the breaking bump — so this is
+  the last cheap moment.
+- **The crate is inconsistent about it, which is the tell.** `SqlValueRef` and
+  `RowError` (`from_row.rs`) are both `#[non_exhaustive]`, each with the reason
+  written down. `SqlValue` got neither the attribute nor a ruling.
+- **Two public enums are deliberately left exhaustive, and should stay so.**
+  `SingleError` (`Empty` / `MoreThanOne`) and `query::Direction` (`Asc` / `Desc`)
+  are exhaustive *by nature* — a sequence has none, one, or more than one, and SQL
+  has two sort directions. `#[non_exhaustive]` there would cost callers a
+  wildcard arm and buy nothing. This entry is about `SqlValue` only.
+- **Options as raised.** (a) `#[non_exhaustive]` now, turning the "add new
+  variants" line from a plan into a permission. (b) Leave it exhaustive and commit
+  to never adding a variant, which would constrain the unbuilt dialect work. (c)
+  Leave it exhaustive and accept a major bump when it changes — what happens by
+  default if nobody decides.
+- **Ruling: (a).** `SqlValue` carries `#[non_exhaustive]`. A new SQL type is now an
+  additive change rather than a breaking one, and the rustdoc says what that costs
+  a caller instead of promising growth it could not deliver.
+- **What it does and does not change, measured from a separate downstream crate
+  rather than reasoned about:**
+
+  | from another crate | before | after |
+  |---|---|---|
+  | exhaustive `match` over all five variants | compiles | **`E0004`: non-exhaustive patterns, `_` not covered** |
+  | same `match` plus a `_ =>` arm | compiles | compiles |
+  | `SqlValue::Integer(7)` and the other four constructors | compiles | compiles |
+  | `PartialEq` comparison against a constructed value | compiles | compiles |
+
+  Construction is unaffected because the attribute is on the **enum**, not on its
+  variants — which matters, because constructing values is exactly what a driver
+  adapter does (`docs/DRIVER_ADAPTER.md`), and blocking that would have made the
+  ruling unusable. Nothing in the workspace needed changing: all 331 tests pass
+  untouched, because every use outside `src/` is a construction or a `PartialEq`,
+  not a `match`. The integration tests under `linq_rs_sql/tests/` are separate
+  crates, so they were a genuine downstream check, not a formality.
+- **Guidance given in the rustdoc, not just the attribute.** A `_ =>` arm should
+  return an error naming the unhandled value rather than `unreachable!()`, which
+  would become a panic on the day a variant is added — the failure the attribute
+  exists to prevent, relocated.
+- **Enforced by:** `packaging-gate.sh`. Deleting the attribute is **silent** — the
+  crate compiles, every test passes, and the breakage surfaces in a downstream
+  `match` at the next release — so the gate asserts it rather than trusting it.
+  Two failure modes verified: the attribute removed (FAIL), and the attribute
+  present elsewhere in the same file but not on `SqlValue` (FAIL, which a
+  `grep -q non_exhaustive` would have passed). The check reads the repo source but
+  only after the tarball **listing** confirms `src/value.rs` ships: cargo
+  normalizes manifests and generates lockfiles, which is why `D-023` forbids
+  checking those against the repo, but it copies `.rs` verbatim. If that ever
+  changes, the check must extract the tarball.
+- **How this went unrecorded.** Every other `D-1xx` was raised by `W-19`'s API
+  sweep, which covered bounds, naming, return types and sealing but not enum
+  exhaustiveness. `release-gate.sh` reported "8 decisions; 0 still OPEN — a 1.0 tag
+  is allowed" while this question had never been asked. With this entry the gate
+  correctly refuses a 1.0 tag until it is settled; `FLOOR_D1XX` raised to 9 in the
+  same commit.
+- **`FLOOR_D1XX` stays at 9.** It floors the *count* of `D-1xx` entries, not the
+  open ones; settling this entry takes `open_count` to 0 and `release-gate.sh` back
+  to allowing a 1.0 tag.
+- **The ruling broke the crate's own documented adapter, and nothing would have
+  said so.** `docs/DRIVER_ADAPTER.md`'s `bind` helper matched all five `SqlValue`
+  variants with no wildcard arm — exactly the shape `#[non_exhaustive]` now
+  rejects — so the guidance the README points a user at stopped compiling the
+  moment the attribute landed. Fixed by giving `bind` a `Result` return (its only
+  caller, `fetch`, already returns one) and a `_` arm that names the unhandled
+  value, which is the guidance this entry gives rather than a `panic!` or a silent
+  `NULL` bind. The first fenced block is untouched, so the "42 lines, 30 of them
+  code" figure still holds; the helper block grew from 29 lines to 39.
+- **That gap is now closed: `adapter-gate.sh`.** `D-032` deleted `linq_rs_sqlite`
+  and preserved the adapter as documentation, and from then until 2026-09-29 nothing
+  built it. It cannot be a doctest — compiling it needs `rusqlite`, and `D-032`
+  permits no dependency anywhere in the workspace, including a dev-dependency of a
+  `publish = false` crate, which would still appear in the resolved graph
+  `packaging-gate.sh` checks. So the crate's central "you write this glue" promise
+  was the one piece of code here with no mechanical check, and this entry's own
+  ruling silently invalidating it is what forced the issue.
+
+  The gate extracts every fenced Rust block from the doc and compiles it in a
+  throwaway crate against `linq_rs_sql` plus a **hand-written stand-in named
+  `rusqlite`** — a separate crate, not a `mod`, because a bare `use rusqlite::..`
+  path resolves to a crate and the documented `use` has to compile *verbatim*. The
+  stub is ~90 lines with every body `unimplemented!()`; the gate type-checks and
+  never runs. Nothing enters the workspace, so the resolved graph is untouched, which
+  is what makes this possible under `D-032` at all.
+
+  **Verified failing in five ways**, because a gate that has only ever passed is a
+  claim:
+
+  | perturbation | result |
+  |---|---|
+  | `bind`'s wildcard arm removed — the exact `D-109` regression | `E0004: non-exhaustive patterns` |
+  | `SqlValueRef::Text` handed bytes instead of `&str` | `E0308: mismatched types` |
+  | ` ```rust ` fences relabelled ` ```rs ` | FAIL: no blocks found |
+  | a block silently emptied | FAIL, naming the absent markers |
+  | the `bind`/`fetch` block deleted outright | FAIL, naming the absent markers |
+
+  The last three matter most: an extraction that quietly returns nothing would
+  otherwise report success, which is what `release-gate.sh` did in this same repo.
+  So the extractor asserts that specific adapter markers are present rather than
+  trusting a non-zero block count.
+- **What the stub does *not* prove, stated in the script and in the doc.** The
+  signatures are copied from rusqlite's public API, so this catches a `linq_rs_sql`
+  change that breaks the adapter — the half that actually drifts, because it is the
+  half this repo edits. It would **not** catch a *rusqlite* change, because finding
+  that out requires the dependency `D-032` forbids. A documented limitation beats a
+  silent assumption, and the honest scope is "the adapter agrees with this crate",
+  not "the adapter compiles against rusqlite".
 
 # DO-NOT-BUILD
 

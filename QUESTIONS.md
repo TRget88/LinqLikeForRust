@@ -1,5 +1,16 @@
 # QUESTIONS.md — Phase 0 target elicitation
 
+> ## ⚠ SUPERSEDED — Phase 0 record, not a description of the crate
+>
+> **Written 2026-09-09. Do not read any statement here as current.** Its premise
+> about the repository was already wrong when written (see the correction below),
+> and the code has since moved much further: the claim that
+> "no `IQueryable`/`IEnumerable` seam exists **or is possible** in the current
+> design" is false — the seam exists, executes against a real SQLite, and is
+> gated in CI — and "LINQ-to-Entities is a greenfield decision" describes
+> something that is now built and tested. Kept as the record of what was asked
+> and answered at Phase 0.
+
 > ## ⚠ CORRECTION (2026-09-09, after Phase 1)
 >
 > **This document was written against `main` only and one of its premises is

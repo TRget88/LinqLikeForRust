@@ -27,8 +27,8 @@ you its sole owner**, permanently.
 
 ## Current state (verified 2026-09-10, after release)
 
-**Both crates are published.** Everything below is the record of how, and the
-procedure for the next release.
+**Both crates are published.** The runbook below is for the **next** release; the
+completed 2026-09-10 run is recorded at the end.
 
 | Crate         | On crates.io                                      |
 |---------------|---------------------------------------------------|
@@ -41,12 +41,11 @@ of both: `TRget88` (crates.io user id 401874).
 
 ## The token
 
-Mint at <https://crates.io/settings/tokens> with **both**:
+Mint at <https://crates.io/settings/tokens>.
 
-- `publish-new` — required to *create* `linq_rs_sql`
-- `publish-update` — required for `linq_rs 0.2.0`
-
-Not interchangeable. From crates.io's own publish handler, an existing crate
+**For the next release, `publish-update` alone is enough** — both crate names
+already exist. `publish-new` was needed only the first time, and the two are not
+interchangeable: From crates.io's own publish handler, an existing crate
 takes `PublishUpdate` and a new one takes `PublishNew`, so a `publish-update`
 token **cannot** create the second crate. A crate-scope pattern of `linq_rs*`
 covers both; patterns match by prefix, so it covers `linq_rs_sql` before it
@@ -59,8 +58,8 @@ long-lived token.
 
 ## Order no longer matters
 
-Both crates have **zero dependencies of any kind** (`D-024`), so neither blocks
-the other. Publish them in any order, together or months apart. Verified:
+Both crates have **zero dependencies of any kind** (`D-032`, which extends
+`D-024`), so neither blocks the other. Publish them in any order, together or months apart. Verified:
 `cargo publish --dry-run -p linq_rs_sql` succeeds with `linq_rs 0.2.0` not yet
 on crates.io.
 
@@ -75,131 +74,125 @@ failed to select a version for the requirement `linq_rs = "^0.2"`
 
 — a dependency has crept back in; `packaging-gate.sh` should have caught it.
 
-## Steps
+## The next release
 
-Run everything from the repo root.
+`linq_rs 0.2.1` and `linq_rs_sql 0.2.0`. Everything below is un-run. Order does
+not matter (see above) and nothing is published until you say so.
 
-### 1. Push the branch — DONE 2026-09-10
+**Before anything:** publishing from an unmerged branch leaves
+`.cargo_vcs_info.json` pointing at a commit that may be deleted — that was one of
+the original `0.1.0` defects. Land the work first.
 
-```bash
-git push -u origin feature/v0.2.0-remediation
-```
+### 1. Land the remaining work on `main`
 
-`origin/feature/v0.2.0-remediation` now exists and CI passed on it (all four
-jobs; the `1.0 release gate` job correctly skips on a non-`v1.*` ref). Before
-this the work existed only on one disk.
-
-### 2. Land it on `main` — DONE 2026-09-10
-
-```bash
-git checkout main
-```
-```bash
-git merge --no-ff feature/v0.2.0-remediation
-```
-```bash
-git push origin main
-```
-
-The tarball embeds `.cargo_vcs_info.json` — the commit it was built from.
-Publishing from a branch you later delete leaves the artifact with no path back
-to source, which was one of the `0.1.0` defects (`AUDIT.md` A-3). This also
-un-404s `README.md`'s link to `tree/main/linq_rs_sql`.
-
-Let CI go green on `main` before continuing.
-
-### 3. Run the gates
+**One** PR is open: `#2`, `docs/readme-refresh` → `main`. Yours to merge; I do not
+merge. Verified against the live remote on 2026-09-29 — check it again rather than
+trusting this paragraph, and check `origin/main`, not a stale local ref:
 
 ```bash
-./.github/scripts/packaging-gate.sh && ./.github/scripts/msrv-tarball.sh && ./.github/scripts/release-gate.sh && ./.github/scripts/test-count-floor.sh
+git fetch origin --prune && gh pr list --state open && git log --oneline -1 origin/main
 ```
 
-`msrv-tarball.sh` is the one that matters here: it packages with stable,
-extracts every `.crate`, and builds it on 1.65. A green repo does not imply a
-green tarball — see `D-023`.
+This section said *"the work is spread across a stack of branches, none merged"*
+and *"bottom-up, so each merge is a fast-forward"* until 2026-09-29. Both were
+false: `origin/main` is a two-parent merge commit (PR #1 landed merged, not
+fast-forwarded), so `origin/main` is **not** an ancestor of the remaining branch
+and no further merge can be a fast-forward. A local `main` several commits behind
+reproduces the stale picture exactly, which is how the paragraph survived.
 
-### 4. Authenticate — DONE 2026-09-10
+### 2. Run every gate on `main`
+
+```bash
+./.github/scripts/test-count-floor.sh && ./.github/scripts/packaging-gate.sh && ./.github/scripts/msrv-tarball.sh && ./.github/scripts/release-gate.sh && python3 .github/scripts/gen-docs.py --check && python3 .github/scripts/like-differential.py && python3 .github/scripts/link-check.py && ./.github/scripts/adapter-gate.sh && ./.github/scripts/itertools-interop.sh
+```
+
+`msrv-tarball.sh` is the one that matters: a green repo does not imply a green
+tarball (`D-023`).
+
+That is **all nine** scripts in `.github/scripts/`, which is what the heading
+claims. It listed six until 2026-09-29 — `link-check.py` was created in the commit
+directly after this runbook's last edit and never added here, and
+`itertools-interop.sh` was never listed; `adapter-gate.sh` was added the same day
+and is in the chain from the start. Of the additions, two need network:
+`link-check.py` resolves external URLs (pass `--no-network` to skip that third of
+it) and `itertools-interop.sh` builds a throwaway crate against the real
+`itertools`. `adapter-gate.sh` needs none — its rusqlite stand-in is written on the
+spot, which is what lets it exist under `D-032` at all. If you add a script to `.github/scripts/`, add it here in the same
+commit, or this list becomes the thing it was meant to prevent — a gate list that
+looks complete and is not.
+
+### 3. Authenticate
 
 ```bash
 cargo login
 ```
 
-Paste the token at the prompt — do not pass it as an argument, where it lands in
-shell history. It is stored **unencrypted** at `~/.cargo/credentials.toml`.
+Paste the token at the prompt. Scopes: `publish-update` is enough — both crate
+names already exist, so `publish-new` is not needed this time.
 
-### 5. Dry-run the whole workspace
+### 4. Dry-run the workspace
 
 ```bash
 cargo publish --dry-run --workspace
 ```
 
-Expect both crates packaged, each followed by `warning: aborting upload due to
-dry run`. `seam-tests` is `publish = false` and is silently skipped — if it
-ever appears here, something removed that line. If only `linq_rs` is mentioned,
-you dropped `--workspace`.
+Expect both crates packaged, each followed by `warning: aborting upload due to dry
+run`. `seam-tests` is `publish = false` and is skipped silently.
 
-### 6. Publish `linq_rs 0.2.0` — IRREVERSIBLE — DONE 2026-09-10
+### 5. Publish — IRREVERSIBLE
 
 ```bash
 cargo publish -p linq_rs
 ```
-
-**The `-p` is not optional.** A bare `cargo publish` at the root selects only
-the default members and silently publishes `linq_rs` alone — verified: the
-dry-run prints `Packaging linq_rs v0.2.0` with no mention of the sibling, and
-exits 0.
-
-### 7. Publish `linq_rs_sql 0.1.0` — IRREVERSIBLE — DONE 2026-09-10
-
 ```bash
 cargo publish -p linq_rs_sql
 ```
 
-Order is free (see above), so this can equally go first if all you want is to
-claim the name. `cargo publish --workspace` would do both in one invocation,
-but multi-package publishing is explicitly **non-atomic**: per the Cargo 1.90
-changelog, a server-side error leaves the workspace partially published.
-Sequential gives a clean failure boundary.
+`-p` is mandatory: a bare `cargo publish` at the root selects only the default
+members and silently publishes `linq_rs` alone.
 
-### 8. Yank `0.1.0` — DONE 2026-09-10
+### 6. Tag per crate
 
 ```bash
-cargo yank --version 0.1.0 linq_rs
-```
-
-Only now — yanking earlier leaves the crate with no usable version in between.
-`0.1.0` shipped a `then_by` that discarded the primary sort key and a `skip`
-that turned every unqualified `.skip(n)` in an importing module into a compile
-error (`D-009`, `AUDIT.md` A-3).
-
-### 9. Flip the README note — DONE 2026-09-10
-
-`README.md` says `0.1.0` "is being yanked … update this note to 'yanked' once
-that has run, **not before**." Now, and only now.
-
-### 10. Tag per crate
-
-```bash
-git tag -a linq_rs-v0.2.0 -m "linq_rs 0.2.0" && git tag -a linq_rs_sql-v0.1.0 -m "linq_rs_sql 0.1.0"
+git tag -a linq_rs-v0.2.1 -m "linq_rs 0.2.1" && git tag -a linq_rs_sql-v0.2.0 -m "linq_rs_sql 0.2.0"
 ```
 ```bash
-git push origin linq_rs-v0.2.0 linq_rs_sql-v0.1.0
+git push origin linq_rs-v0.2.1 linq_rs_sql-v0.2.0
 ```
 
-Not a single `v0.2.0`. The two crates version independently — root is `0.2.0`,
-member is `0.1.0` — so an unprefixed tag is ambiguous from the first release.
-This is what tokio (`tokio-1.53.1`, `tokio-util-0.7.19`) and axum
-(`axum-v0.8.9`) do.
+### 7. Move the CHANGELOG's `[Unreleased]` under a dated heading
 
-### 11. Verify ownership landed
+`CHANGELOG.md` uses dated release headings because the two crates version
+independently. After publishing, add
+`## [<date>] — linq_rs 0.2.1, linq_rs_sql 0.2.0` above what is currently
+`[Unreleased]`, and leave `[Unreleased]` empty.
+
+### 8. Verify
 
 ```bash
-curl -sS -A "your-email@example.com" https://crates.io/api/v1/crates/linq_rs_sql/owners
+curl -sS -A "your-email@example.com" https://crates.io/api/v1/crates/linq_rs_sql | python3 -m json.tool | head -30
 ```
 
-Expect `"login":"TRget88"`. Use `curl`, not `cargo owner --list`, which wants a
-token even though the endpoint is public. crates.io rejects requests with no
-User-Agent.
+Use the **API**, not the HTML page — crates.io returns 404 to any non-browser
+client, so a `curl` of `/crates/linq_rs_sql` 404s even for a published crate.
+
+---
+
+## Record: the 2026-09-10 release
+
+`linq_rs 0.2.0` and `linq_rs_sql 0.1.0`, published from `fae7a35`. All steps
+completed: branch pushed, merged to `main`, authenticated, both crates published,
+`linq_rs 0.1.0` yanked, the README's yank note flipped afterwards (it was written
+to instruct its own replacement, so the repo could never claim a yank that had not
+happened). Tags `linq_rs-v0.2.0` and `linq_rs_sql-v0.1.0`.
+
+Two things that release taught, both now gated rather than remembered:
+
+- `cargo package` always writes a lockfile into the tarball, so an untracked
+  `Cargo.lock` shipped v4 against a declared MSRV of 1.65 and the artifact could
+  not build on its own floor (`D-023`).
+- The published crate had no `repository` link, so there was no path from the
+  artifact back to source (`AUDIT.md` A-3).
 
 ## After: docs.rs
 

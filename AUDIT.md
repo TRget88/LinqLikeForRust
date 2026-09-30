@@ -1,5 +1,27 @@
 # AUDIT.md — `linq_rs`
 
+> ## ⚠ SUPERSEDED — historical evidence, not a description of the crate
+>
+> **This file was written on 2026-09-09 and graded trees that no longer exist in
+> that form. Do not read any statement here as current.** Everything below is
+> present-tense about `main` @ `bd9fd4f` and
+> `origin/feature/v0.1.0-and-sql-builder` @ `d99c405`, and the code has moved a
+> long way past both.
+>
+> Specifically, and verified: the branch it calls unmerged, untagged and
+> unpublished **is** merged, tagged and published; `linq_rs 0.1.0`, which it
+> calls "not yanked", **was yanked** on 2026-09-10; `src/sql/`, whose contents it
+> greps, **no longer exists** (it became the sibling crate `linq_rs_sql`); the
+> `IQueryable`/`IEnumerable` seam it calls impossible **exists, executes against
+> a real SQLite, and is gated in CI**; and the finding tags `[main]`/`[branch]`
+> have no notation for "fixed after this audit", so a live-looking finding may
+> simply be closed.
+>
+> It is kept because the *evidence* is dated and reproducible, and because
+> `§0` records an error in the audit's own method that is worth not repeating.
+> For what the crate does now, read the README; for what is binding, read
+> [DECISIONS.md](DECISIONS.md).
+
 Audit date **2026-09-09**. Trees graded: `main` @ `bd9fd4f` and
 `origin/feature/v0.1.0-and-sql-builder` @ `d99c405`.
 Toolchains: `rustc 1.96.0`, plus `1.75.0` for the MSRV check.

@@ -32,13 +32,32 @@ generator.
 - `D-205` **one vocabulary per concept.** A second, parallel query surface in
   this crate is forbidden even when it works — that is why `src/sql/` is held on
   `feature/v0.1.0-and-sql-builder` rather than merged.
-- `D-101`..`D-108` are **OPEN** and must close before any 1.0.
+- `D-101`..`D-108` are all **SETTLED** (`D-101` 2026-09-09, the rest 2026-09-10).
+  This line read "**OPEN** and must close before any 1.0" until 2026-09-29, while
+  this same file already described `D-106` as settled and CI-enforced.
+- `D-109` is **SETTLED** (2026-09-29): `SqlValue` is `#[non_exhaustive]`, so a new
+  SQL type is additive rather than breaking. Raised and settled the same day
+  because the question had never been asked — `W-19`'s API sweep covered bounds,
+  naming, return types and sealing, but not enum exhaustiveness. Asserted by
+  `packaging-gate.sh`, because deleting the attribute compiles and passes every
+  test. `Direction` and `SingleError` stay exhaustive on purpose.
 
 ## Hard constraints
 
-- **Zero dependencies.** `Cargo.toml` is `std`-only. Do not introduce a crate
-  dependency without explicit user approval. If a feature genuinely needs one
-  (e.g. `rayon`, `serde`), gate it behind an opt-in cargo feature.
+- **Zero dependencies, and this one is not negotiable** (`D-032`):
+  - `linq_rs` — **no dependencies.**
+  - `linq_rs_sql` — **only `linq_rs`.**
+  - **Nothing else is acceptable.**
+
+  Not "ask first", and **not** "gate it behind an opt-in cargo feature" — that
+  escape hatch used to be written here and it is exactly the route `D-032`
+  forbids. An optional dependency is still a dependency: it is in the manifest,
+  it ends the claim as written, and it reaches the lockfile of everyone who
+  wanted none. A whole crate was deleted for taking one (`linq_rs_sqlite`, whose
+  single driver dependency pulled 24 crates into the resolved graph). If a
+  feature needs a third-party crate, the feature does not belong here — publish
+  it as a separate crate outside this workspace, or define a trait and let the
+  caller supply the glue, as `RowSource` does.
 - **Stable Rust.** No nightly features.
 - **No `unsafe`.** This library is a thin layer over safe iterator combinators —
   there is no reason to reach for `unsafe`.
@@ -107,6 +126,40 @@ and resolve the collision with `_`.
 
 For operators that take a value instead of a closure where C# overloads on
 type, suffix with `_where` (e.g. `first_where`, `last_where`).
+
+## Documentation changes in the same commit as the behaviour
+
+**A commit that changes documented behaviour updates its documentation in the same
+commit.** Not a follow-up, not a TODO, not "I'll sweep the docs after."
+
+This is prose, not a gate, and it is stated because the alternative was measured.
+A documentation truth pass over this repo extracted **1,788 atomic claims** and
+verified 284 by execution: **46 were false and 49 were true only under unstated
+conditions**, with 22 of those dangerous enough that believing them would make a
+user write incorrect code. Almost none of it was old rot. It was confident summary
+prose written alongside a more conditional reality, days or hours earlier, by
+someone who had just verified the conditional version and then compressed it.
+
+What is actually enforced, and what is not:
+
+| Claim type | Gate |
+|---|---|
+| Code examples | `#![doc = include_str!("../README.md")]` — every README fence is a doctest |
+| Counts, coverage, operator tables | `gen-docs.py`, derived from `.github/data/` and cross-checked both ways |
+| Links, anchors, paths, external URLs | `link-check.py` |
+| `LIKE` semantics vs a real database | `like-differential.py` |
+| What ships in the tarball | `packaging-gate.sh`, `msrv-tarball.sh` |
+| **Prose about behaviour** | **nothing** |
+
+That last row is why this rule exists. 590 BEHAVIOR claims and 73 TRANSLATION
+claims have no mechanical check, and **every dangerous claim the pass found was one
+of those two**. A doctest proves an example runs; it says nothing about a sentence
+describing an edge case.
+
+So when you change behaviour: find the sentences that described the old behaviour
+and change them too, in the same commit. `grep` for the method name, the type name
+and the claim. If a number is involved, generate it instead of writing it
+(`D-016`).
 
 ## Lazy vs eager semantics
 

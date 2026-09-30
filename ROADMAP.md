@@ -5,7 +5,8 @@ It is organized by phase, with each phase shippable on its own.
 
 **This file is a work list, not a source of decisions.** Scope and API rulings
 live in [DECISIONS.md](DECISIONS.md); cite `D-NNN` rather than restating them.
-Phases 1 and 2 grew the surface from 48 to 90 methods, which `AUDIT.md` finding
+Phases 1 and 2 grew the surface from 48 to 90 methods (a figure from 2026-09-09;
+the surface is 62 today after the `D-019` cut), which `AUDIT.md` finding
 A-2 identifies as the crate's principal liability — see the v1.0 cut line in
 `AUDIT.md` §7.3 before adding another operator.
 
@@ -52,7 +53,8 @@ were not wired into `Cargo.toml`, so they had never actually run. When
 they were wired up, two pre-existing bugs surfaced and were fixed in the
 same change:
 
-- [x] **Register `linq_tests.rs` as an integration test** — added `[[test]]` block in `Cargo.toml`. 57 tests now run on every `cargo test`.
+- [x] **Register `linq_tests.rs` as an integration test** — added `[[test]]` block in `Cargo.toml`. 57 tests ran on every `cargo test` when
+  this landed; the workspace floor is 278 today.
 - [x] **`skip` → `skip_` rename** (breaking) — `LinqExt::skip` collided with `Iterator::skip` but lacked the trailing `_` per the project's documented convention. Renamed to match `take_`, `any_`, `all_`, etc.
 - [x] **`then_by` correctness fix** — `OrderedQueryable` was eagerly sorting in `order_by` and `then_by` re-sorted on the secondary key *alone*, destroying the primary order. Refactored to defer sorting and stack comparators; sort runs once at `into_iter` time using the comparators in lexicographic order. The `Fn` bound on key selectors tightened from `FnMut` to `Fn` + `'static` to allow boxed dyn dispatch (custom mutable-state key functions are not a realistic use case).
 
@@ -179,8 +181,8 @@ operators were O(n²) where O(n) is achievable.
 - [x] **Move `linq_tests.rs` into `tests/`** — standard integration test location. `[[test]]` block dropped.
 - [x] **`examples/`** — three runnable examples: `basic_pipeline`, `join`, `group_aggregate`.
 - [x] **CI** — `.github/workflows/ci.yml` runs build, test, clippy `-D warnings`, fmt `--check`, doc on Linux + Windows. Separate `msrv` job pinned to Rust 1.65 (see `D-010`).
-- [x] **`#![warn(missing_docs)]`** — applied on the crate root. Caught two undocumented public fields on `Grouping<K, V>` (now documented).
-- [x] **`#![forbid(unsafe_code)]`** — applied on the crate root.
+- [x] **`#![deny(missing_docs)]`** — on both published crate roots. Caught two undocumented public fields on `Grouping<K, V>` (now documented), and `DynPred`'s doc comment being attached to a private `mod sealed` so it rendered nowhere (`D-035`). Recorded as `warn` here until 2026-09-29, which is also what `src/lib.rs` still said on the line *below* the `deny` — see `D-035` for how long that made the ruling inert.
+- [x] **`#![forbid(unsafe_code)]`** — on **both** published crate roots. `linq_rs` has had it since its first commit; `linq_rs_sql` did not get it until 2026-09-29, while this line already read "applied on the crate root".
 - [x] **`CHANGELOG.md`** — Keep-a-Changelog format with the Phase 1–4 work documented.
 - [x] **`rust-version` / MSRV** — pinned to `1.65`. It was `1.75`, forced by 23 return-position-`impl Trait`-in-trait sites; `D-106` converted those to named types for unrelated reasons and the floor dropped ten releases.
 - [~] **`rustdoc` polish** — partial. The crate-level doc comment already shows a quick-start; a fuller side-by-side cheatsheet inside the rustdoc is deferred (it would duplicate the README).
@@ -194,10 +196,89 @@ operators were O(n²) where O(n) is achievable.
 ## Phase 5 — Release & distribution
 
 - [x] **Publish to crates.io** — `linq_rs` is owned by the user; no rename needed. Actual `cargo publish` is the user's call.
-- [x] **Fill in `Cargo.toml` metadata** — `homepage`, `documentation`, `categories`, `keywords`, `readme`, `license`, `rust-version`, `description` all set. `repository` left unset (no public source repo to point to — fill in when one exists).
+- [x] **Fill in `Cargo.toml` metadata** — `homepage`, `documentation`, `categories`, `keywords`, `readme`, `license`, `rust-version`, `description` all set. `repository` is set on both crates and `packaging-gate.sh` asserts it against the packaged manifest — it was missing from the yanked `linq_rs` 0.1.0, which is why the gate checks the tarball rather than the working tree (`D-023`).
 - [x] **Semver policy** — documented in `README.md` under "Versioning". Headline: adding a `LinqExt` method is a minor bump, not breaking; tightening trait bounds is breaking; pre-1.0 anything can break on a minor.
-- [ ] **First tagged release (`v0.1.0`)** — ready to tag. Run `git tag v0.1.0 && cargo publish` when you're ready. CI must be green first (use the workflow's first run as the gate).
+- [x] **First release** — done 2026-09-10: `linq_rs 0.2.0` and `linq_rs_sql 0.1.0` are
+  live on crates.io. `linq_rs 0.1.0` is **yanked** (published without `repository` and
+  MIT-only; see `D-023`), so it is not a version to tag or re-publish. This box used to
+  read "ready to tag, run `git tag v0.1.0 && cargo publish`" — stale by two releases and
+  naming a yanked version. The runbook for the *next* release is `PUBLISHING.md`; what
+  the next version number may be is `D-033` (a version counts releases, not branches).
 - [ ] **`v1.0.0`** — after the API has marinated through at least one real user.
+
+---
+
+## Phase 2.8 — `linq_rs_sql` call-site ergonomics
+
+Both found by writing real calls rather than by reading the API, which is the
+only way this class of thing surfaces.
+
+### 2.8.1 The typed query is one-shot for in-memory use
+
+`Rows::to_memory` takes `self` by value, so this does not compile:
+
+```rust
+let q = query::<Employee>().filter(pred!(employees, |e| e.salary > 100_000i64));
+let sql = q.to_sql();                      // borrows
+let got = q.to_memory(&rows);              // moves  -> E0382
+```
+
+The caller has to bind `q.to_sql()` first. The **erased** form
+(`boxed_query()`) takes `&self` and can be used repeatedly, so the asymmetry
+runs backwards from expectation: the ergonomic form is the type-erased one.
+
+`to_memory` returns a lazy iterator borrowing the predicate, which is why it
+took ownership. Worth checking whether `&self` is achievable now that `D-027`
+proved it for `BoxedRows`.
+
+### 2.8.2 Integer literals default to `i32`, not to the column's type
+
+Originally filed as "literals need explicit type suffixes". **That was wrong** —
+`e.salary > 100_000` compiles and emits byte-identical SQL to `100_000i64`,
+because `i32` also satisfies `Integer`. The real, narrower problem:
+
+```text
+e.big > 3_000_000_000
+error: literal out of range for `i32`
+help: consider using the type `u32` instead
+```
+
+Inference reaches `i32`, not the column's type, so a literal above `i32::MAX`
+needs a suffix — and the error never mentions the column, suggesting `u32`, which
+is not a SQL type here. Likely wants the comparison operators to accept anything
+`Into<Lit<Self::SqlType>>` rather than a bare `Expr`, so an untyped literal has
+somewhere to land.
+
+---
+
+## Phase 2.9 — Schema drift is the one EF protection with no counterpart
+
+`table!` is a **hand-written declaration with no link to the real database**.
+Everything it asserts is enforced against the *declaration*, never against the
+schema. Demonstrated against real SQLite:
+
+```
+declared: table! { emp (id) { id -> Integer, salary -> Integer, bonus -> Integer } }
+actual  : CREATE TABLE emp(id INTEGER, salary TEXT)
+
+compiles cleanly, emits:  SELECT id, salary, bonus FROM emp WHERE (bonus > ?)
+the database says:        no such column: bonus
+```
+
+This is what EF closes with scaffolding (model from database) or migrations
+(database from model). Two candidate directions, neither started:
+
+- **Verify at runtime, once.** A `check_schema(&conn)` that compares
+  `ALL_COLUMNS` and the declared SQL types against the driver's introspection and
+  returns a diff. Cheap, catches drift at startup rather than on the first query
+  that touches the missing column. Needs driver introspection, which under `D-032`
+  means a trait the caller implements — not a dependency.
+- **Generate the declaration.** A `table!` emitted from the live schema, so the
+  two cannot disagree. Bigger, needs a build step, and is the EF answer.
+
+Worth noting what is *already* protected so the gap is not overstated — typo'd
+column, wrong type, wrong table, hostile input and NULL semantics are all caught
+at compile time (`D-026`, `D-028`, `D-029`). Drift is the one that is not.
 
 ---
 
@@ -205,8 +286,12 @@ operators were O(n²) where O(n) is achievable.
 
 Decided-for-now, with a named reason to look again. See `DECISIONS.md`.
 
-- [ ] **`itertools` as a dev-dependency for interop testing** — *deferred, not
-  rejected* (`D-005`). Today the real-crate check runs as a CI-only job
+- [x] **`itertools` as a dev-dependency for interop testing** — **rejected** under
+  `D-032`, superseding the *deferred, not rejected* of `D-005`. The rule is "`linq_rs`
+  no dependencies, `linq_rs_sql` only `linq_rs`, nothing else" and it covers
+  dev-dependencies: they appear in the resolved graph, which is what
+  `packaging-gate.sh` checks. The practice below already complies — it is only this
+  box's status that was wrong. Today the real-crate check runs as a CI-only job
   (`.github/scripts/itertools-interop.sh`) that builds a throwaway crate
   depending on both, so `itertools` never enters `Cargo.toml`, never ships in the
   published manifest, and a bare checkout still tests offline. The always-on
@@ -223,16 +308,37 @@ Decided-for-now, with a named reason to look again. See `DECISIONS.md`.
   another reason (benchmarks under `D-207` would be the likeliest trigger, since
   a `criterion` dev-dependency raises the same question).
 
-## Phase 6 — Optional / opt-in features
+## Phase 6 — Optional / opt-in features: **rejected**
 
-Each of these would ship behind a cargo feature flag (no impact on the
-default zero-dep build).
+This section proposed three cargo features, each carrying a third-party dependency
+(`rayon`, `serde`, `futures`), and justified them with: *"Each of these would ship
+behind a cargo feature flag (no impact on the default zero-dep build)."*
 
-- [ ] **`parallel` feature** — `rayon` integration. Expose `par_where_`, `par_select`, etc. on `ParallelIterator`.
-- [ ] **`serde` feature** — `Serialize` / `Deserialize` impls for `Grouping` and `Lookup`.
-- [ ] **`async` feature** — equivalent extension trait for `futures::Stream`.
+That sentence is the exact reasoning `D-032` closes. An optional dependency is still a
+dependency: it is in the manifest, it reaches the lockfile of everyone who wanted none,
+and it ends the claim as written. `packaging-gate.sh` asserts an empty **resolved**
+graph, so any of these would fail CI rather than ship — the fence is already in place
+and it was this document that disagreed with it.
 
-These are speculative — defer until someone actually asks for them.
+Kept here rather than deleted, because each has a shape that satisfies the rule, and
+the shape is the useful part:
+
+- [x] **`parallel`** — needs nothing from this crate. `rayon` parallelizes anything
+  that is `IntoParallelIterator`, so a caller writes
+  `xs.where_(p).collect::<Vec<_>>().into_par_iter()`. The composition already works at
+  the call site; a `par_where_` here would only move the dependency from the user's
+  manifest to ours.
+- [x] **`serde`** — `Grouping` and `Lookup` already expose their data (`key()` plus an
+  iterator), which is everything a caller needs to serialize them with their own
+  `serde`. Impls belong on the caller's type, where the dependency already exists.
+- [x] **`async`** — the compliant shape is the one `D-029` already proved: define the
+  trait here with no dependency and let the caller supply the glue. That is exactly how
+  `ColumnSet` / `RowSource` / `FromRow` support rusqlite without depending on it
+  (`docs/DRIVER_ADAPTER.md`). A `Stream` adaptor would follow the same pattern; it is
+  unbuilt because nobody has asked, not because it is forbidden.
+
+Marked `[x]` to mean **settled**, not shipped: the question is closed, and re-opening
+any of the first two needs `D-032` overturned by the owner, not a feature flag.
 
 ---
 

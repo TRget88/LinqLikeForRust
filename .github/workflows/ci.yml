@@ -17,7 +17,12 @@ name: CI
 #      the declared 1.75 floor was never checked against a single documented
 #      example. It also would have failed on its first run regardless: the
 #      tracked Cargo.lock was lockfile v4, which Cargo 1.75 cannot parse. The
-#      lockfile is now untracked (D-010).
+#      lockfile is TRACKED and must stay so -- `packaging-gate.sh` fails if it
+#      is not, because `cargo package` writes its own lockfile into the tarball
+#      regardless and D-023 gates the artifact. What D-010 forbids is committing
+#      a lockfile NEWER than the MSRV's cargo can parse, which is why the tracked
+#      file is v3. This comment read "the lockfile is now untracked (D-010)"
+#      until 2026-09-29, contradicting both `.gitignore` and the gate.
 
 # Quoted so YAML 1.1 parsers keep this a string key. Unquoted, `on` coerces to
 # boolean true and any home-grown validator looking up cfg["on"] silently sees
@@ -74,7 +79,18 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
+          # `grep -c` on a MISSING file yields the empty string through
+          # `|| true`, and `[ "" -ne 0 ]` then errors -- which inside an `if`
+          # condition reads as false. So a rename of src/queryable.rs used to
+          # make this gate silently stop firing. Assert the file exists first,
+          # and default the count, so neither failure mode is silent.
+          [ -f src/queryable.rs ] || {
+            echo "FAIL: src/queryable.rs is missing. If LinqExt moved, point this"
+            echo "      D-106 gate at its new home in the same commit."
+            exit 1
+          }
           n="$(grep -c -- '-> impl Iterator' src/queryable.rs || true)"
+          n="${n:-0}"
           echo "opaque return sites: $n"
           if [ "$n" -ne 0 ]; then
             echo "FAIL: $n method(s) return an opaque type. D-106 requires named"
@@ -94,10 +110,32 @@ jobs:
       # D-009 / D-012. A ruling in DECISIONS.md that is checked by nothing is a
       # ruling that gets broken again: 0.1.0 shipped with no `repository`, the
       # wrong licence, and 421 lines of dead test code in the tarball.
+      # D-034: the in-memory LIKE matcher must answer what SQLite answers. The
+      # oracle is python3's built-in sqlite3, because D-032 permits no Rust
+      # dependency anywhere -- including a dev-dep of a publish = false crate.
+      # D-036: anchors, repo paths and external URLs. A GitHub `blob/main/...`
+      # 404 for a path that exists locally is reported, not failed -- it is
+      # correct after merge.
+      - name: Link check
+        run: python3 .github/scripts/link-check.py
+      - name: LIKE differential vs a real SQLite
+        run: python3 .github/scripts/like-differential.py
       - name: Packaging and licence gate
         if: runner.os == 'Linux'
         shell: bash
         run: ./.github/scripts/packaging-gate.sh
+
+      # docs/DRIVER_ADAPTER.md is the code the README hands a user when it says
+      # the driver glue is theirs to write, and until this gate existed nothing
+      # built it -- D-032 deleted the provider crate that used to, and it cannot
+      # be a doctest because compiling it needs rusqlite. Settling D-109 broke it
+      # and nothing noticed. Linux only: the script writes a temp crate whose
+      # manifest carries an absolute path, and Windows path quoting buys nothing
+      # here since the check is a type-check, not a platform behaviour.
+      - name: Driver adapter in the docs compiles (D-109)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./.github/scripts/adapter-gate.sh
 
   # D-005. Real-crate interop, deliberately in its own job rather than as a
   # dev-dependency: itertools never enters this crate's Cargo.toml, never ships
@@ -118,10 +156,21 @@ jobs:
   # W-19 / DECISIONS.md D-101..D-108. These are decisions, not code, so there is
   # nothing to check on a branch -- but each is free now and a breaking change
   # after 1.0, which makes the tag the moment they stop being deferrable.
-  # Guards v1.* only; v0.x tags are unaffected.
+  # Guards 1.0 tags only; v0.x tags are unaffected.
+  #
+  # The predicate must match the tag convention PUBLISHING.md actually uses, which
+  # is PER-CRATE: `linq_rs-v1.0.0`, not `v1.0.0`. It read
+  # `startsWith(github.ref, 'refs/tags/v1.')` until 2026-09-29 and could therefore
+  # never fire -- both existing tags are `linq_rs-v0.2.0` and `linq_rs_sql-v0.1.0`,
+  # and a 1.0 cut by the documented process is `refs/tags/linq_rs-v1.0.0`. The bare
+  # form is kept as the first clause so a `v1.0.0` tag still trips the gate, and the
+  # second clause is guarded by `refs/tags/` so a branch named `something-v1.x`
+  # (which is `refs/heads/...`) cannot trigger it.
   release-gate:
     name: 1.0 release gate
-    if: startsWith(github.ref, 'refs/tags/v1.')
+    if: >-
+      startsWith(github.ref, 'refs/tags/v1.') ||
+      (startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-v1.'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -165,6 +214,10 @@ jobs:
       # v4 lockfile against `rust-version = "1.65"` and could not build on 1.65
       # at all; every check above passed because none looked inside the
       # tarball. (D-023)
+      # Every tarball builds fully OFFLINE, because no crate here has a
+      # third-party dependency (D-032). If this step ever needs the registry,
+      # a dependency has crept in and msrv-tarball.sh fails rather than
+      # helpfully resolving it.
       - name: Build the packaged tarballs on MSRV
         shell: bash
         run: ./.github/scripts/msrv-tarball.sh

@@ -1,5 +1,10 @@
-# A test-only crate. It exists so the two published crates can both declare
-# zero dependencies while the cross-crate seam is still exercised in CI.
+# A test-only crate. It exists so the two published crates can both declare zero
+# dependencies while the cross-crate seam is still exercised in CI.
+#
+# NOTE: D-032 now permits `linq_rs_sql` to depend on `linq_rs`, so this crate is
+# no longer strictly required -- its tests could move into `linq_rs_sql` as a
+# dev-dependency. The remaining reason not to is publish order (see that crate's
+# manifest). Collapsing it is an open option, not an oversight.
 #
 # `linq_rs_sql` used to carry `linq_rs` as a dev-dependency for exactly two
 # files, and that one line cost two things: the sibling's manifest was not
